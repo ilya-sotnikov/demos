@@ -1,0 +1,10 @@
+*.png
+*.jpg
+*.JPG
+*.kra
+*.blend*
+*.cap
+build
+build-release
+compile_commands.json
+.cache/

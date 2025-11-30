@@ -1,0 +1,10 @@
+#pragma once
+
+// Shared with C++.
+
+static const int RENDERER_MAX_FRAMES_IN_FLIGHT = 2;
+static const int RENDERER_SHADOW_MAP_CASCADE_COUNT = 4;
+static const int RENDERER_SHADOW_MAP_JITTER_OFFSETS_SIZE = 16;
+static const int RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_U = 8;
+static const int RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_V = 8;
+static const int RENDERER_SHADOW_MAP_DIMENSIONS = 2048;
