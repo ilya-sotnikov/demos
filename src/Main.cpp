@@ -422,6 +422,7 @@ int main()
     assert(gArenaSwapchain.mBuffer + gArenaSwapchain.mBufferSize < gArenaReset.mBuffer);
     assert(gArenaReset.mBuffer + gArenaReset.mBufferSize < static_cast<u8*>(memory) + MEMORY_SIZE);
 
+#ifdef __linux__
     if (!SDL_SetHint("SDL_VIDEO_DRIVER", "x11"))
     {
         fprintf(stderr, "SDL_SetHint(\"SDL_VIDEO_DRIVER\", \"x11\") failed: %s\n", SDL_GetError());
@@ -432,6 +433,7 @@ int main()
             "It seems that using X11 (or Xwayland) is better for now.\n"
         );
     }
+#endif
 
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
     {
