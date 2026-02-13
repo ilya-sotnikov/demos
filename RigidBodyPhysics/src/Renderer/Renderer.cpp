@@ -334,7 +334,7 @@ bool Renderer::Init(SDL_Window* window)
         VkPhysicalDeviceVulkan11Features vulkanFeatures11{};
         vulkanFeatures11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
         vulkanFeatures11.pNext = &vulkanFeatures12;
-        vulkanFeatures11.shaderDrawParameters = true;
+        vulkanFeatures11.shaderDrawParameters = VK_TRUE;
         VkPhysicalDeviceFeatures2 physicalDeviceFeatures{};
         physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         physicalDeviceFeatures.pNext = &vulkanFeatures11;
@@ -346,7 +346,7 @@ bool Renderer::Init(SDL_Window* window)
 
         VkDeviceQueueCreateInfo deviceQueueCreateInfo{};
         deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        deviceQueueCreateInfo.queueFamilyIndex = queueInfo.mQueueIndex;
+        deviceQueueCreateInfo.queueFamilyIndex = queueInfo.mQueueIndex; // TODO: seems wrong.
         deviceQueueCreateInfo.queueCount = 1;
         deviceQueueCreateInfo.pQueuePriorities = &queuePriority;
 
@@ -1779,6 +1779,8 @@ bool Renderer::RecordCommandBuffer(u32 imageIndex)
     VkCommandBufferBeginInfo cmdBeginInfo{};
     cmdBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+
+    // TODO: batch barriers and maybe rework synchronization in general.
 
     // NOTE: specifying VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT as
     // srcStageMask forms dependency chain with vkQueueSubmit, since

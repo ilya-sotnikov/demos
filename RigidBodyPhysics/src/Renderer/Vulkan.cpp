@@ -108,7 +108,7 @@ QueueInfo GetQueue(VkPhysicalDevice device, VkQueueFlagBits flags, Arena scratch
         if (queueFamilies.mData[i].queueFamilyProperties.queueFlags & flags)
         {
             queueInfo.mFamilyIndex = i;
-            queueInfo.mQueueIndex = i;
+            queueInfo.mQueueIndex = i; // TODO: wrong? Should be zero?
             // queueInfo.Queue is set after creating a logical device and calling vkGetDeviceQueue.
             break;
         }
