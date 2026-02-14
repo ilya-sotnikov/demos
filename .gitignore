@@ -6,5 +6,7 @@
 *.cap
 build
 build-release
+Build
+BuildRelease
 compile_commands.json
 .cache/

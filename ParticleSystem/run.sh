@@ -1,0 +1,40 @@
+#/bin/sh
+
+# For my own internal use.
+
+set -e
+
+if [ $# -eq 0 ]
+then
+    BUILD_TYPE=Debug
+    BUILD_DIRECTORY=Build
+else
+    if [ "$1" == "release" ]
+    then
+        BUILD_TYPE=Release
+        BUILD_DIRECTORY=BuildRelease
+    elif [ "$1" == "check" ]
+    then
+        cppcheck -j$(nproc) --enable=all --inconclusive --project=compile_commands.json \
+            -i "*lib*" --suppress="*:*lib*" --suppress="missingInclude" --suppress="missingIncludeSystem"
+        exit $?
+    else
+        echo "Unrecognized argument: $1"
+        exit 1
+    fi
+fi
+
+mkdir -p "$BUILD_DIRECTORY"
+
+export CC=clang
+export CXX=clang++
+
+cmake -B "$BUILD_DIRECTORY" -DCMAKE_BUILD_TYPE=$BUILD_TYPE -G Ninja
+time cmake --build "$BUILD_DIRECTORY"
+
+CLANG_VERSION=$(clang++ --version | rg -or '$1' 'version (\d\d)')
+export LD_PRELOAD=/usr/lib/clang/$CLANG_VERSION/lib/linux/libclang_rt.asan-x86_64.so
+
+./$BUILD_DIRECTORY/DemoTest
+cd "$BUILD_DIRECTORY"
+ASAN_OPTIONS=detect_leaks=0 ./Demo
