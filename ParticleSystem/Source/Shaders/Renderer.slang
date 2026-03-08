@@ -26,6 +26,7 @@ void ParticleVertexMain(
     output.positionClip =
         mul(uniformBuffer.worldToClip, float4(positionDistToForceFieldInv.xyz, 1.0));
 
+    // TODO: check min/max supported size and clamp.
     pointSize = uniformBuffer.swapchainHeight * uniformBuffer.viewToClip[1][1]
                 * radius / output.positionClip.w;
 

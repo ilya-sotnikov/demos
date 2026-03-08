@@ -177,7 +177,7 @@ inline constexpr Vec3 Rotate(Quat lhs, Vec3 rhs)
     const Vec3 uv = Cross(v, rhs);
     const Vec3 uuv = Cross(v, uv);
 
-    return rhs + (uuv + uv * lhs.mVal[3]) * 2.0f;
+    return rhs + (uuv + uv * lhs.mVal[3]) * 2.0f; // TODO: seems wrong.
 }
 
 inline constexpr Mat3 ToMat3(Quat quat)

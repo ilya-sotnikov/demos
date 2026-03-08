@@ -27,7 +27,7 @@ cd build
 
 ## Controls
 
-- WASD/ZX -- position control, Z/X are down/up, you can choose a body from the menu to control it instead
+- WASD/ZX -- position control, Z/X are down/up
 - Escape -- close
 - . -- toggle fullscreen
 - r -- restart simulation
