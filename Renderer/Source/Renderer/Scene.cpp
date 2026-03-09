@@ -1,0 +1,422 @@
+#include "Scene.hpp"
+
+#include "../Utils.hpp"
+#include "../Math/Vec3.hpp"
+#include "../Math/Mat4.hpp"
+
+#include <cgltf.h>
+
+// TODO: more error handling.
+
+static const char* cgltf_result_to_string(cgltf_result result)
+{
+    switch (result)
+    {
+    case cgltf_result_success:
+        return "success";
+    case cgltf_result_data_too_short:
+        return "data too short";
+    case cgltf_result_unknown_format:
+        return "unknown format";
+    case cgltf_result_invalid_json:
+        return "invalid json";
+    case cgltf_result_invalid_gltf:
+        return "invalid gltf";
+    case cgltf_result_invalid_options:
+        return "invalid options";
+    case cgltf_result_file_not_found:
+        return "file not found";
+    case cgltf_result_io_error:
+        return "io error";
+    case cgltf_result_out_of_memory:
+        return "out of memory";
+    case cgltf_result_legacy_gltf:
+        return "legacy gltf";
+    case cgltf_result_max_enum:
+        return "max enum (invalid enum value)";
+    }
+}
+
+static void LoadGeometry(
+    std::vector<Vertex>& vertices,
+    std::vector<u32>& indices,
+    std::vector<Mesh>& meshes,
+    std::vector<MeshPrimitive>& meshPrimitives,
+    std::vector<VkDrawIndexedIndirectCommand>& drawCmds,
+    const cgltf_data* cgltfData
+)
+{
+    DEBUG_ASSERT(vertices.empty());
+    DEBUG_ASSERT(indices.empty());
+    DEBUG_ASSERT(meshes.empty());
+    DEBUG_ASSERT(meshPrimitives.empty());
+    DEBUG_ASSERT(drawCmds.empty());
+    DEBUG_ASSERT(cgltfData);
+
+    std::vector<f32> tmp;
+
+    for (cgltf_size mi = 0; mi < cgltfData->meshes_count; ++mi)
+    {
+        const cgltf_mesh& mesh = cgltfData->meshes[mi];
+
+        meshes.push_back({drawCmds.size(), mesh.primitives_count});
+
+        for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
+        {
+            const cgltf_primitive& prim = mesh.primitives[pi];
+            ASSERT(prim.type == cgltf_primitive_type_triangles);
+            ASSERT(prim.indices);
+
+            const size_t vertexCount = vertices.size();
+
+            const cgltf_size primVertexCount = prim.attributes[0].data->count;
+
+            vertices.resize(vertexCount + primVertexCount);
+
+            tmp.resize(primVertexCount * 4);
+
+            if (const cgltf_accessor* const pos
+                = cgltf_find_accessor(&prim, cgltf_attribute_type_position, 0))
+            {
+                ASSERT(cgltf_num_components(pos->type) == 3);
+                const cgltf_size size
+                    = cgltf_accessor_unpack_floats(pos, tmp.data(), primVertexCount * 3);
+                ASSERT(size == primVertexCount * 3);
+
+                for (cgltf_size vi = 0; vi < primVertexCount; ++vi)
+                {
+                    vertices[vertexCount + vi].px = tmp[vi * 3 + 0];
+                    vertices[vertexCount + vi].py = tmp[vi * 3 + 1];
+                    vertices[vertexCount + vi].pz = tmp[vi * 3 + 2];
+                }
+            }
+
+            if (const cgltf_accessor* const norm
+                = cgltf_find_accessor(&prim, cgltf_attribute_type_normal, 0))
+            {
+                ASSERT(cgltf_num_components(norm->type) == 3);
+                const cgltf_size size
+                    = cgltf_accessor_unpack_floats(norm, tmp.data(), primVertexCount * 3);
+                ASSERT(size == primVertexCount * 3);
+
+                for (cgltf_size ni = 0; ni < primVertexCount; ++ni)
+                {
+                    vertices[vertexCount + ni].nx = tmp[ni * 3 + 0];
+                    vertices[vertexCount + ni].ny = tmp[ni * 3 + 1];
+                    vertices[vertexCount + ni].nz = tmp[ni * 3 + 2];
+                }
+            }
+
+            if (const cgltf_accessor* const tangent
+                = cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0))
+            {
+                ASSERT(cgltf_num_components(tangent->type) == 4);
+                const cgltf_size size
+                    = cgltf_accessor_unpack_floats(tangent, tmp.data(), primVertexCount * 4);
+                ASSERT(size == primVertexCount * 4);
+
+                for (cgltf_size ti = 0; ti < primVertexCount; ++ti)
+                {
+                    vertices[vertexCount + ti].tx = tmp[ti * 4 + 0];
+                    vertices[vertexCount + ti].ty = tmp[ti * 4 + 1];
+                    vertices[vertexCount + ti].tz = tmp[ti * 4 + 2];
+                    vertices[vertexCount + ti].tw = tmp[ti * 4 + 3];
+                }
+            }
+
+            if (const cgltf_accessor* const tex
+                = cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord, 0))
+            {
+                ASSERT(cgltf_num_components(tex->type) == 2);
+                const cgltf_size size
+                    = cgltf_accessor_unpack_floats(tex, tmp.data(), primVertexCount * 2);
+                ASSERT(size == primVertexCount * 2);
+
+                for (cgltf_size ti = 0; ti < primVertexCount; ++ti)
+                {
+                    vertices[vertexCount + ti].u = tmp[ti * 2 + 0];
+                    vertices[vertexCount + ti].v = tmp[ti * 2 + 1];
+                }
+            }
+
+            const size_t indexCount = indices.size();
+            const size_t primIndexCount = prim.indices->count;
+            indices.resize(indexCount + primIndexCount);
+            const cgltf_size size = cgltf_accessor_unpack_indices(
+                prim.indices,
+                indices.data() + indexCount,
+                sizeof(u32),
+                primIndexCount
+            );
+            ASSERT(size == primIndexCount);
+
+            VkDrawIndexedIndirectCommand drawCmd{};
+            drawCmd.indexCount = u32(primIndexCount);
+            drawCmd.instanceCount = 1;
+            drawCmd.firstIndex = u32(indexCount);
+            drawCmd.vertexOffset = i32(vertexCount);
+            drawCmd.firstInstance = 0;
+            drawCmds.push_back(drawCmd);
+
+            MeshPrimitive meshPrimitive{};
+            meshPrimitive.vertexCount = primVertexCount;
+            meshPrimitive.meshIdx = mi;
+            meshPrimitive.material = prim.material;
+
+            meshPrimitives.push_back(meshPrimitive);
+        }
+    }
+
+    for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
+    {
+        Vec3 sphereCenter{};
+
+        const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
+
+        for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
+        {
+            // TODO: implement a better algorithm.
+            sphereCenter += Vec3{
+                vertices[vertexOffset + vi].px,
+                vertices[vertexOffset + vi].py,
+                vertices[vertexOffset + vi].pz
+            };
+        }
+
+        sphereCenter /= float(meshPrimitives[pi].vertexCount);
+
+        meshPrimitives[pi].sphereCenter = sphereCenter;
+    }
+
+    for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
+    {
+        f32 sphereRadius = 0.0f;
+
+        const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
+
+        for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
+        {
+            // TODO: implement a better algorithm.
+            const Vec3 v = Vec3{
+                vertices[vertexOffset + vi].px,
+                vertices[vertexOffset + vi].py,
+                vertices[vertexOffset + vi].pz
+            };
+            sphereRadius = Max(sphereRadius, Magnitude(meshPrimitives[pi].sphereCenter - v));
+        }
+
+        meshPrimitives[pi].sphereRadius = sphereRadius;
+    }
+}
+
+static void LoadMaterials(
+    std::vector<DrawData>& drawData,
+    std::vector<Material>& materials,
+    Vec3& sunDirectionWorld,
+    const std::vector<Mesh>& meshes,
+    const std::vector<MeshPrimitive>& meshPrimitives,
+    const cgltf_data* cgltfData
+)
+{
+    DEBUG_ASSERT(drawData.empty());
+    DEBUG_ASSERT(materials.empty());
+    DEBUG_ASSERT(!meshes.empty());
+    DEBUG_ASSERT(!meshPrimitives.empty());
+    DEBUG_ASSERT(cgltfData);
+
+    const u32 materialOffset = 1;
+
+    for (cgltf_size ni = 0; ni < cgltfData->nodes_count; ++ni)
+    {
+        const cgltf_node& node = cgltfData->nodes[ni];
+
+        if (node.mesh)
+        {
+            Mat4 localToWorld{};
+            cgltf_node_transform_world(&node, &localToWorld.col[0].val[0]);
+
+            // TODO: for now assuming positive uniform scale,
+            // works on Intel Sponza but it's not asserted.
+
+            const Mesh mesh = meshes[cgltf_mesh_index(cgltfData, node.mesh)];
+
+            for (size_t pi = 0; pi < mesh.primitiveCount; ++pi)
+            {
+                const cgltf_material* const material
+                    = meshPrimitives[mesh.primitiveIdx + pi].material;
+                DrawData d{};
+                // TODO: separate quat, scale, position.
+                d.localToWorld = localToWorld;
+                d.scale = Magnitude(localToWorld.col[0].XYZ());
+
+                if (material)
+                {
+                    d.materialIdx = materialOffset + u32(cgltf_material_index(cgltfData, material));
+                    d.renderPassFlags = material->alpha_mode == cgltf_alpha_mode_opaque
+                        ? RENDER_PASS_OPAQUE_BIT
+                        : RENDER_PASS_TRANSLUCENT;
+                }
+                d.sphereCenter = meshPrimitives[mesh.primitiveIdx + pi].sphereCenter;
+                d.sphereRadius = meshPrimitives[mesh.primitiveIdx + pi].sphereRadius;
+                drawData.push_back(d);
+            }
+        }
+
+        if (node.light && (node.light->type == cgltf_light_type_directional))
+        {
+            Mat4 localToWorld{};
+            cgltf_node_transform_world(&node, &localToWorld.col[0].val[0]);
+
+            // From KHR_lights_punctual:
+            // For light types that have a direction (directional and spot lights),
+            // the light's direction is defined as the 3-vector (0.0, 0.0, -1.0)
+            // and the rotation of the node orients the light accordingly.
+            sunDirectionWorld = -Vec3{localToWorld(0, 2), localToWorld(1, 2), localToWorld(2, 2)};
+        }
+    }
+
+    materials.resize(1); // Dummy index.
+
+    for (cgltf_size i = 0; i < cgltfData->materials_count; ++i)
+    {
+        const cgltf_material& mat = cgltfData->materials[i];
+
+        Material material{};
+
+        if (mat.has_pbr_metallic_roughness)
+        {
+            if (mat.pbr_metallic_roughness.base_color_texture.texture)
+            {
+                material.albedoTexIdx = u32(cgltf_texture_index(
+                    cgltfData,
+                    mat.pbr_metallic_roughness.base_color_texture.texture
+                ));
+            }
+
+            COPY_ARRAY_TO_ARRAY(
+                material.albedoFactor.val,
+                mat.pbr_metallic_roughness.base_color_factor
+            );
+
+            if (mat.pbr_metallic_roughness.metallic_roughness_texture.texture)
+            {
+                material.metallicRoughnessTexIdx = u32(cgltf_texture_index(
+                    cgltfData,
+                    mat.pbr_metallic_roughness.metallic_roughness_texture.texture
+                ));
+            }
+
+            material.metallicFactor = mat.pbr_metallic_roughness.metallic_factor;
+            material.roughnessFactor = mat.pbr_metallic_roughness.roughness_factor;
+        }
+
+        if (mat.normal_texture.texture)
+        {
+            material.normalTexIdx = u32(cgltf_texture_index(cgltfData, mat.normal_texture.texture));
+        }
+
+        materials.push_back(material);
+    }
+}
+
+static void LoadTexturePaths(
+    std::vector<std::string>& texturePaths,
+    const std::string& gltfPath,
+    const cgltf_data* cgltfData
+)
+{
+    DEBUG_ASSERT(texturePaths.empty());
+    DEBUG_ASSERT(!gltfPath.empty());
+    DEBUG_ASSERT(cgltfData);
+
+    std::string basePath;
+    const size_t lastSeparatorPos = gltfPath.find_last_of("/\\");
+    if (lastSeparatorPos == std::string::npos)
+    {
+        basePath = "";
+    }
+    else
+    {
+        basePath = gltfPath.substr(0, lastSeparatorPos + 1);
+    }
+
+    for (cgltf_size i = 0; i < cgltfData->textures_count; ++i)
+    {
+        const cgltf_texture& tex = cgltfData->textures[i];
+        ASSERT(tex.image);
+
+        const cgltf_image& image = *tex.image;
+        ASSERT(image.uri);
+
+        std::string uri{image.uri};
+        uri.resize(cgltf_decode_uri(uri.data()));
+
+        const std::string::size_type dotPos = uri.find_last_of('.');
+        if (dotPos != std::string::npos)
+        {
+            uri.replace(dotPos, uri.size() - dotPos, ".ktx2");
+        }
+
+        texturePaths.push_back(basePath + uri);
+    }
+}
+
+// Stole some GLTF loading logic from niagara.
+// https://github.com/zeux/niagara
+bool LoadScene(
+    std::vector<Vertex>& vertices,
+    std::vector<u32>& indices,
+    std::vector<MeshPrimitive>& meshPrimitives,
+    std::vector<VkDrawIndexedIndirectCommand>& drawCmds,
+    std::vector<DrawData>& drawData,
+    std::vector<Material>& materials,
+    std::vector<std::string>& texturePaths,
+    Vec3& sunDirectionWorld,
+    const std::string& gltfPath
+)
+{
+    DEBUG_ASSERT(vertices.empty());
+    DEBUG_ASSERT(indices.empty());
+    DEBUG_ASSERT(meshPrimitives.empty());
+    DEBUG_ASSERT(drawCmds.empty());
+    DEBUG_ASSERT(drawData.empty());
+    DEBUG_ASSERT(materials.empty());
+    DEBUG_ASSERT(texturePaths.empty());
+    DEBUG_ASSERT(!gltfPath.empty());
+
+    cgltf_options options{};
+    cgltf_data* cgltfData{};
+    cgltf_result cgltfResult = cgltf_parse_file(&options, gltfPath.c_str(), &cgltfData);
+    if (cgltfResult != cgltf_result_success)
+    {
+        fprintf(stderr, "gltf loading failed: %s\n", cgltf_result_to_string(cgltfResult));
+        return false;
+    }
+    DEFER(cgltf_free(cgltfData));
+
+    cgltfResult = cgltf_load_buffers(&options, cgltfData, gltfPath.c_str());
+    if (cgltfResult != cgltf_result_success)
+    {
+        fprintf(stderr, "gltf buffer loading failed: %s\n", cgltf_result_to_string(cgltfResult));
+        return false;
+    }
+
+    cgltfResult = cgltf_validate(cgltfData);
+    if (cgltfResult != cgltf_result_success)
+    {
+        fprintf(stderr, "gltf validation failed: %s\n", cgltf_result_to_string(cgltfResult));
+        return false;
+    }
+
+    std::vector<Mesh> meshes;
+
+    LoadGeometry(vertices, indices, meshes, meshPrimitives, drawCmds, cgltfData);
+
+    DEBUG_ASSERT(meshPrimitives.size() == drawCmds.size());
+
+    LoadMaterials(drawData, materials, sunDirectionWorld, meshes, meshPrimitives, cgltfData);
+
+    LoadTexturePaths(texturePaths, gltfPath, cgltfData);
+
+    return true;
+}

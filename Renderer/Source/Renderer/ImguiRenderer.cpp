@@ -1,29 +1,35 @@
-#include "ImGuiRenderer.hpp"
+#include "ImguiRenderer.hpp"
 
 #include "Vulkan.hpp"
 #include "../Math/Utils.hpp"
 
-#include "SDL3/SDL_video.h"
-#include "imgui.h"
-#include "imgui_impl_sdl3.h"
+#include <SDL3/SDL_video.h>
+#include <imgui.h>
+#include <imgui_impl_sdl3.h>
 
 // Heavily based on Sascha Willems's vulkan examples:
 // https://github.com/SaschaWillems/Vulkan/blob/master/base/VulkanUIOverlay.h
 
-bool ImGuiRenderer::Init(
+bool ImguiRenderer::Init(
     SDL_Window* window,
     VkPhysicalDevice physicalDevice,
     VkDevice device,
+    VmaAllocator vmaAllocator,
     VkCommandPool commandPool,
     Vulkan::QueueInfo queueInfo,
-    VkFormat colorFormat,
-    VkFormat depthFormat
+    VkFormat colorFormat
 )
 {
-    assert(window);
+    DEBUG_ASSERT(window);
+    DEBUG_ASSERT(physicalDevice);
+    DEBUG_ASSERT(device);
+    DEBUG_ASSERT(vmaAllocator);
+    DEBUG_ASSERT(commandPool);
+    DEBUG_ASSERT(queueInfo.queue);
 
     mPhysicalDevice = physicalDevice;
     mDevice = device;
+    mVmaAllocator = vmaAllocator;
     mCommandPool = commandPool;
     mQueueInfo = queueInfo;
 
@@ -50,8 +56,7 @@ bool ImGuiRenderer::Init(
     int texWidth = 0;
     int texHeight = 0;
     io.Fonts->GetTexDataAsRGBA32(&fontData, &texWidth, &texHeight);
-    const VkDeviceSize uploadSize
-        = static_cast<VkDeviceSize>(texWidth * texHeight * 4) * sizeof(char);
+    const VkDeviceSize uploadSize = VkDeviceSize(texWidth * texHeight * 4) * sizeof(char);
 
     ImGui::StyleColorsDark();
 
@@ -74,40 +79,39 @@ bool ImGuiRenderer::Init(
 
     // Font image.
     {
+        VkFormat fontImageFormat{};
+        if (!Vulkan::FindSupportedImageFormat(
+                fontImageFormat,
+                physicalDevice,
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                {VK_FORMAT_R8G8B8A8_UNORM}
+            ))
+        {
+            fprintf(stderr, "vulkan: failed to find a suitable imgui font image format\n");
+            return false;
+        }
+
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-        imageInfo.extent = {static_cast<u32>(texWidth), static_cast<u32>(texHeight), 1};
+        imageInfo.format = fontImageFormat;
+        imageInfo.extent = {u32(texWidth), u32(texHeight), 1};
         imageInfo.mipLevels = 1;
         imageInfo.arrayLayers = 1;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        VK_CHECK(vkCreateImage(mDevice, &imageInfo, nullptr, &mFontImage.mImage));
 
-        VkMemoryRequirements memoryRequirements{};
-        vkGetImageMemoryRequirements(mDevice, mFontImage.mImage, &memoryRequirements);
+        VmaAllocationCreateInfo allocationInfo{};
+        allocationInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-        u32 memoryTypeIndex = 0;
-        const bool result = Vulkan::FindMemoryType(
-            memoryTypeIndex,
-            mPhysicalDevice,
-            memoryRequirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-        if (!result)
-        {
-            fprintf(stderr, "Vulkan failed to find a suitable memory type\n");
-            return false;
-        }
-
-        VkMemoryAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocateInfo.allocationSize = memoryRequirements.size;
-        allocateInfo.memoryTypeIndex = memoryTypeIndex;
-        VK_CHECK(vkAllocateMemory(mDevice, &allocateInfo, nullptr, &mFontImage.mMemory));
-
-        VK_CHECK(vkBindImageMemory(mDevice, mFontImage.mImage, mFontImage.mMemory, 0));
+        VK_CHECK(vmaCreateImage(
+            mVmaAllocator,
+            &imageInfo,
+            &allocationInfo,
+            &mFontImage.image,
+            &mFontImage.allocation,
+            nullptr
+        ));
 
         VkImageSubresourceRange subresourceRange{};
         subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -116,37 +120,33 @@ bool ImGuiRenderer::Init(
 
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = mFontImage.mImage;
+        viewInfo.image = mFontImage.image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.format = fontImageFormat;
         viewInfo.subresourceRange = subresourceRange;
-        VK_CHECK(vkCreateImageView(mDevice, &viewInfo, nullptr, &mFontImage.mView));
+        VK_CHECK(vkCreateImageView(mDevice, &viewInfo, nullptr, &mFontImage.view));
     }
 
     // Uploading buffer data to font image.
     {
-        VkBuffer stagingBuffer{};
-        VkDeviceMemory stagingBufferMemory{};
+        Vulkan::Buffer stagingBuffer{};
         const bool result = Vulkan::CreateBuffer(
             stagingBuffer,
-            stagingBufferMemory,
-            mPhysicalDevice,
             mDevice,
+            mVmaAllocator,
             uploadSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            "stagingBuffer"
         );
         if (!result)
         {
             fprintf(stderr, "Vulkan failed to create a staging buffer\n");
             return false;
         }
-        DEFER(vkDestroyBuffer(mDevice, stagingBuffer, nullptr));
-        DEFER(vkFreeMemory(mDevice, stagingBufferMemory, nullptr));
+        DEFER(Vulkan::DestroyBuffer(stagingBuffer, mVmaAllocator));
 
-        void* mapped{};
-        VK_CHECK(vkMapMemory(mDevice, stagingBufferMemory, 0, VK_WHOLE_SIZE, 0, &mapped));
-        memcpy(mapped, fontData, uploadSize);
+        memcpy(stagingBuffer.mapped, fontData, uploadSize);
 
         VkCommandBufferAllocateInfo allocateInfo{};
         allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -162,16 +162,20 @@ bool ImGuiRenderer::Init(
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         VK_CHECK(vkBeginCommandBuffer(copyCmdBuffer, &beginInfo));
 
-        Vulkan::ImageMemoryBarrier(
+        Vulkan::CmdImageMemoryBarrier(
             copyCmdBuffer,
-            mFontImage.mImage,
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_PIPELINE_STAGE_2_HOST_BIT,
-            VK_ACCESS_2_NONE,
-            VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
-            VK_ACCESS_2_TRANSFER_WRITE_BIT
+            {
+                Vulkan::ImageMemoryBarrier(
+                    mFontImage.image,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_PIPELINE_STAGE_2_HOST_BIT,
+                    VK_ACCESS_2_NONE,
+                    VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    VK_IMAGE_ASPECT_COLOR_BIT
+                ),
+            }
         );
 
         VkImageSubresourceLayers imageSubresource{};
@@ -180,26 +184,30 @@ bool ImGuiRenderer::Init(
 
         VkBufferImageCopy bufferCopyRegion{};
         bufferCopyRegion.imageSubresource = imageSubresource;
-        bufferCopyRegion.imageExtent = {static_cast<u32>(texWidth), static_cast<u32>(texHeight), 1};
+        bufferCopyRegion.imageExtent = {u32(texWidth), u32(texHeight), 1};
         vkCmdCopyBufferToImage(
             copyCmdBuffer,
-            stagingBuffer,
-            mFontImage.mImage,
+            stagingBuffer.buffer,
+            mFontImage.image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1,
             &bufferCopyRegion
         );
 
-        Vulkan::ImageMemoryBarrier(
+        Vulkan::CmdImageMemoryBarrier(
             copyCmdBuffer,
-            mFontImage.mImage,
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
-            VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-            VK_ACCESS_2_SHADER_READ_BIT
+            {
+                Vulkan::ImageMemoryBarrier(
+                    mFontImage.image,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_READ_BIT,
+                    VK_IMAGE_ASPECT_COLOR_BIT
+                ),
+            }
         );
 
         VK_CHECK(vkEndCommandBuffer(copyCmdBuffer));
@@ -215,7 +223,7 @@ bool ImGuiRenderer::Init(
         VK_CHECK(vkCreateFence(mDevice, &fenceInfo, nullptr, &fence));
         DEFER(vkDestroyFence(mDevice, fence, nullptr));
 
-        VK_CHECK(vkQueueSubmit(queueInfo.mQueue, 1, &submitInfo, fence));
+        VK_CHECK(vkQueueSubmit(queueInfo.queue, 1, &submitInfo, fence));
 
         VK_CHECK(vkWaitForFences(mDevice, 1, &fence, VK_TRUE, 1'000'000'000));
     }
@@ -231,7 +239,7 @@ bool ImGuiRenderer::Init(
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-        VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mFontImage.mSampler));
+        VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mFontImage.sampler));
     }
 
     // Descriptor pool.
@@ -276,8 +284,8 @@ bool ImGuiRenderer::Init(
         VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocateInfo, &mDescriptorSet));
 
         VkDescriptorImageInfo fontDescriptor{};
-        fontDescriptor.sampler = mFontImage.mSampler;
-        fontDescriptor.imageView = mFontImage.mView;
+        fontDescriptor.sampler = mFontImage.sampler;
+        fontDescriptor.imageView = mFontImage.view;
         fontDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkWriteDescriptorSet writeDescriptorSets{};
@@ -345,7 +353,7 @@ bool ImGuiRenderer::Init(
         VkShaderModule shaderModule{};
 
         const bool result
-            = Vulkan::CreateShaderModule(shaderModule, mDevice, "ImGuiRenderer.slang.spv");
+            = Vulkan::CreateShaderModule(shaderModule, mDevice, "ImguiRenderer.slang.spv");
         if (!result)
         {
             fprintf(stderr, "Vulkan failed to build a vertex/fragment shader\n");
@@ -357,13 +365,13 @@ bool ImGuiRenderer::Init(
         vertexShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertexShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
         vertexShaderStageInfo.module = shaderModule;
-        vertexShaderStageInfo.pName = "vertexMain";
+        vertexShaderStageInfo.pName = "VertexMain";
 
         VkPipelineShaderStageCreateInfo fragmentShaderStageInfo{};
         fragmentShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         fragmentShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         fragmentShaderStageInfo.module = shaderModule;
-        fragmentShaderStageInfo.pName = "fragmentMain";
+        fragmentShaderStageInfo.pName = "FragmentMain";
 
         const VkPipelineShaderStageCreateInfo shaderStages[]
             = {vertexShaderStageInfo, fragmentShaderStageInfo};
@@ -395,12 +403,23 @@ bool ImGuiRenderer::Init(
         dynamicInfo.dynamicStateCount = ARRAY_SIZE(dynamicStates);
         dynamicInfo.pDynamicStates = dynamicStates;
 
+        VkFormat stencilFormat{};
+        if (!Vulkan::FindSupportedImageFormat(
+                stencilFormat,
+                physicalDevice,
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                {VK_FORMAT_S8_UINT}
+            ))
+        {
+            fprintf(stderr, "vulkan: failed to find a suitable imgui stencil attachment format\n");
+            return false;
+        }
+
         VkPipelineRenderingCreateInfo renderingInfo{};
         renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
         renderingInfo.colorAttachmentCount = 1;
         renderingInfo.pColorAttachmentFormats = &colorFormat;
-        renderingInfo.depthAttachmentFormat = depthFormat;
-        renderingInfo.stencilAttachmentFormat = depthFormat;
+        renderingInfo.stencilAttachmentFormat = stencilFormat;
 
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -429,7 +448,7 @@ bool ImGuiRenderer::Init(
     return true;
 }
 
-void ImGuiRenderer::Cleanup()
+void ImguiRenderer::Cleanup()
 {
     vkDeviceWaitIdle(mDevice);
 
@@ -439,32 +458,18 @@ void ImGuiRenderer::Cleanup()
     for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
     {
         Frame& frame = mFrame[i];
-        if (frame.mVertexBuffer.mMapped)
-        {
-            vkUnmapMemory(mDevice, frame.mVertexBuffer.mMemory);
-            frame.mVertexBuffer.mMapped = nullptr;
-        }
-        vkFreeMemory(mDevice, frame.mVertexBuffer.mMemory, nullptr);
-        vkDestroyBuffer(mDevice, frame.mVertexBuffer.mBuffer, nullptr);
-
-        if (mFrame[i].mIndexBuffer.mMapped)
-        {
-            vkUnmapMemory(mDevice, frame.mIndexBuffer.mMemory);
-            mFrame[i].mIndexBuffer.mMapped = nullptr;
-        }
-        vkFreeMemory(mDevice, frame.mIndexBuffer.mMemory, nullptr);
-        vkDestroyBuffer(mDevice, frame.mIndexBuffer.mBuffer, nullptr);
+        Vulkan::DestroyBuffer(frame.vertexBuffer, mVmaAllocator);
+        Vulkan::DestroyBuffer(frame.indexBuffer, mVmaAllocator);
     }
     vkDestroyPipeline(mDevice, mPipeline, nullptr);
     vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
     vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
-    vkDestroySampler(mDevice, mFontImage.mSampler, nullptr);
-    vkDestroyImageView(mDevice, mFontImage.mView, nullptr);
-    vkFreeMemory(mDevice, mFontImage.mMemory, nullptr);
-    vkDestroyImage(mDevice, mFontImage.mImage, nullptr);
+    vkDestroySampler(mDevice, mFontImage.sampler, nullptr);
+    vkDestroyImageView(mDevice, mFontImage.view, nullptr);
+    vmaDestroyImage(mVmaAllocator, mFontImage.image, mFontImage.allocation);
 }
 
-bool ImGuiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
+bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
 {
     ImGui::Render();
 
@@ -474,10 +479,8 @@ bool ImGuiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
         return true;
     }
 
-    VkDeviceSize vertexBufferSize
-        = static_cast<VkDeviceSize>(drawData->TotalVtxCount) * sizeof(ImDrawVert);
-    VkDeviceSize indexBufferSize
-        = static_cast<VkDeviceSize>(drawData->TotalIdxCount) * sizeof(ImDrawIdx);
+    VkDeviceSize vertexBufferSize = VkDeviceSize(drawData->TotalVtxCount) * sizeof(ImDrawVert);
+    VkDeviceSize indexBufferSize = VkDeviceSize(drawData->TotalIdxCount) * sizeof(ImDrawIdx);
 
     if (vertexBufferSize == 0 || indexBufferSize == 0)
     {
@@ -491,115 +494,88 @@ bool ImGuiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
     vertexBufferSize = ((vertexBufferSize + chunkSize - 1) / chunkSize) * chunkSize;
     indexBufferSize = ((indexBufferSize + chunkSize - 1) / chunkSize) * chunkSize;
 
-    const bool shouldRecreateVertexBuffer = (frame.mVertexBuffer.mBuffer == VK_NULL_HANDLE)
-        || (frame.mVertexBufferSize < vertexBufferSize);
+    const bool shouldRecreateVertexBuffer = (frame.vertexBuffer.buffer == VK_NULL_HANDLE)
+        || (frame.vertexBufferSize < vertexBufferSize);
     if (shouldRecreateVertexBuffer)
     {
-        if (frame.mVertexBuffer.mMapped)
-        {
-            vkUnmapMemory(mDevice, frame.mVertexBuffer.mMemory);
-            frame.mVertexBuffer.mMapped = nullptr;
-        }
-        vkFreeMemory(mDevice, frame.mVertexBuffer.mMemory, nullptr);
-        vkDestroyBuffer(mDevice, frame.mVertexBuffer.mBuffer, nullptr);
+        Vulkan::DestroyBuffer(frame.vertexBuffer, mVmaAllocator);
+
         const bool result = Vulkan::CreateBuffer(
-            frame.mVertexBuffer.mBuffer,
-            frame.mVertexBuffer.mMemory,
-            mPhysicalDevice,
+            frame.vertexBuffer,
             mDevice,
+            mVmaAllocator,
             vertexBufferSize,
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+            "ImGuiVertexBuffer"
         );
         if (!result)
         {
             return false;
         }
-        frame.mVertexCount = drawData->TotalVtxCount;
-        // TODO: set frame.mVertexBufferSize.
-        VK_CHECK(vkMapMemory(
-            mDevice,
-            frame.mVertexBuffer.mMemory,
-            0,
-            VK_WHOLE_SIZE,
-            0,
-            &frame.mVertexBuffer.mMapped
-        ));
+        frame.vertexCount = drawData->TotalVtxCount;
+        frame.vertexBufferSize = vertexBufferSize;
     }
 
-    const bool shouldRecreateIndexBuffer = (frame.mIndexBuffer.mBuffer == VK_NULL_HANDLE)
-        || (frame.mIndexBufferSize < indexBufferSize);
+    const bool shouldRecreateIndexBuffer
+        = (frame.indexBuffer.buffer == VK_NULL_HANDLE) || (frame.indexBufferSize < indexBufferSize);
     if (shouldRecreateIndexBuffer)
     {
-        if (frame.mIndexBuffer.mMapped)
-        {
-            vkUnmapMemory(mDevice, frame.mIndexBuffer.mMemory);
-            frame.mIndexBuffer.mMapped = nullptr;
-        }
-        vkFreeMemory(mDevice, frame.mIndexBuffer.mMemory, nullptr);
-        vkDestroyBuffer(mDevice, frame.mIndexBuffer.mBuffer, nullptr);
+        Vulkan::DestroyBuffer(frame.indexBuffer, mVmaAllocator);
+
         const bool result = Vulkan::CreateBuffer(
-            frame.mIndexBuffer.mBuffer,
-            frame.mIndexBuffer.mMemory,
-            mPhysicalDevice,
+            frame.indexBuffer,
             mDevice,
+            mVmaAllocator,
             indexBufferSize,
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+            "ImGuiIndexBuffer"
         );
         if (!result)
         {
             return false;
         }
-        frame.mIndexCount = drawData->TotalIdxCount;
-        // TODO: set frame.mIndexBufferSize.
-        VK_CHECK(vkMapMemory(
-            mDevice,
-            frame.mIndexBuffer.mMemory,
-            0,
-            VK_WHOLE_SIZE,
-            0,
-            &frame.mIndexBuffer.mMapped
-        ));
+        frame.indexCount = drawData->TotalIdxCount;
+        frame.indexBufferSize = indexBufferSize;
     }
 
     // Upload data.
-    ImDrawVert* vertexDst = static_cast<ImDrawVert*>(frame.mVertexBuffer.mMapped);
-    ImDrawIdx* indexDst = static_cast<ImDrawIdx*>(frame.mIndexBuffer.mMapped);
+    ImDrawVert* vertexDst = static_cast<ImDrawVert*>(frame.vertexBuffer.mapped);
+    ImDrawIdx* indexDst = static_cast<ImDrawIdx*>(frame.indexBuffer.mapped);
     for (int i = 0; i < drawData->CmdListsCount; ++i)
     {
         const ImDrawList* const cmdList = drawData->CmdLists[i];
         memcpy(
             vertexDst,
             cmdList->VtxBuffer.Data,
-            static_cast<VkDeviceSize>(cmdList->VtxBuffer.Size) * sizeof(ImDrawVert)
+            VkDeviceSize(cmdList->VtxBuffer.Size) * sizeof(ImDrawVert)
         );
         memcpy(
             indexDst,
             cmdList->IdxBuffer.Data,
-            static_cast<VkDeviceSize>(cmdList->IdxBuffer.Size) * sizeof(ImDrawIdx)
+            VkDeviceSize(cmdList->IdxBuffer.Size) * sizeof(ImDrawIdx)
         );
         vertexDst += cmdList->VtxBuffer.Size;
         indexDst += cmdList->IdxBuffer.Size;
     }
-    VkMappedMemoryRange range{};
-    range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    range.memory = frame.mVertexBuffer.mMemory;
-    range.size = VK_WHOLE_SIZE;
-    VK_CHECK(vkFlushMappedMemoryRanges(mDevice, 1, &range));
-    range.memory = frame.mIndexBuffer.mMemory;
-    VK_CHECK(vkFlushMappedMemoryRanges(mDevice, 1, &range));
+
+    const VmaAllocation allocations[]
+        = {frame.vertexBuffer.allocation, frame.indexBuffer.allocation};
+    VK_CHECK(
+        vmaFlushAllocations(mVmaAllocator, ARRAY_SIZE(allocations), allocations, nullptr, nullptr)
+    );
 
     return true;
 }
 
-void ImGuiRenderer::StartNewFrame() const
+void ImguiRenderer::StartNewFrame() const
 {
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 }
 
-bool ImGuiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
+bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
 {
     const ImDrawData* const drawData = ImGui::GetDrawData();
     i32 vertexOffset = 0;
@@ -612,7 +588,7 @@ bool ImGuiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
 
     Frame& frame = mFrame[frameIndex];
 
-    if (!frame.mVertexBuffer.mBuffer || !frame.mIndexBuffer.mBuffer)
+    if (!frame.vertexBuffer.buffer || !frame.indexBuffer.buffer)
     {
         return true;
     }
@@ -631,8 +607,8 @@ bool ImGuiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
         nullptr
     );
 
-    mPushConstantBlock.mScale = Vec2{2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y};
-    mPushConstantBlock.mTranslate = Vec2{-1.0f};
+    mPushConstantBlock.scale = Vec2{2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y};
+    mPushConstantBlock.translate = Vec2{-1.0f};
     vkCmdPushConstants(
         cmd,
         mPipelineLayout,
@@ -643,8 +619,8 @@ bool ImGuiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
     );
 
     VkDeviceSize offsets[1]{};
-    vkCmdBindVertexBuffers(cmd, 0, 1, &frame.mVertexBuffer.mBuffer, offsets);
-    vkCmdBindIndexBuffer(cmd, frame.mIndexBuffer.mBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindVertexBuffers(cmd, 0, 1, &frame.vertexBuffer.buffer, offsets);
+    vkCmdBindIndexBuffer(cmd, frame.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 
     VkViewport viewport{};
     viewport.width = io.DisplaySize.x;
@@ -660,10 +636,8 @@ bool ImGuiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
             const ImVec4 rect = imCmd.ClipRect;
 
             VkRect2D scissorRect{};
-            scissorRect.offset
-                = {Max(static_cast<i32>(rect.x), 0), Max(static_cast<i32>(rect.y), 0)};
-            scissorRect.extent
-                = {static_cast<u32>(rect.z - rect.x), static_cast<u32>(rect.w - rect.y)};
+            scissorRect.offset = {Max(i32(rect.x), 0), Max(i32(rect.y), 0)};
+            scissorRect.extent = {u32(rect.z - rect.x), u32(rect.w - rect.y)};
             vkCmdSetScissor(cmd, 0, 1, &scissorRect);
 
             vkCmdDrawIndexed(cmd, imCmd.ElemCount, 1, indexOffset, vertexOffset, 0);

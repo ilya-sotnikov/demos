@@ -1,0 +1,18 @@
+[submodule "Renderer/Lib/SDL"]
+	path = Renderer/Lib/SDL
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "Renderer/Lib/volk"]
+	path = Renderer/Lib/volk
+	url = https://github.com/zeux/volk.git
+[submodule "Renderer/Lib/VulkanMemoryAllocator"]
+	path = Renderer/Lib/VulkanMemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+[submodule "Renderer/Lib/cgltf"]
+	path = Renderer/Lib/cgltf
+	url = https://github.com/jkuhlmann/cgltf.git
+[submodule "Renderer/Lib/KTX-Software"]
+	path = Renderer/Lib/KTX-Software
+	url = https://github.com/KhronosGroup/KTX-Software.git
+[submodule "Renderer/Lib/imgui"]
+	path = Renderer/Lib/imgui
+	url = https://github.com/ocornut/imgui.git
