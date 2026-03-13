@@ -192,3 +192,21 @@ inline constexpr f32 Square(f32 x)
 {
     return x * x;
 }
+
+// https://en.wikipedia.org/wiki/Halton_sequence
+inline constexpr f32 HaltonSequence(u32 idx, u32 base)
+{
+    DEBUG_ASSERT(idx > 0);
+
+    f32 f = 1.0f;
+    f32 r = 0.0f;
+
+    while (idx > 0)
+    {
+        f /= f32(base);
+        r = r + f * f32(idx % base);
+        idx = u32(floorf(f32(idx) / f32(base)));
+    }
+
+    return r;
+}

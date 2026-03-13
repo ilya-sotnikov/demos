@@ -30,14 +30,6 @@ struct Image
     VmaAllocation allocation;
 };
 
-struct SampledImage
-{
-    VkImage image;
-    VkImageView view;
-    VmaAllocation allocation;
-    VkSampler sampler;
-};
-
 struct Swapchain
 {
     VkSwapchainKHR swapchain;
@@ -47,6 +39,7 @@ struct Swapchain
     u32 minImageCount;
 };
 
+// TODO: remove, since every pipeline is sharing a single layout and a single descriptor set layout.
 struct Pipeline
 {
     VkPipeline pipeline;
@@ -160,19 +153,16 @@ bool CreateImage(
     const char* name = "",
     u32 mipLevels = 1
 );
-bool CreateSampledImage(
-    Vulkan::SampledImage& image,
-    VkDevice device,
-    VmaAllocator vmaAllocator,
-    VkFormat format,
-    VkImageUsageFlags usage,
-    u32 width,
-    u32 height,
-    const char* name = "",
-    u32 mipLevels = 1
-);
 void DestroyImage(Vulkan::Image& image, VkDevice device, VmaAllocator vmaAllocator);
-void DestroySampledImage(Vulkan::SampledImage& image, VkDevice device, VmaAllocator vmaAllocator);
+
+bool CreateComputePipeline(
+    VkPipeline& pipeline,
+    VkDevice device,
+    VkPipelineLayout layout,
+    VkShaderModule shaderModule,
+    const char* mainName,
+    const char* debugName = ""
+);
 
 bool DebugNameObject(
     VkDevice device,

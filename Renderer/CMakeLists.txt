@@ -121,6 +121,7 @@ set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Renderer.slang
     ${SHADER_SOURCE_DIRECTORY}/Shadow.slang
     ${SHADER_SOURCE_DIRECTORY}/ImguiRenderer.slang
+    ${SHADER_SOURCE_DIRECTORY}/TaaResolve.slang
 )
 set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/SharedDef.slang

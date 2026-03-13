@@ -24,7 +24,8 @@ struct ImguiRenderer
     VmaAllocator mVmaAllocator;
 
     // It's own resources.
-    Vulkan::SampledImage mFontImage;
+    Vulkan::Image mFontImage;
+    VkSampler mFontSampler;
     VkDescriptorPool mDescriptorPool;
     VkDescriptorSet mDescriptorSet;
     VkPipelineLayout mPipelineLayout;

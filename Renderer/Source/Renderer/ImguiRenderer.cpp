@@ -239,7 +239,7 @@ bool ImguiRenderer::Init(
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-        VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mFontImage.sampler));
+        VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mFontSampler));
     }
 
     // Descriptor pool.
@@ -284,7 +284,7 @@ bool ImguiRenderer::Init(
         VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocateInfo, &mDescriptorSet));
 
         VkDescriptorImageInfo fontDescriptor{};
-        fontDescriptor.sampler = mFontImage.sampler;
+        fontDescriptor.sampler = mFontSampler;
         fontDescriptor.imageView = mFontImage.view;
         fontDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -464,7 +464,7 @@ void ImguiRenderer::Cleanup()
     vkDestroyPipeline(mDevice, mPipeline, nullptr);
     vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
     vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
-    vkDestroySampler(mDevice, mFontImage.sampler, nullptr);
+    vkDestroySampler(mDevice, mFontSampler, nullptr);
     vkDestroyImageView(mDevice, mFontImage.view, nullptr);
     vmaDestroyImage(mVmaAllocator, mFontImage.image, mFontImage.allocation);
 }

@@ -17,6 +17,65 @@ static bool sMouseRelativeMode = true;
 static bool sNeedUpdateViewMatrix = true;
 static bool sFullscreen = true;
 
+static bool SaveCamera(const Camera& camera, const char* path = "Camera.bin")
+{
+    DEBUG_ASSERT(path);
+
+    FILE* const fp = fopen(path, "wb");
+    if (!fp)
+    {
+        fprintf(stderr, "%s: fopen %s failed: %s\n", __func__, path, strerror(errno));
+        return false;
+    }
+    DEFER(fclose(fp));
+
+    // TODO: very hacky but should be ok for POD.
+    if (fwrite(&camera, sizeof(camera), 1, fp) != 1)
+    {
+        fprintf(stderr, "%s: fwrite %s failed: %s\n", __func__, path, strerror(errno));
+        return false;
+    }
+
+    return true;
+}
+
+static bool LoadCamera(Camera& camera, SDL_Window* window, const char* path = "Camera.bin")
+{
+    DEBUG_ASSERT(window);
+    DEBUG_ASSERT(path);
+
+    FILE* const fp = fopen(path, "rb");
+    if (!fp)
+    {
+        fprintf(stderr, "%s: fopen %s failed: %s\n", __func__, path, strerror(errno));
+        return false;
+    }
+    DEFER(fclose(fp));
+
+    Camera newCamera{};
+    // TODO: very hacky but should be ok for POD.
+    if (fread(&newCamera, sizeof(newCamera), 1, fp) != 1)
+    {
+        if (feof(fp))
+        {
+            fprintf(stderr, "%s: fread %s failed: EOF\n", __func__, path);
+        }
+        else if (ferror(fp))
+        {
+            fprintf(stderr, "%s: fread %s failed: %s\n", __func__, path, strerror(errno));
+        }
+        return false;
+    }
+
+    memcpy(&camera, &newCamera, sizeof(camera));
+
+    SDL_SetWindowRelativeMouseMode(window, true);
+    sMouseRelativeMode = true;
+    sCamera.mLockDirection = false;
+
+    return true;
+}
+
 static void ProcessMouse(SDL_Window* window)
 {
     assert(window);
@@ -155,8 +214,10 @@ int main()
     }
     DEFER(renderer.Cleanup());
 
+    bool enableCameraLoading = true;
+
     renderer.mEnableUI = true;
-    renderer.mUniformData.exposure = 4.0f;
+    renderer.mUniformData.taaEnable = 1;
 
     sCamera.mPosition = {9.4f, 7.4f, 0.8f};
     sCamera.mYaw = Radians(-85.0f);
@@ -165,6 +226,13 @@ int main()
     sCamera.mSpeed = 10.0f;
     sCamera.mMouseSensitivity = 0.002f;
     sCamera.mPitchClamp = Radians(89.0f);
+    if (enableCameraLoading)
+    {
+        if (!LoadCamera(sCamera, renderer.mWindow))
+        {
+            fprintf(stderr, "camera loading failed\n");
+        }
+    }
     sCamera.UpdateVectors();
     renderer.UpdateCamera(sCamera.mPosition, sCamera.GetViewMatrix());
 
@@ -225,7 +293,79 @@ int main()
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::SliderFloat("Exposure", &renderer.mUniformData.exposure, 1.0, 128.0, "%.1f");
+            if (ImGui::Button("Save"))
+            {
+                if (!SaveCamera(sCamera))
+                {
+                    fprintf(stderr, "camera saving failed\n");
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Load"))
+            {
+                if (!LoadCamera(sCamera, renderer.mWindow))
+                {
+                    fprintf(stderr, "camera loading failed\n");
+                }
+                sCamera.UpdateVectors();
+                renderer.UpdateCamera(sCamera.mPosition, sCamera.GetViewMatrix());
+            }
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::SeparatorText("Misc");
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::SliderFloat(
+                "##MiscSunIntensity",
+                &renderer.mUniformData.sunIntensity,
+                1.0f,
+                20.0f,
+                "%.1f"
+            );
+            ImGui::TableNextColumn();
+            ImGui::Text("Sun intensity");
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::SliderFloat(
+                "##MiscAmbientIntensity",
+                &renderer.mUniformData.ambientIntensity,
+                0.01f,
+                1.0f,
+                "%.2f"
+            );
+            ImGui::TableNextColumn();
+            ImGui::Text("Ambient intensity");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::SeparatorText("TAA");
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            bool taaEnable = renderer.mUniformData.taaEnable;
+            ImGui::Checkbox("Enable", &taaEnable);
+            renderer.mUniformData.taaEnable = taaEnable;
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            int taaJitterMaxIdx = int(renderer.mTaaJitterMaxIdx);
+            ImGui::SliderInt("##TaaJitterMaxIdx", &taaJitterMaxIdx, 1, 16);
+            ImGui::TableNextColumn();
+            ImGui::Text("Jitter max idx");
+            renderer.mTaaJitterMaxIdx = u32(taaJitterMaxIdx);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::SliderFloat(
+                "##TaaBlendWeight",
+                &renderer.mUniformData.taaBlendWeight,
+                0.01f,
+                1.0f,
+                "%.2f"
+            );
+            ImGui::TableNextColumn();
+            ImGui::Text("Blend weight");
 
             ImGui::EndTable();
         }

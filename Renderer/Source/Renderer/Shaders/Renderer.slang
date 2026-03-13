@@ -5,6 +5,7 @@
 struct VertexOutput
 {
     float4 positionClip : SV_Position;
+    float4 prevPositionClip;
     float3 positionWorld;
     float3 normalWorld;
     float4 tangent;
@@ -36,12 +37,19 @@ void VertexMain(
     const float4 positionWorld =
         mul(drawData.localToWorld, float4(vertex.px, vertex.py, vertex.pz, 1.0));
 
+    // TODO: support movable objects (double-buffered draw data).
+    const float4 prevPositionWorld = positionWorld;
+
     output.positionClip = mul(uniformData.worldToClip, positionWorld);
+    output.prevPositionClip = mul(uniformData.prevWorldToClip, prevPositionWorld);
+    // Since we are flipping Y in the viewport, need to do it manually here.
+    output.prevPositionClip.y *= -1.0;
 
     output.positionWorld = positionWorld.xyz;
 
     // TODO: doesn't work on non-uniform scale.
-    output.normalWorld = mul(drawData.localToWorld, float4(vertex.nx, vertex.ny, vertex.nz, 0.0)).xyz;
+    output.normalWorld =
+        mul(drawData.localToWorld, float4(vertex.nx, vertex.ny, vertex.nz, 0.0)).xyz;
 
     output.tangent = float4(vertex.tx, vertex.ty, vertex.tz, vertex.tw);
 
@@ -51,13 +59,14 @@ void VertexMain(
 
 float4 SampleTex(uint32_t idx, float2 uv)
 {
-    return textures[NonUniformResourceIndex(idx)].Sample(samplers[SAMPLER_TEXTURE_IDX], uv);
+    return textures[NonUniformResourceIndex(idx)].Sample(textureSampler, uv);
 }
 
 struct FragmentOutput
 {
     float4 color : SV_Target0;
     float4 albedo : SV_Target1;
+    float2 velocity : SV_Target2;
 }
 
 [shader("fragment")]
@@ -128,19 +137,22 @@ void FragmentMain(
     float3 kDiffuse = float3(1.0) - kSpecular;
     kDiffuse *= 1.0 - metallic;
 
-    const float3 radianceOut = (kDiffuse * albedo.rgb / M_PIf + specular) * dotNormalLight;
+    const float3 radianceOut =
+        (kDiffuse * albedo.rgb / M_PIf + specular) * uniformData.sunIntensity * dotNormalLight;
 
     const float3 color = radianceOut;
 
+    const float2 renderImageSize = float2(uniformData.renderWidth, uniformData.renderHeight);
+    // input.positionClip is in screen space in a fragment shader (a vertex shader outputs clip).
+    const float2 posNdc = ((input.positionClip.xy) / renderImageSize) * 2.0 - 1.0;
+    const float2 prevPosNdc = input.prevPositionClip.xy / input.prevPositionClip.w;
+
     output.color = float4(color, 1.0);
     output.albedo = float4(albedo.rgb, 1.0);
+    output.velocity = (posNdc - uniformData.taaJitter) - (prevPosNdc - uniformData.prevTaaJitter);
 }
 
 // TODO: AO.
-
-// TODO: if I decide to continue RT route, some form of temporal anti-aliasing
-// is basically inevitable, and probably upscaling too.
-// Need to research if blurriness and ghosting can be avoided when using TAA.
 
 struct FullscreenVertexOutput
 {
@@ -164,15 +176,7 @@ float4 FullscreenFragmentMain(
 {
     const Ptr<UniformData, Access.Read> uniformData = pushConstants.uniformData;
 
-    const float shadow =
-        combinedImageSamplers[COMBINED_IMAGE_SAMPLER_SHADOW_IDX].Sample(input.uv).r;
+    float3 color = resolvedRenderSampledImage.Sample(linearSampler, input.uv).rgb;
 
-    const float3 ambient =
-        combinedImageSamplers[COMBINED_IMAGE_SAMPLER_ALBEDO_IDX].Sample(input.uv).rgb * 0.02;
-
-    float3 color = combinedImageSamplers[COMBINED_IMAGE_SAMPLER_RENDER_IDX].Sample(input.uv).rgb;
-
-    color = color * shadow + ambient;
-
-    return float4(TonemapHejlBurgessDawson(color, uniformData.exposure), 1.0);
+    return float4(TonemapHejlBurgessDawson(color), 1.0);
 }

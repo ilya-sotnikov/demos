@@ -410,12 +410,15 @@ bool Vulkan::CreateBuffer(
 
     if (debugName)
     {
-        return Vulkan::DebugNameObject(
-            device,
-            VK_OBJECT_TYPE_BUFFER,
-            reinterpret_cast<u64>(buffer.buffer),
-            debugName
-        );
+        if (!Vulkan::DebugNameObject(
+                device,
+                VK_OBJECT_TYPE_BUFFER,
+                reinterpret_cast<u64>(buffer.buffer),
+                debugName
+            ))
+        {
+            return false;
+        }
     }
 
     return true;
@@ -524,52 +527,17 @@ bool Vulkan::CreateImage(
         {
             return false;
         }
+
+        if (!Vulkan::DebugNameObject(
+                device,
+                VK_OBJECT_TYPE_IMAGE_VIEW,
+                reinterpret_cast<u64>(image.view),
+                name
+            ))
+        {
+            return false;
+        }
     }
-
-    return true;
-}
-
-bool Vulkan::CreateSampledImage(
-    Vulkan::SampledImage& image,
-    VkDevice device,
-    VmaAllocator vmaAllocator,
-    VkFormat format,
-    VkImageUsageFlags usage,
-    u32 width,
-    u32 height,
-    const char* name,
-    u32 mipLevels
-)
-{
-    DEBUG_ASSERT(device);
-    DEBUG_ASSERT(vmaAllocator);
-    DEBUG_ASSERT(height > 0);
-    DEBUG_ASSERT(width > 0);
-    DEBUG_ASSERT(mipLevels > 0);
-
-    Vulkan::Image img{};
-
-    const bool ok = Vulkan::CreateImage(
-        img,
-        device,
-        vmaAllocator,
-        format,
-        usage,
-        width,
-        height,
-        name,
-        mipLevels
-    );
-
-    if (!ok)
-    {
-        return false;
-    }
-
-    image.image = img.image;
-    image.view = img.view;
-    image.allocation = img.allocation;
-    image.sampler = VK_NULL_HANDLE;
 
     return true;
 }
@@ -586,22 +554,48 @@ void Vulkan::DestroyImage(Vulkan::Image& image, VkDevice device, VmaAllocator vm
     image.image = VK_NULL_HANDLE;
 }
 
-void Vulkan::DestroySampledImage(
-    Vulkan::SampledImage& image,
+bool Vulkan::CreateComputePipeline(
+    VkPipeline& pipeline,
     VkDevice device,
-    VmaAllocator vmaAllocator
+    VkPipelineLayout layout,
+    VkShaderModule shaderModule,
+    const char* mainName,
+    const char* debugName
 )
 {
-    DEBUG_ASSERT(device);
-    DEBUG_ASSERT(vmaAllocator);
+    DEBUG_ASSERT(layout);
+    DEBUG_ASSERT(shaderModule);
+    DEBUG_ASSERT(mainName);
 
-    vkDestroyImageView(device, image.view, nullptr);
-    image.view = VK_NULL_HANDLE;
-    vmaDestroyImage(vmaAllocator, image.image, image.allocation);
-    image.allocation = VK_NULL_HANDLE;
-    image.image = VK_NULL_HANDLE;
-    vkDestroySampler(device, image.sampler, nullptr);
-    image.sampler = VK_NULL_HANDLE;
+    VkPipelineShaderStageCreateInfo shaderStageInfo{};
+    shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    shaderStageInfo.module = shaderModule;
+    shaderStageInfo.pName = mainName;
+
+    VkComputePipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    pipelineInfo.stage = shaderStageInfo;
+    pipelineInfo.layout = layout;
+
+    VK_CHECK(
+        vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline)
+    );
+
+    if (debugName)
+    {
+        if (!Vulkan::DebugNameObject(
+                device,
+                VK_OBJECT_TYPE_PIPELINE,
+                reinterpret_cast<u64>(pipeline),
+                debugName
+            ))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool Vulkan::DebugNameObject(

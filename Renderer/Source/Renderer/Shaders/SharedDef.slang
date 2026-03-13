@@ -35,20 +35,28 @@ struct UniformData
     MAT_4X4 worldToView;
     MAT_4X4 worldToClip;
     MAT_4X4 viewToClip;
+    MAT_4X4 prevWorldToClip;
     MAT_4X4 clipToWorld;
     FLOAT_3 cameraPosition;
     FLOAT_3 sunDirectionWorld;
     FLOAT_3 sunDirectionView;
+    FLOAT_2 taaJitter;
+    FLOAT_2 prevTaaJitter;
+    float taaBlendWeight;
     float frustumPlaneXX;
     float frustumPlaneXZ;
     float frustumPlaneYY;
     float frustumPlaneYZ;
     float deltaTime;
-    float exposure;
+    float sunIntensity;
+    float ambientIntensity;
     uint64_t frameCount;
     uint32_t swapchainWidth;
     uint32_t swapchainHeight;
+    uint32_t renderWidth;
+    uint32_t renderHeight;
     uint32_t drawCount;
+    uint32_t taaEnable;
 
 };
 
@@ -104,30 +112,19 @@ struct PushConstants
 };
 
 enum {
-    COMBINED_IMAGE_SAMPLER_BINDING,
-    STORAGE_IMAGE_BINDING,
-    STORAGE_IMAGE_RW_BINDING,
-    SAMPLER_BINDING,
-    SAMPLED_IMAGE_BINDING,
-    DESCRIPTOR_BINDING_COUNT,
-};
-
-enum {
-    COMBINED_IMAGE_SAMPLER_RENDER_IDX,
-    COMBINED_IMAGE_SAMPLER_ALBEDO_IDX,
-    COMBINED_IMAGE_SAMPLER_SHADOW_IDX,
-    COMBINED_IMAGE_SAMPLER_DEPTH_IDX,
-    COMBINED_IMAGE_SAMPLER_COUNT,
-};
-
-enum {
-    STORAGE_IMAGE_RW_SHADOW_IDX,
-    STORAGE_IMAGE_RW_COUNT,
-};
-
-enum {
-    SAMPLER_TEXTURE_IDX,
-    SAMPLER_COUNT,
+    SAMPLER_TEXTURE_BINDING,
+    SAMPLER_LINEAR_BINDING,
+    SAMPLED_IMAGE_RENDER_BINDING,
+    SAMPLED_IMAGE_RESOLVED_RENDER_BINDING,
+    SAMPLED_IMAGE_PREV_RESOLVED_RENDER_BINDING,
+    SAMPLED_IMAGE_ALBEDO_BINDING,
+    SAMPLED_IMAGE_SHADOW_BINDING,
+    SAMPLED_IMAGE_DEPTH_BINDING,
+    SAMPLED_IMAGE_VELOCITY_BINDING,
+    STORAGE_IMAGE_RENDER_BINDING,
+    STORAGE_IMAGE_RESOLVED_RENDER_BINDING,
+    STORAGE_IMAGE_SHADOW_BINDING,
+    BINDING_COUNT,
 };
 
 enum RenderPassFlagBits

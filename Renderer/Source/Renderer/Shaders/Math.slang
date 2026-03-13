@@ -100,6 +100,11 @@ struct Pcg32
     }
 };
 
+float Max3(float3 x)
+{
+    return max(x.x, max(x.y, x.z));
+}
+
 // [0, 1] -> [-x, x]
 T IntervalUnitToSymmetric<T>(T val, float x) where T : IFloat
 {
@@ -128,25 +133,20 @@ float4 UnpackRGBA8UnormToFloat4(uint32_t packed)
     return float4(unpack_u8u32(packed)) / 255.0;
 }
 
-// SRGB functions are approximations.
-float4 FromSrgb(float4 color)
-{
-    return float4(pow(color.rgb, float3(2.2)), color.a);
-}
-
-float4 ToSrgb(float4 color)
-{
-    return float4(pow(color.rgb, float3(1.0 / 2.2)), color.a);
-}
-
-float3 FromSrgb(float3 color)
+// TODO: SRGB functions are approximations.
+float3 SrgbToLinear(float3 color)
 {
     return pow(color, float3(2.2));
 }
 
-float3 ToSrgb(float3 color)
+float3 LinearToSrgb(float3 color)
 {
     return pow(color, float3(1.0 / 2.2));
+}
+
+float Luminance(float3 linearColor)
+{
+    return dot(linearColor, float3(0.2127, 0.7152, 0.0722));
 }
 
 // A Fast and Robust Method for Avoiding Self-Intersection, Carsten Wächter, Nikolaus Binder.
@@ -219,10 +219,118 @@ float3 ChangeBasis(float3 vec, float3 direction)
 
 // Doesn't need additional linear -> SRGB.
 // http://filmicworlds.com/blog/filmic-tonemapping-operators/
-float3 TonemapHejlBurgessDawson(float3 color, float exposure = 1.0)
+float3 TonemapHejlBurgessDawson(float3 color)
 {
-   color *= exposure;
    const float3 x = max(0.0, color - 0.004);
    return (x * (6.2 * x + 0.5)) /
           (x * (6.2 * x + 1.7) + 0.06);
+}
+
+// https://mynameismjp.wordpress.com/2012/10/28/msaa-resolve-filters/
+// https://en.wikipedia.org/wiki/Mitchell%E2%80%93Netravali_filters
+float FilterMitchellNetravali(float x, float B = 1.0 / 3.0, float C = 1.0 / 3.0)
+{
+    // TODO: implement shader asserts (with just printf?)
+
+    float y = 0.0f;
+    const float x2 = x * x;
+    const float x3 = x * x * x;
+
+    if (x < 1.0)
+    {
+        y = (12.0 - 9.0 * B - 6.0 * C) * x3 +
+            (-18.0 + 12.0 * B + 6.0 * C) * x2 +
+            (6.0 - 2.0 * B);
+    }
+    else if (x < 2)
+    {
+        y = (-B - 6.0 * C) * x3 +
+            (6.0 * B + 30.0 * C) * x2 +
+            (-12.0 * B - 48.0 * C) * x +
+            (8.0 * B + 24.0 * C);
+    }
+
+    return y / 6.0f;
+}
+
+// https://gist.github.com/TheRealMJP/c83b8c0f46b63f3a88a5986f4fa982b1
+// Samples a texture with Catmull-Rom filtering, using 9 texture fetches instead of 16.
+// See https://vec3.ca/posts/bicubic-filtering-in-fewer-taps for more details.
+float4 SampleTextureCatmullRom(
+    Texture2D<float4> tex,
+    SamplerState linearSampler,
+    float2 uv,
+    float2 texSize
+)
+{
+    // We're going to sample a a 4x4 grid of texels surrounding the target UV coordinate.
+    // We'll do this by rounding down the sample location to get the exact center of our
+    // "starting" texel. The starting texel will be at location [1, 1] in the grid,
+    // where [0, 0] is the top left corner.
+    const float2 samplePos = uv * texSize;
+    const float2 texPos1 = floor(samplePos - 0.5) + 0.5;
+
+    // Compute the fractional offset from our starting texel to our original sample
+    // location, which we'll feed into the Catmull-Rom spline function to get our filter weights.
+    const float2 f = samplePos - texPos1;
+
+    // Compute the Catmull-Rom weights using the fractional offset that we calculated earlier.
+    // These equations are pre-expanded based on our knowledge of where the texels will be located,
+    // which lets us avoid having to evaluate a piece-wise function.
+    const float2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    const float2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    const float2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    const float2 w3 = f * f * (-0.5 + 0.5 * f);
+
+    // Work out weighting factors and sampling offsets that will let us use bilinear filtering to
+    // simultaneously evaluate the middle 2 samples from the 4x4 grid.
+    const float2 w12 = w1 + w2;
+    const float2 offset12 = w2 / (w1 + w2);
+
+    // Compute the final UV coordinates we'll use for sampling the texture.
+    float2 texPos0 = texPos1 - 1.0;
+    float2 texPos3 = texPos1 + 2.0;
+    float2 texPos12 = texPos1 + offset12;
+
+    texPos0 /= texSize;
+    texPos3 /= texSize;
+    texPos12 /= texSize;
+
+    float4 result = float4(0.0f);
+
+    result += tex.SampleLevel(linearSampler, float2(texPos0.x, texPos0.y), 0.0) * w0.x * w0.y;
+    result += tex.SampleLevel(linearSampler, float2(texPos12.x, texPos0.y), 0.0) * w12.x * w0.y;
+    result += tex.SampleLevel(linearSampler, float2(texPos3.x, texPos0.y), 0.0) * w3.x * w0.y;
+
+    result += tex.SampleLevel(linearSampler, float2(texPos0.x, texPos12.y), 0.0) * w0.x * w12.y;
+    result += tex.SampleLevel(linearSampler, float2(texPos12.x, texPos12.y), 0.0) * w12.x * w12.y;
+    result += tex.SampleLevel(linearSampler, float2(texPos3.x, texPos12.y), 0.0f) * w3.x * w12.y;
+
+    result += tex.SampleLevel(linearSampler, float2(texPos0.x, texPos3.y), 0.0) * w0.x * w3.y;
+    result += tex.SampleLevel(linearSampler, float2(texPos12.x, texPos3.y), 0.0) * w12.x * w3.y;
+    result += tex.SampleLevel(linearSampler, float2(texPos3.x, texPos3.y), 0.0) * w3.x * w3.y;
+
+    return result;
+}
+
+// https://github.com/playdeadgames/temporal/blob/master/Assets/Shaders/TemporalReprojection.shader
+float3 ClipAabbCenter(float3 aabbMin, float3 aabbMax, float3 p)
+{
+        // NOTE: only clips towards AABB center (but fast!).
+        const float3 pClip = 0.5 * (aabbMax + aabbMin);
+        const float3 eClip = 0.5 * (aabbMax - aabbMin) + 0.0001;
+
+        const float3 vClip = p - pClip;
+        const float3 vUnit = vClip / eClip;
+        const float3 aUnit = abs(vUnit);
+        const float maUnit = max(aUnit.x, max(aUnit.y, aUnit.z));
+
+        if (maUnit > 1.0)
+        {
+            return pClip + vClip / maUnit;
+        }
+        else
+        {
+            return p; // Point inside AABB.
+        }
 }

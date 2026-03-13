@@ -10,17 +10,44 @@ struct VkDrawIndexedIndirectCommand
     uint32_t    firstInstance;
 };
 
-[[vk::binding(COMBINED_IMAGE_SAMPLER_BINDING)]]
-Sampler2D combinedImageSamplers[];
+// NOTE: full bindless is not practical yet since it messes up synchronization validation.
+// For now it's only for read-only resources (textures).
 
-[[vk::binding(STORAGE_IMAGE_BINDING)]]
-Texture2D storageImages[];
+[[vk::binding(SAMPLER_TEXTURE_BINDING)]]
+SamplerState textureSampler;
 
-[[vk::binding(STORAGE_IMAGE_RW_BINDING)]]
-RWTexture2D storageImagesRW[];
+[[vk::binding(SAMPLER_LINEAR_BINDING)]]
+SamplerState linearSampler;
 
-[[vk::binding(SAMPLER_BINDING)]]
-SamplerState samplers[];
+[[vk::binding(SAMPLED_IMAGE_RENDER_BINDING)]]
+Texture2D renderSampledImage;
 
-[[vk::binding(SAMPLED_IMAGE_BINDING)]]
+[[vk::binding(SAMPLED_IMAGE_RESOLVED_RENDER_BINDING)]]
+Texture2D resolvedRenderSampledImage;
+
+[[vk::binding(SAMPLED_IMAGE_PREV_RESOLVED_RENDER_BINDING)]]
+Texture2D prevResolvedRenderSampledImage;
+
+[[vk::binding(SAMPLED_IMAGE_ALBEDO_BINDING)]]
+Texture2D albedoSampledImage;
+
+[[vk::binding(SAMPLED_IMAGE_SHADOW_BINDING)]]
+Texture2D shadowSampledImage;
+
+[[vk::binding(SAMPLED_IMAGE_DEPTH_BINDING)]]
+Texture2D depthSampledImage;
+
+[[vk::binding(SAMPLED_IMAGE_VELOCITY_BINDING)]]
+Texture2D velocitySampledImage;
+
+[[vk::binding(STORAGE_IMAGE_RENDER_BINDING)]]
+RWTexture2D renderStorageImage;
+
+[[vk::binding(STORAGE_IMAGE_RESOLVED_RENDER_BINDING)]]
+RWTexture2D resolvedRenderStorageImage;
+
+[[vk::binding(STORAGE_IMAGE_SHADOW_BINDING)]]
+RWTexture2D shadowStorageImage;
+
+[[vk::binding(0, 1)]]
 Texture2D textures[];
