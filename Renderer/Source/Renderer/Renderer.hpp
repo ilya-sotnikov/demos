@@ -73,9 +73,9 @@ struct Renderer
     VkDescriptorSetLayout mDescriptorSetLayout;
     VkSampler mTextureSampler;
     VkSampler mLinearSampler;
-    VkFormat mRenderImageFormat{};
-    VkFormat mAlbedoImageFormat{};
-    VkFormat mVelocityImageFormat{};
+    VkFormat mRenderImageFormat;
+    VkFormat mAlbedoImageFormat;
+    VkFormat mVelocityImageFormat;
     VkFormat mDepthFormat;
     VkCommandPool mCommandPool;
     VkSampleCountFlagBits mSampleCount;

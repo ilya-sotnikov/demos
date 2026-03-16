@@ -13,6 +13,7 @@ set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(Lib/SDL)
 add_subdirectory(Lib/volk)
 add_subdirectory(Lib/VulkanMemoryAllocator)
+add_subdirectory(Lib/meshoptimizer)
 
 set(KTX_FEATURE_TESTS OFF)
 add_subdirectory(Lib/KTX-Software)
@@ -60,6 +61,7 @@ set(LIBS
     GPUOpen::VulkanMemoryAllocator
     ktx
     imgui
+    meshoptimizer
 )
 
 add_executable(${PROJECT_NAME}

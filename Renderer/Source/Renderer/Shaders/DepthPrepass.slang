@@ -19,7 +19,7 @@ void VertexMain(
     const Vertex vertex = pushConstants.vertices[vertexId + vertexOffset];
 
     const float4 positionWorld =
-        mul(drawData.localToWorld, float4(vertex.px, vertex.py, vertex.pz, 1.0));
+        mul(drawData.localToWorld, float4(vertex.posX, vertex.posY, vertex.posZ, 1.0));
 
     output.positionClip = mul(pushConstants.uniformData.worldToClip, positionWorld);
 }

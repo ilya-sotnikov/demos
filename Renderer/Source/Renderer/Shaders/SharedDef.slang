@@ -60,13 +60,14 @@ struct UniformData
 
 };
 
-// TODO: pack.
+// Took the packing approach from niagara:
+// https://github.com/zeux/niagara
 struct Vertex
 {
-    float px, py, pz;
-    float nx, ny, nz;
-    float tx, ty, tz, tw;
-    float u, v;
+    HALF posX, posY, posZ;
+    uint16_t tangent; // 8-8 octahedral.
+    uint32_t normal; // 10-10-10 + 1 bit bitangent sign.
+    HALF u, v;
 };
 
 struct Material

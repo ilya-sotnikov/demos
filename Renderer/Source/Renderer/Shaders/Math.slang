@@ -100,6 +100,11 @@ struct Pcg32
     }
 };
 
+// https://blog.demofox.org/2022/01/01/interleaved-gradient-noise-a-different-kind-of-low-discrepancy-sequence/
+float InterleavedGradientNoise(int x, int y) {
+    return fmod(52.9829189 * fmod(0.06711056 * float(x) + 0.00583715 * float(y), 1.0), 1.0);
+}
+
 float Max3(float3 x)
 {
     return max(x.x, max(x.y, x.z));
@@ -131,6 +136,26 @@ uint32_t PackFloat4ToRGBA8Unorm(float4 val)
 float4 UnpackRGBA8UnormToFloat4(uint32_t packed)
 {
     return float4(unpack_u8u32(packed)) / 255.0;
+}
+
+float2 PackNormalOctahedral(float3 normal)
+{
+    normal /= (abs(normal.x) + abs(normal.y) + abs(normal.z));
+    normal.xy = normal.z >= 0.0 ? normal.xy :
+        (1.0 - abs(normal.yx)) * select(normal.xy >= 0.0, 1.0, -1.0);
+    normal.xy = normal.xy * 0.5 + 0.5;
+    return normal.xy;
+}
+
+float3 UnpackNormalOctahedral(float2 packed)
+{
+    packed = packed * 2.0 - 1.0;
+
+    // https://twitter.com/Stubbesaurus/status/937994790553227264
+    float3 n = float3(packed.xy, 1.0 - abs(packed.x) - abs(packed.y));
+    const float t = saturate(-n.z);
+    n.xy += select(n.xy >= 0.0, -t, t);
+    return normalize(n);
 }
 
 // TODO: SRGB functions are approximations.

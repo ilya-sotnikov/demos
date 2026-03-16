@@ -16,3 +16,6 @@
 [submodule "Renderer/Lib/imgui"]
 	path = Renderer/Lib/imgui
 	url = https://github.com/ocornut/imgui.git
+[submodule "Renderer/Lib/meshoptimizer"]
+	path = Renderer/Lib/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer.git

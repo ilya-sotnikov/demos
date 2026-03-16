@@ -294,11 +294,15 @@ bool Renderer::Init()
                 &= vulkanFeatures12.descriptorBindingStorageImageUpdateAfterBind;
             supportsRequiredFeatures &= vulkanFeatures12.runtimeDescriptorArray;
             supportsRequiredFeatures &= vulkanFeatures12.drawIndirectCount;
+            supportsRequiredFeatures &= vulkanFeatures12.shaderFloat16;
+            supportsRequiredFeatures &= vulkanFeatures11.shaderDrawParameters;
+            supportsRequiredFeatures &= vulkanFeatures11.storagePushConstant16;
             supportsRequiredFeatures &= physicalDeviceFeatures.features.multiDrawIndirect;
             supportsRequiredFeatures &= physicalDeviceFeatures.features.fragmentStoresAndAtomics;
             supportsRequiredFeatures &= physicalDeviceFeatures.features.samplerAnisotropy;
             supportsRequiredFeatures &= physicalDeviceFeatures.features.sampleRateShading;
             supportsRequiredFeatures &= physicalDeviceFeatures.features.textureCompressionBC;
+            supportsRequiredFeatures &= physicalDeviceFeatures.features.shaderInt16;
             supportsRequiredFeatures &= accelStructFeatures.accelerationStructure;
             supportsRequiredFeatures &= rayQueryFeatures.rayQuery;
             supportsRequiredFeatures &= rayTracingPipelineFeatures.rayTracingPipeline;
@@ -373,11 +377,13 @@ bool Renderer::Init()
         vulkanFeatures12.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
         vulkanFeatures12.runtimeDescriptorArray = VK_TRUE;
         vulkanFeatures12.drawIndirectCount = VK_TRUE;
+        vulkanFeatures12.shaderFloat16 = VK_TRUE;
 
         VkPhysicalDeviceVulkan11Features vulkanFeatures11{};
         vulkanFeatures11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
         vulkanFeatures11.pNext = &vulkanFeatures12;
         vulkanFeatures11.shaderDrawParameters = VK_TRUE;
+        vulkanFeatures11.storagePushConstant16 = VK_TRUE;
 
         VkPhysicalDeviceFeatures2 physicalDeviceFeatures{};
         physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -388,6 +394,7 @@ bool Renderer::Init()
         physicalDeviceFeatures.features.fragmentStoresAndAtomics = VK_TRUE;
         physicalDeviceFeatures.features.samplerAnisotropy = VK_TRUE;
         physicalDeviceFeatures.features.sampleRateShading = VK_TRUE;
+        physicalDeviceFeatures.features.shaderInt16 = VK_TRUE;
 
         const f32 queuePriority = 1.0f;
 
@@ -1639,7 +1646,7 @@ bool Renderer::CreateAndUploadBlas(
         geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
         geometry.geometry.triangles.sType
             = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-        geometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+        geometry.geometry.triangles.vertexFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         geometry.geometry.triangles.vertexData.deviceAddress
             = mVertexBuffer.deviceAddress + size_t(drawCmd.vertexOffset) * sizeof(Vertex);
         geometry.geometry.triangles.vertexStride = sizeof(Vertex);
@@ -2680,13 +2687,15 @@ bool Renderer::CreateSwapchain()
     {
         surfaceCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     }
-    else if (surfaceCapabilities.supportedCompositeAlpha
-             & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)
+    else if (
+        surfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR
+    )
     {
         surfaceCompositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
     }
-    else if (surfaceCapabilities.supportedCompositeAlpha
-             & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
+    else if (
+        surfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR
+    )
     {
         surfaceCompositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
     }
@@ -2823,7 +2832,7 @@ bool Renderer::CreateColorResources()
     if (!Vulkan::FindSupportedImageFormat(
             shadowImageFormat,
             mPhysicalDevice,
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             {VK_FORMAT_R8_UNORM}
         ))
     {

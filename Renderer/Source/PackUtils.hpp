@@ -2,6 +2,7 @@
 
 #include "Common.hpp"
 #include "Math/Utils.hpp"
+#include "Math/Vec2.hpp"
 #include "Math/Vec3.hpp"
 
 inline f32 PackToF32(u8 x, u8 y, u8 z)
@@ -29,4 +30,30 @@ inline Vec3 UnpackToVec3(f32 value)
     result.G() = Fract(value * 256.0f);
     result.B() = Fract(value * 65536.0f);
     return result;
+}
+
+// https://www.elopezr.com/the-art-of-packing-data/
+inline Vec2 PackNormalOctahedral(Vec3 normal)
+{
+    normal /= (fabsf(normal.X()) + fabsf(normal.Y()) + fabsf(normal.Z()));
+    normal.X() = normal.Z() >= 0.0f
+        ? normal.X()
+        : (1.0f - abs(normal.Y())) * (normal.X() >= 0.0f ? 1.0f : -1.0f);
+    normal.Y() = normal.Z() >= 0.0f
+        ? normal.Y()
+        : (1.0f - abs(normal.X())) * (normal.Y() >= 0.0f ? 1.0f : -1.0f);
+    normal.X() = normal.X() * 0.5f + 0.5f;
+    normal.Y() = normal.Y() * 0.5f + 0.5f;
+    return {normal.X(), normal.Y()};
+}
+
+inline Vec3 UnpackNormalOctahedral(Vec2 packed)
+{
+    packed = packed * 2.0f - Vec2{1.0f};
+
+    Vec3 n = {packed.X(), packed.Y(), 1.0f - fabsf(packed.X()) - fabsf(packed.Y())};
+    const float t = Clamp(-n.Z(), 0.0f, 1.0f);
+    n.X() += n.X() >= 0.0f ? -t : t;
+    n.Y() += n.Y() >= 0.0f ? -t : t;
+    return Normalize(n);
 }

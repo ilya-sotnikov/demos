@@ -3,7 +3,6 @@
 
 // Took an implementation from this article:
 // https://alextardif.com/TAA.html
-// TODO: probably have some bugs left and thin bright stuff flickers.
 
 // Additional resources that explain these techniques in more depth:
 // https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/
@@ -12,6 +11,10 @@
 // http://behindthepixels.io/assets/files/TemporalAA.pdf
 // https://developer.download.nvidia.com/gameworks/events/GDC2016/msalvi_temporal_supersampling.pdf
 // https://github.com/playdeadgames/temporal
+
+// TODO: probably have some bugs left and thin bright stuff flickers.
+// TODO: more explanations in comments.
+// TODO: optimize.
 
 [shader("compute")]
 [numthreads(RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_X, RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_Y, 1)]

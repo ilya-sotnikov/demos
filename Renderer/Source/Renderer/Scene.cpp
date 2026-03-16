@@ -3,8 +3,10 @@
 #include "../Utils.hpp"
 #include "../Math/Vec3.hpp"
 #include "../Math/Mat4.hpp"
+#include "../PackUtils.hpp"
 
 #include <cgltf.h>
+#include <meshoptimizer.h>
 
 // TODO: more error handling.
 
@@ -54,6 +56,9 @@ static void LoadGeometry(
     DEBUG_ASSERT(cgltfData);
 
     std::vector<f32> tmp;
+    std::vector<Vertex> primVertices;
+    std::vector<u32> primIndices;
+    std::vector<u32> remap;
 
     for (cgltf_size mi = 0; mi < cgltfData->meshes_count; ++mi)
     {
@@ -71,7 +76,7 @@ static void LoadGeometry(
 
             const cgltf_size primVertexCount = prim.attributes[0].data->count;
 
-            vertices.resize(vertexCount + primVertexCount);
+            primVertices.resize(primVertexCount);
 
             tmp.resize(primVertexCount * 4);
 
@@ -85,9 +90,9 @@ static void LoadGeometry(
 
                 for (cgltf_size vi = 0; vi < primVertexCount; ++vi)
                 {
-                    vertices[vertexCount + vi].px = tmp[vi * 3 + 0];
-                    vertices[vertexCount + vi].py = tmp[vi * 3 + 1];
-                    vertices[vertexCount + vi].pz = tmp[vi * 3 + 2];
+                    primVertices[vi].posX = meshopt_quantizeHalf(tmp[vi * 3 + 0]);
+                    primVertices[vi].posY = meshopt_quantizeHalf(tmp[vi * 3 + 1]);
+                    primVertices[vi].posZ = meshopt_quantizeHalf(tmp[vi * 3 + 2]);
                 }
             }
 
@@ -101,9 +106,13 @@ static void LoadGeometry(
 
                 for (cgltf_size ni = 0; ni < primVertexCount; ++ni)
                 {
-                    vertices[vertexCount + ni].nx = tmp[ni * 3 + 0];
-                    vertices[vertexCount + ni].ny = tmp[ni * 3 + 1];
-                    vertices[vertexCount + ni].nz = tmp[ni * 3 + 2];
+                    // clang-format off
+                    primVertices[ni].normal = u32(
+                          ((meshopt_quantizeSnorm(tmp[ni * 3 + 0], 10) + 511) <<  0)
+                        | ((meshopt_quantizeSnorm(tmp[ni * 3 + 1], 10) + 511) << 10)
+                        | ((meshopt_quantizeSnorm(tmp[ni * 3 + 2], 10) + 511) << 20)
+                    );
+                    // clang-format on
                 }
             }
 
@@ -117,10 +126,20 @@ static void LoadGeometry(
 
                 for (cgltf_size ti = 0; ti < primVertexCount; ++ti)
                 {
-                    vertices[vertexCount + ti].tx = tmp[ti * 4 + 0];
-                    vertices[vertexCount + ti].ty = tmp[ti * 4 + 1];
-                    vertices[vertexCount + ti].tz = tmp[ti * 4 + 2];
-                    vertices[vertexCount + ti].tw = tmp[ti * 4 + 3];
+                    const float tx = tmp[ti * 4 + 0];
+                    const float ty = tmp[ti * 4 + 1];
+                    const float tz = tmp[ti * 4 + 2];
+                    const float tw = tmp[ti * 4 + 3];
+                    const Vec2 packed = PackNormalOctahedral({tx, ty, tz});
+                    // clang-format off
+                    primVertices[ti].tangent = u16(
+                          ((meshopt_quantizeSnorm(packed.X(), 8) + 127) << 0)
+                        | ((meshopt_quantizeSnorm(packed.Y(), 8) + 127) << 8)
+                    );
+                    // clang-format on
+
+                    // Store the sign bit in one of two free bits in normal.
+                    primVertices[ti].normal |= tw >= 0.0f ? 0 : 1U << 30;
                 }
             }
 
@@ -134,21 +153,73 @@ static void LoadGeometry(
 
                 for (cgltf_size ti = 0; ti < primVertexCount; ++ti)
                 {
-                    vertices[vertexCount + ti].u = tmp[ti * 2 + 0];
-                    vertices[vertexCount + ti].v = tmp[ti * 2 + 1];
+                    primVertices[ti].u = meshopt_quantizeHalf(tmp[ti * 2 + 0]);
+                    primVertices[ti].v = meshopt_quantizeHalf(tmp[ti * 2 + 1]);
                 }
             }
 
             const size_t indexCount = indices.size();
             const size_t primIndexCount = prim.indices->count;
-            indices.resize(indexCount + primIndexCount);
+
+            primIndices.resize(primIndexCount);
             const cgltf_size size = cgltf_accessor_unpack_indices(
                 prim.indices,
-                indices.data() + indexCount,
+                primIndices.data(),
                 sizeof(u32),
                 primIndexCount
             );
             ASSERT(size == primIndexCount);
+
+            remap.resize(primVertexCount);
+            const size_t uniqueVertexCount = meshopt_generateVertexRemap(
+                remap.data(),
+                primIndices.data(),
+                primIndexCount,
+                primVertices.data(),
+                primVertexCount,
+                sizeof(primVertices[0])
+            );
+
+            meshopt_remapVertexBuffer(
+                primVertices.data(),
+                primVertices.data(),
+                primVertexCount,
+                sizeof(primVertices[0]),
+                remap.data()
+            );
+            meshopt_remapIndexBuffer(
+                primIndices.data(),
+                primIndices.data(),
+                primIndexCount,
+                remap.data()
+            );
+
+            primVertices.resize(uniqueVertexCount);
+
+            meshopt_optimizeVertexCache(
+                primIndices.data(),
+                primIndices.data(),
+                primIndexCount,
+                uniqueVertexCount
+            );
+            meshopt_optimizeVertexFetch(
+                primVertices.data(),
+                primIndices.data(),
+                primIndexCount,
+                primVertices.data(),
+                uniqueVertexCount,
+                sizeof(primVertices[0])
+            );
+
+            indices.resize(indexCount + primIndexCount);
+            memcpy(indices.data() + indexCount, primIndices.data(), VEC_SIZE_BYTES(primIndices));
+
+            vertices.resize(vertexCount + uniqueVertexCount);
+            memcpy(
+                vertices.data() + vertexCount,
+                primVertices.data(),
+                VEC_SIZE_BYTES(primVertices)
+            );
 
             VkDrawIndexedIndirectCommand drawCmd{};
             drawCmd.indexCount = u32(primIndexCount);
@@ -159,7 +230,7 @@ static void LoadGeometry(
             drawCmds.push_back(drawCmd);
 
             MeshPrimitive meshPrimitive{};
-            meshPrimitive.vertexCount = primVertexCount;
+            meshPrimitive.vertexCount = uniqueVertexCount;
             meshPrimitive.meshIdx = mi;
             meshPrimitive.material = prim.material;
 
@@ -177,9 +248,9 @@ static void LoadGeometry(
         {
             // TODO: implement a better algorithm.
             sphereCenter += Vec3{
-                vertices[vertexOffset + vi].px,
-                vertices[vertexOffset + vi].py,
-                vertices[vertexOffset + vi].pz
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posX),
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posY),
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posZ)
             };
         }
 
@@ -198,9 +269,9 @@ static void LoadGeometry(
         {
             // TODO: implement a better algorithm.
             const Vec3 v = Vec3{
-                vertices[vertexOffset + vi].px,
-                vertices[vertexOffset + vi].py,
-                vertices[vertexOffset + vi].pz
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posX),
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posY),
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posZ)
             };
             sphereRadius = Max(sphereRadius, Magnitude(meshPrimitives[pi].sphereCenter - v));
         }

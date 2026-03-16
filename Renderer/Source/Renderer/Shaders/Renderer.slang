@@ -35,7 +35,7 @@ void VertexMain(
     const Vertex vertex = pushConstants.vertices[vertexId + vertexOffset];
 
     const float4 positionWorld =
-        mul(drawData.localToWorld, float4(vertex.px, vertex.py, vertex.pz, 1.0));
+        mul(drawData.localToWorld, float4(vertex.posX, vertex.posY, vertex.posZ, 1.0));
 
     // TODO: support movable objects (double-buffered draw data).
     const float4 prevPositionWorld = positionWorld;
@@ -47,12 +47,24 @@ void VertexMain(
 
     output.positionWorld = positionWorld.xyz;
 
+    const int32_t normalPacked = int32_t(vertex.normal);
+    const int32_t normalIntX = (normalPacked >>  0) & 1023;
+    const int32_t normalIntY = (normalPacked >> 10) & 1023;
+    const int32_t normalIntZ = (normalPacked >> 20) & 1023;
+    const float3 normal = float3(normalIntX, normalIntY, normalIntZ) / 511.0 - 1.0;
     // TODO: doesn't work on non-uniform scale.
     output.normalWorld =
-        mul(drawData.localToWorld, float4(vertex.nx, vertex.ny, vertex.nz, 0.0)).xyz;
+        mul(drawData.localToWorld, float4(normal, 0.0)).xyz;
 
-    output.tangent = float4(vertex.tx, vertex.ty, vertex.tz, vertex.tw);
+    const int32_t tangentPacked = int32_t(vertex.tangent);
+    const int32_t tangentIntX = (tangentPacked >> 0) & 255;
+    const int32_t tangentIntY = (tangentPacked >> 8) & 255;
+    float4 tangent;
+    tangent.xy = float2(tangentIntX, tangentIntY) / 127.0 - 1.0;
+    tangent.xyz = UnpackNormalOctahedral(tangent.xy);
+    tangent.w = (normalPacked & (1U << 30)) != 0 ? -1.0 : 1.0;
 
+    output.tangent = tangent;
     output.uv = float2(vertex.u, vertex.v);
     output.materialIdx = drawData.materialIdx;
 }
