@@ -359,3 +359,12 @@ float3 ClipAabbCenter(float3 aabbMin, float3 aabbMax, float3 p)
             return p; // Point inside AABB.
         }
 }
+
+float3 QuatRotate(float4 quat, float3 vec)
+{
+    const float3 v = float3(quat.y, quat.z, quat.w);
+    const float3 uv = cross(v, vec);
+    const float3 uuv = cross(v, uv);
+
+    return vec + (uuv + uv * quat.x) * 2.0;
+}

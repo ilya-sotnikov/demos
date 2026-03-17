@@ -1825,7 +1825,8 @@ bool Renderer::CreateAndUploadTlas(
 
     for (size_t i = 0; i < drawData.size(); ++i)
     {
-        const Mat4& transform = Transpose(drawData[i].localToWorld);
+        const Mat4 transform
+            = Transpose(Model(drawData[i].position, drawData[i].orientation, drawData[i].scale));
 
         VkAccelerationStructureInstanceKHR instance{};
         memcpy(

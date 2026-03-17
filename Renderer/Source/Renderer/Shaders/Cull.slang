@@ -1,4 +1,5 @@
 #include "Common.slang"
+#include "Math.slang"
 
 [shader("compute")]
 [numthreads(RENDERER_CULL_WORKGROUP_SIZE, 1, 1)]
@@ -24,9 +25,11 @@ void Main(
         return;
     }
 
+    const float3 sphereCenterWorld =
+        QuatRotate(drawData.orientation, drawData.sphereCenter) * drawData.scale + drawData.position;
     const float3 sphereCenterView = mul(
         uniformData.worldToView,
-        mul(drawData.localToWorld, float4(drawData.sphereCenter, 1.0))
+        float4(sphereCenterWorld, 1.0)
     ).xyz;
     const float sphereRadius = drawData.scale * drawData.sphereRadius;
 
@@ -41,6 +44,8 @@ void Main(
         abs(sphereCenterView.y) * uniformData.frustumPlaneYY > -sphereRadius;
 
     visible = visible && sphereCenterView.z - sphereRadius < -RENDERER_NEAR_PLANE;
+
+    // TODO: visualize frustum culling.
 
     // TODO: occlusion culling.
 

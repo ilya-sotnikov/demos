@@ -29,6 +29,7 @@ Dependencies (included as git submodules):
 - imgui
 - cgltf
 - KTX-Software
+- meshoptimizer
 
 You also need [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) (not bundled).
 
@@ -71,7 +72,7 @@ This will take a while.
 
 ## Resources
 
-- [Niagara renderer, Arseny Kapoulkine](https://github.com/zeux/niagara)
+- [Niagara renderer, Arseny Kapoulkine](https://github.com/zeux/niagara) (learned a lot from here)
 - [Physics and Math of Shading, Naty Hoffman](https://blog.selfshadow.com/publications/s2013-shading-course/hoffman/s2013_pbs_physics_math_notes.pdf)
 - [Building a Simple Engine, Lighting implementation, The Khronos Group](https://github.com/KhronosGroup/Vulkan-Tutorial/blob/main/en/Building_a_Simple_Engine/Lighting_Materials/04_lighting_implementation.adoc)
 - [Real Shading in Unreal Engine 4, Brian Karis](https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf)

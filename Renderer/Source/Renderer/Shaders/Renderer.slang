@@ -34,8 +34,11 @@ void VertexMain(
     const DrawData drawData = pushConstants.drawData[drawIdx];
     const Vertex vertex = pushConstants.vertices[vertexId + vertexOffset];
 
-    const float4 positionWorld =
-        mul(drawData.localToWorld, float4(vertex.posX, vertex.posY, vertex.posZ, 1.0));
+    const float3 pos = float3(vertex.posX, vertex.posY, vertex.posZ);
+    const float4 positionWorld = float4(
+        QuatRotate(drawData.orientation, pos) * drawData.scale + drawData.position,
+        1.0
+    );
 
     // TODO: support movable objects (double-buffered draw data).
     const float4 prevPositionWorld = positionWorld;
@@ -52,9 +55,7 @@ void VertexMain(
     const int32_t normalIntY = (normalPacked >> 10) & 1023;
     const int32_t normalIntZ = (normalPacked >> 20) & 1023;
     const float3 normal = float3(normalIntX, normalIntY, normalIntZ) / 511.0 - 1.0;
-    // TODO: doesn't work on non-uniform scale.
-    output.normalWorld =
-        mul(drawData.localToWorld, float4(normal, 0.0)).xyz;
+    output.normalWorld = QuatRotate(drawData.orientation, normal);
 
     const int32_t tangentPacked = int32_t(vertex.tangent);
     const int32_t tangentIntX = (tangentPacked >> 0) & 255;

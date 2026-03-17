@@ -39,6 +39,64 @@ static const char* cgltf_result_to_string(cgltf_result result)
     }
 }
 
+// Stole from niagara:
+// https://github.com/zeux/niagara
+static void DecomposeTransform(
+    f32 translation[3],
+    f32 rotation[4],
+    f32 scale[3],
+    const f32 transform[16]
+)
+{
+    DEBUG_ASSERT(translation);
+    DEBUG_ASSERT(rotation);
+    DEBUG_ASSERT(scale);
+    DEBUG_ASSERT(transform);
+
+    f32 m[4][4] = {};
+    memcpy(m, transform, sizeof(m));
+
+    // Extract translation from last row.
+    translation[0] = m[3][0];
+    translation[1] = m[3][1];
+    translation[2] = m[3][2];
+
+    // Compute determinant to determine handedness.
+    const f32 det = m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2])
+        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+
+    const f32 sign = (det < 0.0f) ? -1.0f : 1.0f;
+
+    // Recover scale from axis lengths.
+    scale[0] = sqrtf(m[0][0] * m[0][0] + m[0][1] * m[0][1] + m[0][2] * m[0][2]) * sign;
+    scale[1] = sqrtf(m[1][0] * m[1][0] + m[1][1] * m[1][1] + m[1][2] * m[1][2]) * sign;
+    scale[2] = sqrtf(m[2][0] * m[2][0] + m[2][1] * m[2][1] + m[2][2] * m[2][2]) * sign;
+
+    // Normalize axes to get a pure rotation matrix.
+    const f32 rsx = (scale[0] == 0.0f) ? 0.0f : 1.0f / scale[0];
+    const f32 rsy = (scale[1] == 0.0f) ? 0.0f : 1.0f / scale[1];
+    const f32 rsz = (scale[2] == 0.0f) ? 0.0f : 1.0f / scale[2];
+
+    const f32 r00 = m[0][0] * rsx, r10 = m[1][0] * rsy, r20 = m[2][0] * rsz;
+    const f32 r01 = m[0][1] * rsx, r11 = m[1][1] * rsy, r21 = m[2][1] * rsz;
+    const f32 r02 = m[0][2] * rsx, r12 = m[1][2] * rsy, r22 = m[2][2] * rsz;
+
+    // "Branchless" version of Mike Day's matrix to quaternion conversion.
+    const int qc = r22 < 0 ? (r00 > r11 ? 0 : 1) : (r00 < -r11 ? 2 : 3);
+    const f32 qs1 = qc & 2 ? -1.0f : 1.0f;
+    const f32 qs2 = qc & 1 ? -1.0f : 1.0f;
+    const f32 qs3 = (qc - 1) & 2 ? -1.0f : 1.0f;
+
+    const f32 qt = 1.0f - qs3 * r00 - qs2 * r11 - qs1 * r22;
+    const f32 qs = 0.5f / sqrtf(qt);
+
+    rotation[qc ^ 3] = qs * qt;
+    rotation[qc ^ 0] = qs * (r01 + qs1 * r10);
+    rotation[qc ^ 1] = qs * (r20 + qs2 * r02);
+    rotation[qc ^ 2] = qs * (r12 + qs3 * r21);
+}
+
 static void LoadGeometry(
     std::vector<Vertex>& vertices,
     std::vector<u32>& indices,
@@ -303,11 +361,8 @@ static void LoadMaterials(
 
         if (node.mesh)
         {
-            Mat4 localToWorld{};
-            cgltf_node_transform_world(&node, &localToWorld.col[0].val[0]);
-
-            // TODO: for now assuming positive uniform scale,
-            // works on Intel Sponza but it's not asserted.
+            f32 localToWorld[16]{};
+            cgltf_node_transform_world(&node, localToWorld);
 
             const Mesh mesh = meshes[cgltf_mesh_index(cgltfData, node.mesh)];
 
@@ -316,9 +371,13 @@ static void LoadMaterials(
                 const cgltf_material* const material
                     = meshPrimitives[mesh.primitiveIdx + pi].material;
                 DrawData d{};
-                // TODO: separate quat, scale, position.
-                d.localToWorld = localToWorld;
-                d.scale = Magnitude(localToWorld.col[0].XYZ());
+
+                f32 scale[3]{};
+                DecomposeTransform(d.position.val, d.orientation.val, scale, localToWorld);
+                ASSERT(AlmostEqual(scale[0], scale[1]));
+                ASSERT(AlmostEqual(scale[0], scale[2]));
+                ASSERT(scale[0] > 0.0f);
+                d.scale = Max(scale[0], Max(scale[1], scale[2]));
 
                 if (material)
                 {

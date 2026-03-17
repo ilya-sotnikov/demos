@@ -10,6 +10,7 @@
 #define FLOAT_2 Vec2
 #define FLOAT_3 Vec3
 #define FLOAT_4 Vec4
+#define QUAT Quat
 #define MAT_4X4 Mat4
 #else
 #define HALF half
@@ -19,6 +20,7 @@
 #define FLOAT_2 float2
 #define FLOAT_3 float3
 #define FLOAT_4 float4
+#define QUAT float4
 #define MAT_4X4 float4x4
 #endif
 
@@ -81,13 +83,16 @@ struct Material
     float roughnessFactor;
 };
 
-// TODO: separate quat, single scale, translation components.
 struct DrawData
 {
-    MAT_4X4 localToWorld;
-    FLOAT_3 sphereCenter;
+    FLOAT_3 position;
     float scale;
+    QUAT orientation;
+
+    // TODO: separate buffer.
+    FLOAT_3 sphereCenter;
     float sphereRadius;
+
     uint32_t materialIdx;
     uint32_t renderPassFlags;
 };
