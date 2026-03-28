@@ -13,6 +13,7 @@ set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(Lib/SDL)
 add_subdirectory(Lib/volk)
 add_subdirectory(Lib/VulkanMemoryAllocator)
+add_subdirectory(Lib/SPIRV-Cross)
 add_subdirectory(Lib/meshoptimizer)
 
 set(KTX_FEATURE_TESTS OFF)
@@ -62,6 +63,7 @@ set(LIBS
     ktx
     imgui
     meshoptimizer
+    spirv-cross-cpp
 )
 
 add_executable(${PROJECT_NAME}
@@ -89,8 +91,6 @@ else()
         -Wconversion
         -Wsign-conversion
         -Wshadow
-        -fno-exceptions
-        -fno-rtti
     )
 
     set(SANITIZERS -fsanitize=address,undefined)
@@ -118,12 +118,14 @@ set(SLANGC_EXECUTABLE slangc)
 
 set(SHADER_SOURCE_DIRECTORY ${CMAKE_SOURCE_DIR}/Source/Renderer/Shaders/)
 set(SHADER_SOURCE_FILES
-    ${SHADER_SOURCE_DIRECTORY}/DepthPrepass.slang
     ${SHADER_SOURCE_DIRECTORY}/Cull.slang
+    ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.slang
     ${SHADER_SOURCE_DIRECTORY}/Renderer.slang
-    ${SHADER_SOURCE_DIRECTORY}/Shadow.slang
-    ${SHADER_SOURCE_DIRECTORY}/ImguiRenderer.slang
     ${SHADER_SOURCE_DIRECTORY}/TaaResolve.slang
+    ${SHADER_SOURCE_DIRECTORY}/Fullscreen.slang
+    ${SHADER_SOURCE_DIRECTORY}/ImguiRenderer.slang
+
+    ${SHADER_SOURCE_DIRECTORY}/DebugGradError.slang
 )
 set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/SharedDef.slang

@@ -54,6 +54,20 @@ T AlignUpPow2(T val, T alignment)
     return (val + alignment - 1) & ~(alignment - 1);
 }
 
+inline u32 GetMipLevels(u32 width, u32 height)
+{
+    u32 mipLevels = 1;
+
+    while (width > 1 || height > 1)
+    {
+        ++mipLevels;
+        width /= 2;
+        height /= 2;
+    }
+
+    return mipLevels;
+}
+
 // Approximations.
 f32 LinearToSrgb(f32 color, f32 gamma = 2.2f);
 f32 SrgbToLinear(f32 color, f32 gamma = 2.2f);

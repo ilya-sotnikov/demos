@@ -28,6 +28,7 @@ struct Image
     VkImage image;
     VkImageView view;
     VmaAllocation allocation;
+    // TODO: VkExtent2D?
 };
 
 struct Swapchain
@@ -39,37 +40,49 @@ struct Swapchain
     u32 minImageCount;
 };
 
-// TODO: remove, since every pipeline is sharing a single layout and a single descriptor set layout.
+union DescriptorInfo
+{
+    VkDescriptorImageInfo image;
+    VkDescriptorBufferInfo buffer;
+    VkAccelerationStructureKHR accelerationStructure;
+
+    DescriptorInfo() = default;
+
+    DescriptorInfo(VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE)
+        : buffer{buffer, offset, range}
+    { }
+
+    DescriptorInfo(
+        VkImageView imageView,
+        VkImageLayout imageLayout,
+        VkSampler sampler = VK_NULL_HANDLE
+    )
+        : image{sampler, imageView, imageLayout}
+    { }
+
+    DescriptorInfo(VkSampler sampler)
+        : image{sampler, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED} { }
+
+    DescriptorInfo(VkAccelerationStructureKHR accelerationStructure)
+        : accelerationStructure{accelerationStructure}
+    { }
+};
+
+struct Shader
+{
+    VkShaderModule module;
+    VkDescriptorSetLayout descriptorSetLayout; // Gives ownership.
+    std::vector<VkDescriptorUpdateTemplateEntry> descriptorUpdateTemplateEntries;
+    u32 pushConstantSize;
+};
+
 struct Pipeline
 {
     VkPipeline pipeline;
     VkPipelineLayout layout;
-    VkDescriptorSetLayout descriptorSetLayout;
-};
-
-union DescriptorResourceInfo
-{
-    VkDescriptorImageInfo image;
-    VkDescriptorBufferInfo buffer;
-
-    DescriptorResourceInfo() = default;
-
-    DescriptorResourceInfo(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range)
-        : buffer{buffer, offset, range}
-    { }
-
-    DescriptorResourceInfo(VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout)
-        : image{sampler, imageView, imageLayout}
-    { }
-};
-
-struct DescriptorBindingInfo
-{
-    const char* name;
-    u32 binding;
-    VkDescriptorType descriptorType;
-    VkShaderStageFlags stageFlags;
-    DescriptorResourceInfo resourceInfo;
+    VkDescriptorSetLayout descriptorSetLayout; // Takes ownership.
+    VkDescriptorUpdateTemplate descriptorUpdateTemplate;
+    u32 pushConstantSize;
 };
 
 bool FindSupportedImageFormat(
@@ -80,7 +93,7 @@ bool FindSupportedImageFormat(
 );
 bool ExtensionIsAvailable(const char* name, Slice<VkExtensionProperties> extensions);
 QueueInfo GetQueue(VkPhysicalDevice device, VkQueueFlagBits flags);
-bool CreateShaderModule(VkShaderModule& result, VkDevice device, const char* shaderPath);
+bool CreateShader(Vulkan::Shader& result, VkDevice device, const char* shaderPath);
 
 VkImageMemoryBarrier2 ImageMemoryBarrier(
     VkImage image,
@@ -150,19 +163,30 @@ bool CreateImage(
     VkImageUsageFlags usage,
     u32 width,
     u32 height,
+    u32 depth = 1,
     const char* name = "",
-    u32 mipLevels = 1
+    u32 mipLevels = 1,
+    u32 arrayLayers = 1
 );
 void DestroyImage(Vulkan::Image& image, VkDevice device, VmaAllocator vmaAllocator);
 
 bool CreateComputePipeline(
-    VkPipeline& pipeline,
+    Vulkan::Pipeline& pipeline,
     VkDevice device,
-    VkPipelineLayout layout,
-    VkShaderModule shaderModule,
+    Vulkan::Shader& shader,
+    VkDescriptorSetLayout extraDescriptorSetLayout,
     const char* mainName,
-    const char* debugName = ""
+    const char* debugName
 );
+bool CreateGraphicsPipeline(
+    Vulkan::Pipeline& pipeline,
+    VkDevice device,
+    Vulkan::Shader& shader,
+    VkDescriptorSetLayout extraDescriptorSetLayout,
+    VkGraphicsPipelineCreateInfo& pipelineInfo,
+    const char* debugName
+);
+void DestroyPipeline(Vulkan::Pipeline& pipeline, VkDevice device);
 
 bool DebugNameObject(
     VkDevice device,

@@ -35,13 +35,14 @@ inline Vec3 UnpackToVec3(f32 value)
 // https://www.elopezr.com/the-art-of-packing-data/
 inline Vec2 PackNormalOctahedral(Vec3 normal)
 {
-    normal /= (fabsf(normal.X()) + fabsf(normal.Y()) + fabsf(normal.Z()));
-    normal.X() = normal.Z() >= 0.0f
-        ? normal.X()
-        : (1.0f - abs(normal.Y())) * (normal.X() >= 0.0f ? 1.0f : -1.0f);
-    normal.Y() = normal.Z() >= 0.0f
-        ? normal.Y()
-        : (1.0f - abs(normal.X())) * (normal.Y() >= 0.0f ? 1.0f : -1.0f);
+    normal /= fabsf(normal.X()) + fabsf(normal.Y()) + fabsf(normal.Z());
+    if (normal.Z() < 0.0f)
+    {
+        const f32 x = normal.X();
+        const f32 y = normal.Y();
+        normal.X() = (1.0f - fabsf(y)) * (x >= 0.0f ? 1.0f : -1.0f);
+        normal.Y() = (1.0f - fabsf(x)) * (y >= 0.0f ? 1.0f : -1.0f);
+    }
     normal.X() = normal.X() * 0.5f + 0.5f;
     normal.Y() = normal.Y() * 0.5f + 0.5f;
     return {normal.X(), normal.Y()};

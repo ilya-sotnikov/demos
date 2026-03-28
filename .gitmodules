@@ -19,3 +19,6 @@
 [submodule "Renderer/Lib/meshoptimizer"]
 	path = Renderer/Lib/meshoptimizer
 	url = https://github.com/zeux/meshoptimizer.git
+[submodule "Renderer/Lib/SPIRV-Cross"]
+	path = Renderer/Lib/SPIRV-Cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git

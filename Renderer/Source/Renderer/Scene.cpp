@@ -148,9 +148,9 @@ static void LoadGeometry(
 
                 for (cgltf_size vi = 0; vi < primVertexCount; ++vi)
                 {
-                    primVertices[vi].posX = meshopt_quantizeHalf(tmp[vi * 3 + 0]);
-                    primVertices[vi].posY = meshopt_quantizeHalf(tmp[vi * 3 + 1]);
-                    primVertices[vi].posZ = meshopt_quantizeHalf(tmp[vi * 3 + 2]);
+                    primVertices[vi].px = meshopt_quantizeHalf(tmp[vi * 3 + 0]);
+                    primVertices[vi].py = meshopt_quantizeHalf(tmp[vi * 3 + 1]);
+                    primVertices[vi].pz = meshopt_quantizeHalf(tmp[vi * 3 + 2]);
                 }
             }
 
@@ -164,40 +164,15 @@ static void LoadGeometry(
 
                 for (cgltf_size ni = 0; ni < primVertexCount; ++ni)
                 {
-                    // clang-format off
-                    primVertices[ni].normal = u32(
-                          ((meshopt_quantizeSnorm(tmp[ni * 3 + 0], 10) + 511) <<  0)
-                        | ((meshopt_quantizeSnorm(tmp[ni * 3 + 1], 10) + 511) << 10)
-                        | ((meshopt_quantizeSnorm(tmp[ni * 3 + 2], 10) + 511) << 20)
+                    const Vec2 packed = PackNormalOctahedral(
+                        Vec3{
+                            tmp[ni * 3 + 0],
+                            tmp[ni * 3 + 1],
+                            tmp[ni * 3 + 2],
+                        }
                     );
-                    // clang-format on
-                }
-            }
-
-            if (const cgltf_accessor* const tangent
-                = cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0))
-            {
-                ASSERT(cgltf_num_components(tangent->type) == 4);
-                const cgltf_size size
-                    = cgltf_accessor_unpack_floats(tangent, tmp.data(), primVertexCount * 4);
-                ASSERT(size == primVertexCount * 4);
-
-                for (cgltf_size ti = 0; ti < primVertexCount; ++ti)
-                {
-                    const float tx = tmp[ti * 4 + 0];
-                    const float ty = tmp[ti * 4 + 1];
-                    const float tz = tmp[ti * 4 + 2];
-                    const float tw = tmp[ti * 4 + 3];
-                    const Vec2 packed = PackNormalOctahedral({tx, ty, tz});
-                    // clang-format off
-                    primVertices[ti].tangent = u16(
-                          ((meshopt_quantizeSnorm(packed.X(), 8) + 127) << 0)
-                        | ((meshopt_quantizeSnorm(packed.Y(), 8) + 127) << 8)
-                    );
-                    // clang-format on
-
-                    // Store the sign bit in one of two free bits in normal.
-                    primVertices[ti].normal |= tw >= 0.0f ? 0 : 1U << 30;
+                    primVertices[ni].nx = meshopt_quantizeHalf(packed.X());
+                    primVertices[ni].ny = meshopt_quantizeHalf(packed.Y());
                 }
             }
 
@@ -306,9 +281,9 @@ static void LoadGeometry(
         {
             // TODO: implement a better algorithm.
             sphereCenter += Vec3{
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posX),
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posY),
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posZ)
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].py),
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].pz)
             };
         }
 
@@ -327,9 +302,9 @@ static void LoadGeometry(
         {
             // TODO: implement a better algorithm.
             const Vec3 v = Vec3{
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posX),
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posY),
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].posZ)
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].py),
+                meshopt_dequantizeHalf(vertices[vertexOffset + vi].pz)
             };
             sphereRadius = Max(sphereRadius, Magnitude(meshPrimitives[pi].sphereCenter - v));
         }

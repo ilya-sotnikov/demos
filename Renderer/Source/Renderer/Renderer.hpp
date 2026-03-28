@@ -22,7 +22,12 @@ struct Renderer
     static constexpr int RENDER_SCALE = 1;
 
     static_assert(sizeof(UniformData) <= UNIFORM_BUFFER_MAX_SIZE_BYTES);
-    static_assert(sizeof(PushConstants) <= 128);
+
+    enum class RenderMode
+    {
+        Normal,
+        GradError,
+    };
 
     struct Frame
     {
@@ -31,7 +36,6 @@ struct Renderer
         VkSemaphore imageAcquireSemaphore;
         Vulkan::Buffer uniformBuffer;
         Vulkan::Image resolvedRenderImage;
-        PushConstants pushConstants;
     };
 
     SDL_Window* mWindow;
@@ -42,40 +46,38 @@ struct Renderer
     VkDevice mDevice;
     Vulkan::QueueInfo mQueueInfo;
     Vulkan::Swapchain mSwapchain;
+    Vulkan::Image mVisibilityImage;
     Vulkan::Image mRenderImage;
-    Vulkan::Image mAlbedoImage;
-    Vulkan::Image mShadowImage;
     Vulkan::Image mVelocityImage;
+    Vulkan::Image mGradImage;
     VkExtent2D mRenderImageExtent;
     Vulkan::Image mDepthImage;
+    Vulkan::Pipeline mVisibilityPipeline;
     Vulkan::Pipeline mRenderPipeline;
     Vulkan::Pipeline mFullscreenPipeline;
-    Vulkan::Pipeline mDepthPrepassPipeline;
     Vulkan::Pipeline mCullPipeline;
-    Vulkan::Pipeline mShadowPipeline;
-    Vulkan::Pipeline mShadowMergePipeline;
     Vulkan::Pipeline mTaaResolvePipeline;
+    Vulkan::Pipeline mDebugGradErrorPipeline;
     Vulkan::Buffer mVertexBuffer;
     Vulkan::Buffer mIndexBuffer;
     Vulkan::Buffer mIndirectBuffer1;
     Vulkan::Buffer mIndirectBuffer2;
+    Vulkan::Buffer mDrawIndicesBuffer;
     Vulkan::Buffer mMaterialBuffer;
     Vulkan::Buffer mDrawDataBuffer;
+    Vulkan::Buffer mIndirectCountBuffer;
     Vulkan::Buffer mBlasBuffer;
     Vulkan::Buffer mTlasBuffer;
-    Vulkan::Buffer mIndirectCountBuffer;
     std::vector<VkAccelerationStructureKHR> mBlas;
     VkAccelerationStructureKHR mTlas;
     ImguiRenderer mImguiRenderer;
     VkDescriptorPool mDescriptorPool;
     VkDescriptorSet mTextureDescriptorSet;
     VkDescriptorSetLayout mTextureDescriptorSetLayout;
-    VkDescriptorSetLayout mDescriptorSetLayout;
     VkSampler mTextureSampler;
     VkSampler mLinearSampler;
-    VkFormat mRenderImageFormat;
-    VkFormat mAlbedoImageFormat;
-    VkFormat mVelocityImageFormat;
+    VkFormat mVisibilityImageFormat;
+    VkFormat mGradImageFormat;
     VkFormat mDepthFormat;
     VkCommandPool mCommandPool;
     VkSampleCountFlagBits mSampleCount;
@@ -93,6 +95,8 @@ struct Renderer
     bool mSwapchainNeedsRecreating;
     bool mSwapchainRecreated;
     bool mEnableUI;
+    bool mRenderModeChanged;
+    RenderMode mRenderMode;
 
     bool Init();
     void Cleanup();
@@ -100,7 +104,9 @@ struct Renderer
     bool Render(f32 deltaTime);
     void UpdateCamera(Vec3 position, const Mat4& worldToView);
     void PauseRendering(bool paused);
+    void ChangeRenderMode(RenderMode mode);
 
+private:
     bool UploadTextures(const std::vector<std::string>& texturePaths);
     bool CreateAndUploadBlas(
         const std::vector<MeshPrimitive>& meshPrimitives,
@@ -111,15 +117,13 @@ struct Renderer
         const std::vector<DrawData>& drawData
     );
 
-    void UpdateDescriptors(VkCommandBuffer cmd);
-    void CullPrepass(VkCommandBuffer cmd);
-    void DepthPrepass(VkCommandBuffer cmd);
-    void MainPass(VkCommandBuffer cmd);
-    void ShadowPass(VkCommandBuffer cmd);
-    void ShadowMergePass(VkCommandBuffer cmd);
+    void VisibilityBufferPass(VkCommandBuffer cmd);
+    void CullPass(VkCommandBuffer cmd);
+    void RenderPass(VkCommandBuffer cmd);
     void TaaResolvePass(VkCommandBuffer cmd);
     void FullscreenPass(VkCommandBuffer cmd, u32 imageIdx);
 
+    bool RecordDebugGradErrorCommandBuffer(u32 imageIdx);
     bool RecordCommandBuffer(u32 imageIdx);
     bool CreateSwapchain();
     void CleanupSwapchain();

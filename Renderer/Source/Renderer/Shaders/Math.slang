@@ -51,6 +51,9 @@
 #define M_SQRT1_2f 0.70710678118654752440f // 1 / sqrt(2)
 #endif
 
+#ifndef FLT_MAX
+#define FLT_MAX 3.402823466e+38f
+#endif
 
 // https://github.com/imneme/pcg-c-basic/blob/master/pcg_basic.c
 // https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
@@ -105,7 +108,12 @@ float InterleavedGradientNoise(int x, int y) {
     return fmod(52.9829189 * fmod(0.06711056 * float(x) + 0.00583715 * float(y), 1.0), 1.0);
 }
 
-float Max3(float3 x)
+float Min(float3 x)
+{
+    return min(x.x, min(x.y, x.z));
+}
+
+float Max(float3 x)
 {
     return max(x.x, max(x.y, x.z));
 }
@@ -255,8 +263,6 @@ float3 TonemapHejlBurgessDawson(float3 color)
 // https://en.wikipedia.org/wiki/Mitchell%E2%80%93Netravali_filters
 float FilterMitchellNetravali(float x, float B = 1.0 / 3.0, float C = 1.0 / 3.0)
 {
-    // TODO: implement shader asserts (with just printf?)
-
     float y = 0.0f;
     const float x2 = x * x;
     const float x3 = x * x * x;
@@ -368,3 +374,102 @@ float3 QuatRotate(float4 quat, float3 vec)
 
     return vec + (uuv + uv * quat.x) * 2.0;
 }
+
+struct BarycentricData
+{
+    float3 lambda;
+    float3 dldx;
+    float3 dldy;
+    float interpInvW;
+};
+
+BarycentricData CalcBarycentricData(
+    float4 posClip0,
+    float4 posClip1,
+    float4 posClip2,
+    float2 pixelNdc,
+    float2 twoOverImageSize
+)
+{
+    const float3 invW012 = rcp(float3(posClip0.w, posClip1.w, posClip2.w));
+
+    const float2 ndc0 = posClip0.xy * invW012.x;
+    const float2 ndc1 = posClip1.xy * invW012.y;
+    const float2 ndc2 = posClip2.xy * invW012.z;
+
+    const float invDet = rcp(determinant(float2x2(ndc2 - ndc1, ndc0 - ndc1)));
+
+    const float2 deltaNdc0 = pixelNdc - ndc0;
+    const float2 deltaNdc1 = pixelNdc - ndc1;
+    const float2 deltaNdc2 = pixelNdc - ndc2;
+
+    float3 lambda;
+    lambda.y = determinant(float2x2(deltaNdc2, deltaNdc0)) * invDet;
+    lambda.z = determinant(float2x2(deltaNdc0, deltaNdc1)) * invDet;
+    lambda.x = 1.0 - lambda.y - lambda.z;
+
+    const float3 dldx = float3(ndc1.y - ndc2.y, ndc2.y - ndc0.y, ndc0.y - ndc1.y) * invDet;
+    const float3 dldy = float3(ndc2.x - ndc1.x, ndc0.x - ndc2.x, ndc1.x - ndc0.x) * invDet;
+
+    const float interpInvW =
+        invW012.x + deltaNdc0.x * dot(invW012, dldx) + deltaNdc0.y * dot(invW012, dldy);
+    const float interpW = rcp(interpInvW);
+
+    const float3 interpW_mul_invW012 = interpW * invW012;
+
+    BarycentricData result;
+
+    result.lambda = interpW_mul_invW012 * lambda; // Pre-perspective bary.
+    result.dldx = twoOverImageSize.x * interpW_mul_invW012 * dldx;
+    result.dldy = -twoOverImageSize.y * interpW_mul_invW012 * dldy;
+    result.interpInvW = interpInvW;
+
+    return result;
+}
+
+struct InterpolatedData2D
+{
+    float2 c;
+    float2 dcdx;
+    float2 dcdy;
+};
+
+InterpolatedData2D Interpolate2D(BarycentricData data, float2 attr0, float2 attr1, float2 attr2)
+{
+    InterpolatedData2D result;
+
+    result.c = attr0 * data.lambda.x + attr1 * data.lambda.y + attr2 * data.lambda.z;
+
+    const float2 delta0 = attr0 - result.c;
+    const float2 delta1 = attr1 - result.c;
+    const float2 delta2 = attr2 - result.c;
+
+    result.dcdx = delta0 * data.dldx.x + delta1 * data.dldx.y + delta2 * data.dldx.z;
+    result.dcdy = delta0 * data.dldy.x + delta1 * data.dldy.y + delta2 * data.dldy.z;
+
+    return result;
+}
+
+struct InterpolatedData3D
+{
+    float3 c;
+    float3 dcdx;
+    float3 dcdy;
+};
+
+InterpolatedData3D Interpolate3D(BarycentricData data, float3 attr0, float3 attr1, float3 attr2)
+{
+    InterpolatedData3D result;
+
+    result.c = attr0 * data.lambda.x + attr1 * data.lambda.y + attr2 * data.lambda.z;
+
+    const float3 delta0 = attr0 - result.c;
+    const float3 delta1 = attr1 - result.c;
+    const float3 delta2 = attr2 - result.c;
+
+    result.dcdx = delta0 * data.dldx.x + delta1 * data.dldx.y + delta2 * data.dldx.z;
+    result.dcdy = delta0 * data.dldy.x + delta1 * data.dldy.y + delta2 * data.dldy.z;
+
+    return result;
+}
+

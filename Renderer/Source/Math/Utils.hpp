@@ -210,3 +210,15 @@ inline constexpr f32 HaltonSequence(u32 idx, u32 base)
 
     return r;
 }
+
+inline constexpr u32 PreviousPow2(u32 x)
+{
+    u32 result = 1;
+
+    while (result * 2 < x)
+    {
+        result *= 2;
+    }
+
+    return result;
+}

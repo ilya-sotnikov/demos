@@ -1,6 +1,14 @@
 #include "Common.slang"
 #include "Math.slang"
 
+ConstantBuffer<UniformData> uniformBuffer;
+Texture2D renderImage;
+Texture2D depthImage;
+Texture2D velocityImage;
+Texture2D prevResolvedRenderImage;
+RWTexture2D resolvedRenderImageRW;
+SamplerState linearSampler;
+
 // Took an implementation from this article:
 // https://alextardif.com/TAA.html
 
@@ -12,29 +20,27 @@
 // https://developer.download.nvidia.com/gameworks/events/GDC2016/msalvi_temporal_supersampling.pdf
 // https://github.com/playdeadgames/temporal
 
-// TODO: probably have some bugs left and thin bright stuff flickers.
+// TODO: thin stuff flickers.
+// TODO: changes color a little.
 // TODO: more explanations in comments.
 // TODO: optimize.
 
+// TODO: now that we have a visibility buffer, is it useful for history rejection?
+
 [shader("compute")]
 [numthreads(RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_X, RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_Y, 1)]
-void Main(
-    uint3 dtid : SV_DispatchThreadID,
-    uniform PushConstants pushConstants,
-)
+void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    const Ptr<UniformData, Access.Read> uniformData = pushConstants.uniformData;
-
-    int2 renderImageSize = int2(uniformData.renderWidth, uniformData.renderHeight);
+    int2 renderImageSize = int2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 
     if (dtid.x >= renderImageSize.x || dtid.y >= renderImageSize.y)
     {
         return;
     }
 
-    if (uniformData.taaEnable == 0)
+    if (uniformBuffer.taaEnable == 0)
     {
-        resolvedRenderStorageImage[dtid.xy] = renderSampledImage[dtid.xy];
+        resolvedRenderImageRW[dtid.xy] = renderImage[dtid.xy];
         return;
     }
 
@@ -55,7 +61,7 @@ void Main(
             int2 pixelPosition = dtid.xy + int2(x, y);
             pixelPosition = clamp(pixelPosition, 0, renderImageSize - 1);
 
-            const float3 neighbor = max(0, renderSampledImage[pixelPosition].rgb);
+            const float3 neighbor = max(0, renderImage[pixelPosition].rgb);
 
             // A filter over a neighborhood negates jitter.
             const float subSampleDistance = length(float2(x, y));
@@ -73,7 +79,7 @@ void Main(
             m2 += neighbor * neighbor;
 
             // For sampling the velocity buffer.
-            const float currentDepth = depthSampledImage[pixelPosition].r;
+            const float currentDepth = depthImage[pixelPosition].r;
             if (currentDepth > closestDepth)
             {
                 closestDepth = currentDepth;
@@ -83,19 +89,19 @@ void Main(
     }
 
     const float2 motionVector =
-        velocitySampledImage[closestDepthPixelPosition].xy * float2(0.5, 0.5);
+        velocityImage[closestDepthPixelPosition].xy * float2(0.5, 0.5);
     const float2 uv = float2(dtid.xy + 0.5) / float2(renderImageSize);
     const float2 prevUV = uv - motionVector;
     const float3 currSample = currSampleTotal / currSampleWeight;
 
     if (any(prevUV != saturate(prevUV)))
     {
-        resolvedRenderStorageImage[dtid.xy] = float4(currSample, 1.0);
+        resolvedRenderImageRW[dtid.xy] = float4(currSample, 1.0);
         return;
     }
 
     float3 prevSample = SampleTextureCatmullRom(
-        prevResolvedRenderSampledImage,
+        prevResolvedRenderImage,
         linearSampler,
         prevUV,
         float2(renderImageSize)
@@ -111,12 +117,12 @@ void Main(
     prevSample =
         ClipAabbCenter(minColor, maxColor, clamp(prevSample, neighborhoodMin, neighborhoodMax));
 
-    const float3 currCompressed = currSample * rcp(Max3(currSample) + 1.0);
-    const float3 prevCompressed = prevSample * rcp(Max3(prevSample) + 1.0);
+    const float3 currCompressed = currSample * rcp(Max(currSample) + 1.0);
+    const float3 prevCompressed = prevSample * rcp(Max(prevSample) + 1.0);
     const float currLuminance = Luminance(currCompressed);
     const float prevLuminance = Luminance(prevCompressed);
 
-    float currWeight = uniformData.taaBlendWeight;
+    float currWeight = uniformBuffer.taaBlendWeight;
     float prevWeight = 1.0 - currWeight;
     currWeight *= 1.0 / (1.0 + currLuminance);
     prevWeight *= 1.0 / (1.0 + prevLuminance);
@@ -124,5 +130,5 @@ void Main(
     const float3 result =
         (currSample * currWeight + prevSample * prevWeight) / max(currWeight + prevWeight, 0.00001);
 
-    resolvedRenderStorageImage[dtid.xy] = float4(result, 1.0);
+    resolvedRenderImageRW[dtid.xy] = float4(result, 1.0);
 }

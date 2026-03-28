@@ -3,6 +3,8 @@
 #include "RendererCommon.hpp"
 #include "Vulkan.hpp"
 #include "Shaders/SharedConfig.slang"
+#include "../Math/Types.hpp"
+#include "Shaders/SharedDef.slang"
 
 #include "../Math/Types.hpp"
 
@@ -26,11 +28,7 @@ struct ImguiRenderer
     // It's own resources.
     Vulkan::Image mFontImage;
     VkSampler mFontSampler;
-    VkDescriptorPool mDescriptorPool;
-    VkDescriptorSet mDescriptorSet;
-    VkPipelineLayout mPipelineLayout;
-    PushConstantBlock mPushConstantBlock;
-    VkPipeline mPipeline;
+    Vulkan::Pipeline mPipeline;
 
     struct Frame
     {

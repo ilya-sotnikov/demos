@@ -242,75 +242,11 @@ bool ImguiRenderer::Init(
         VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mFontSampler));
     }
 
-    // Descriptor pool.
-    {
-        VkDescriptorPoolSize poolSize{};
-        poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSize.descriptorCount = 1;
-
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.maxSets = 2;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-        VK_CHECK(vkCreateDescriptorPool(mDevice, &poolInfo, nullptr, &mDescriptorPool));
-    }
-
-    // Descriptor set.
-    VkDescriptorSetLayout descriptorSetLayout{};
-    DEFER(vkDestroyDescriptorSetLayout(mDevice, descriptorSetLayout, nullptr));
-    {
-        // Descriptor set layout.
-        VkDescriptorSetLayoutBinding setLayoutBinding{};
-        setLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        setLayoutBinding.descriptorCount = 1;
-        setLayoutBinding.binding = 0;
-        setLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-        VkDescriptorSetLayoutCreateInfo setLayoutInfo{};
-        setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        setLayoutInfo.bindingCount = 1;
-        setLayoutInfo.pBindings = &setLayoutBinding;
-        VK_CHECK(
-            vkCreateDescriptorSetLayout(mDevice, &setLayoutInfo, nullptr, &descriptorSetLayout)
-        );
-
-        // Descriptor set.
-        VkDescriptorSetAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocateInfo.descriptorPool = mDescriptorPool;
-        allocateInfo.descriptorSetCount = 1;
-        allocateInfo.pSetLayouts = &descriptorSetLayout;
-        VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocateInfo, &mDescriptorSet));
-
-        VkDescriptorImageInfo fontDescriptor{};
-        fontDescriptor.sampler = mFontSampler;
-        fontDescriptor.imageView = mFontImage.view;
-        fontDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkWriteDescriptorSet writeDescriptorSets{};
-        writeDescriptorSets.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeDescriptorSets.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writeDescriptorSets.descriptorCount = 1;
-        writeDescriptorSets.dstBinding = 0;
-        writeDescriptorSets.pImageInfo = &fontDescriptor;
-        writeDescriptorSets.dstSet = mDescriptorSet;
-        vkUpdateDescriptorSets(mDevice, 1, &writeDescriptorSets, 0, nullptr);
-    }
-
     // Pipeline.
     {
         VkPushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
         pushConstantRange.size = sizeof(PushConstantBlock);
-
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 1;
-        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-        VK_CHECK(vkCreatePipelineLayout(mDevice, &pipelineLayoutInfo, nullptr, &mPipelineLayout));
 
         VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
         inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -350,27 +286,26 @@ bool ImguiRenderer::Init(
         vertexInputInfo.pVertexAttributeDescriptions = vertexInputAttributes;
         vertexInputInfo.vertexAttributeDescriptionCount = ARRAY_SIZE(vertexInputAttributes);
 
-        VkShaderModule shaderModule{};
+        Vulkan::Shader shader{};
 
-        const bool result
-            = Vulkan::CreateShaderModule(shaderModule, mDevice, "ImguiRenderer.slang.spv");
+        const bool result = Vulkan::CreateShader(shader, mDevice, "ImguiRenderer.slang.spv");
         if (!result)
         {
             fprintf(stderr, "Vulkan failed to build a vertex/fragment shader\n");
             return false;
         }
-        DEFER(vkDestroyShaderModule(mDevice, shaderModule, nullptr));
+        DEFER(vkDestroyShaderModule(mDevice, shader.module, nullptr));
 
         VkPipelineShaderStageCreateInfo vertexShaderStageInfo{};
         vertexShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertexShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertexShaderStageInfo.module = shaderModule;
+        vertexShaderStageInfo.module = shader.module;
         vertexShaderStageInfo.pName = "VertexMain";
 
         VkPipelineShaderStageCreateInfo fragmentShaderStageInfo{};
         fragmentShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         fragmentShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragmentShaderStageInfo.module = shaderModule;
+        fragmentShaderStageInfo.module = shader.module;
         fragmentShaderStageInfo.pName = "FragmentMain";
 
         const VkPipelineShaderStageCreateInfo shaderStages[]
@@ -434,15 +369,17 @@ bool ImguiRenderer::Init(
         pipelineInfo.pDepthStencilState = &depthStencilInfo;
         pipelineInfo.pColorBlendState = &colorBlendInfo;
         pipelineInfo.pDynamicState = &dynamicInfo;
-        pipelineInfo.layout = mPipelineLayout;
-        VK_CHECK(vkCreateGraphicsPipelines(
-            mDevice,
-            VK_NULL_HANDLE,
-            1,
-            &pipelineInfo,
-            nullptr,
-            &mPipeline
-        ));
+        if (!Vulkan::CreateGraphicsPipeline(
+                mPipeline,
+                mDevice,
+                shader,
+                VK_NULL_HANDLE,
+                pipelineInfo,
+                "ImguiPass"
+            ))
+        {
+            return false;
+        }
     }
 
     return true;
@@ -450,7 +387,12 @@ bool ImguiRenderer::Init(
 
 void ImguiRenderer::Cleanup()
 {
-    vkDeviceWaitIdle(mDevice);
+    if (!mDevice)
+    {
+        return;
+    }
+
+    (void)vkDeviceWaitIdle(mDevice);
 
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
@@ -461,9 +403,7 @@ void ImguiRenderer::Cleanup()
         Vulkan::DestroyBuffer(frame.vertexBuffer, mVmaAllocator);
         Vulkan::DestroyBuffer(frame.indexBuffer, mVmaAllocator);
     }
-    vkDestroyPipeline(mDevice, mPipeline, nullptr);
-    vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
-    vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
+    Vulkan::DestroyPipeline(mPipeline, mDevice);
     vkDestroySampler(mDevice, mFontSampler, nullptr);
     vkDestroyImageView(mDevice, mFontImage.view, nullptr);
     vmaDestroyImage(mVmaAllocator, mFontImage.image, mFontImage.allocation);
@@ -595,27 +535,33 @@ bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
 
     const ImGuiIO& io = ImGui::GetIO();
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline);
-    vkCmdBindDescriptorSets(
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline.pipeline);
+
+    const Vulkan::DescriptorInfo descInfos[] = {
+        {
+            mFontImage.view,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            mFontSampler,
+        },
+    };
+    vkCmdPushDescriptorSetWithTemplate(
         cmd,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        mPipelineLayout,
+        mPipeline.descriptorUpdateTemplate,
+        mPipeline.layout,
         0,
-        1,
-        &mDescriptorSet,
-        0,
-        nullptr
+        &descInfos
     );
 
-    mPushConstantBlock.scale = Vec2{2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y};
-    mPushConstantBlock.translate = Vec2{-1.0f};
+    PushConstantsImgui pushConstants{};
+    pushConstants.scale = Vec2{2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y};
+    pushConstants.translate = Vec2{-1.0f};
     vkCmdPushConstants(
         cmd,
-        mPipelineLayout,
-        VK_SHADER_STAGE_VERTEX_BIT,
+        mPipeline.layout,
+        VK_SHADER_STAGE_ALL,
         0,
-        sizeof(mPushConstantBlock),
-        &mPushConstantBlock
+        sizeof(pushConstants),
+        &pushConstants
     );
 
     VkDeviceSize offsets[1]{};

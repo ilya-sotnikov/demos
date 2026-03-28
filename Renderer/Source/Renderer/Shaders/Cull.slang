@@ -1,23 +1,25 @@
 #include "Common.slang"
 #include "Math.slang"
 
+ConstantBuffer<UniformData> uniformBuffer;
+StructuredBuffer<DrawData> drawDataBuffer;
+RWByteAddressBuffer indirectCountBuffer;
+StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdsBuffer1;
+RWStructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdsBuffer2;
+RWStructuredBuffer<uint32_t> drawIndicesBuffer;
+
 [shader("compute")]
 [numthreads(RENDERER_CULL_WORKGROUP_SIZE, 1, 1)]
-void Main(
-    uint3 dtid : SV_DispatchThreadID,
-    uniform PushConstants pushConstants,
-)
+void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    const Ptr<UniformData, Access.Read> uniformData = pushConstants.uniformData;
-
     const uint drawIdx = dtid.x;
 
-    if (drawIdx >= uniformData.drawCount)
+    if (drawIdx >= uniformBuffer.drawCount)
     {
         return;
     }
 
-    const DrawData drawData = pushConstants.drawData[drawIdx];
+    const DrawData drawData = drawDataBuffer[drawIdx];
 
     // TODO: support translucent materials.
     if (drawData.renderPassFlags != RenderPassFlagBits::RENDER_PASS_OPAQUE_BIT)
@@ -28,7 +30,7 @@ void Main(
     const float3 sphereCenterWorld =
         QuatRotate(drawData.orientation, drawData.sphereCenter) * drawData.scale + drawData.position;
     const float3 sphereCenterView = mul(
-        uniformData.worldToView,
+        uniformBuffer.worldToView,
         float4(sphereCenterWorld, 1.0)
     ).xyz;
     const float sphereRadius = drawData.scale * drawData.sphereRadius;
@@ -37,35 +39,35 @@ void Main(
     // https://github.com/zeux/niagara
     bool visible = true;
     // View frustum is symmetrical, therefore we can cull against two opposite planes simultaneously.
-    visible = visible && sphereCenterView.z * uniformData.frustumPlaneXZ -
-        abs(sphereCenterView.x) * uniformData.frustumPlaneXX > -sphereRadius;
+    visible = visible && sphereCenterView.z * uniformBuffer.frustumPlaneXZ -
+        abs(sphereCenterView.x) * uniformBuffer.frustumPlaneXX > -sphereRadius;
 
-    visible = visible && sphereCenterView.z * uniformData.frustumPlaneYZ -
-        abs(sphereCenterView.y) * uniformData.frustumPlaneYY > -sphereRadius;
+    visible = visible && sphereCenterView.z * uniformBuffer.frustumPlaneYZ -
+        abs(sphereCenterView.y) * uniformBuffer.frustumPlaneYY > -sphereRadius;
 
     visible = visible && sphereCenterView.z - sphereRadius < -RENDERER_NEAR_PLANE;
 
     // TODO: visualize frustum culling.
 
-    // TODO: occlusion culling.
-
     if (visible)
     {
         uint32_t visibleCount;
         // TODO: subgroup operations.
-        InterlockedAdd(*pushConstants.indirectCountPtr, 1, visibleCount);
+        // Although on Nvidia doesn't matter, driver optimizes it.
+        // Not sure if every vendor does this.
+        indirectCountBuffer.InterlockedAdd(0, 1, visibleCount);
 
-        const VkDrawIndexedIndirectCommand drawCmd = pushConstants.drawCmds1[drawIdx];
+        const VkDrawIndexedIndirectCommand drawCmd = drawCmdsBuffer1[drawIdx];
 
-        DrawCmd writeDrawCmd;
-        writeDrawCmd.idx = drawIdx;
-        writeDrawCmd.cmd.indexCount = drawCmd.indexCount;
-        writeDrawCmd.cmd.instanceCount = 1;
-        writeDrawCmd.cmd.firstIndex = drawCmd.firstIndex;
-        writeDrawCmd.cmd.vertexOffset = drawCmd.vertexOffset;
-        writeDrawCmd.cmd.firstInstance = 0;
+        VkDrawIndexedIndirectCommand writeDrawCmd;
+        writeDrawCmd.indexCount = drawCmd.indexCount;
+        writeDrawCmd.instanceCount = 1;
+        writeDrawCmd.firstIndex = drawCmd.firstIndex;
+        writeDrawCmd.vertexOffset = drawCmd.vertexOffset;
+        writeDrawCmd.firstInstance = 0;
 
-        pushConstants.drawCmds2[visibleCount] = writeDrawCmd;
+        drawCmdsBuffer2[visibleCount] = writeDrawCmd;
+        drawIndicesBuffer[visibleCount] = drawIdx;
     }
 }
 

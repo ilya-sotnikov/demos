@@ -340,6 +340,7 @@ inline Mat4 LookAt(Vec3 position, Vec3 target, Vec3 worldUp)
 
 // Infinite perspective projection with reversed Z.
 // https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
+// https://developer.nvidia.com/blog/visualizing-depth-precision/
 inline constexpr Mat4 Perspective(f32 fovYRad, f32 aspect, f32 zNear)
 {
     DEBUG_ASSERT(fovYRad > 0.0f);

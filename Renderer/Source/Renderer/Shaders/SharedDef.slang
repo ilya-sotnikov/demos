@@ -2,6 +2,8 @@
 
 // Shared with C++.
 
+#include "SharedConfig.slang"
+
 #ifdef __cplusplus
 #define HALF f16
 #define HALF_2 Half2
@@ -52,6 +54,7 @@ struct UniformData
     float deltaTime;
     float sunIntensity;
     float ambientIntensity;
+    float gradErrorMax;
     uint64_t frameCount;
     uint32_t swapchainWidth;
     uint32_t swapchainHeight;
@@ -59,16 +62,12 @@ struct UniformData
     uint32_t renderHeight;
     uint32_t drawCount;
     uint32_t taaEnable;
-
 };
 
-// Took the packing approach from niagara:
-// https://github.com/zeux/niagara
 struct Vertex
 {
-    HALF posX, posY, posZ;
-    uint16_t tangent; // 8-8 octahedral.
-    uint32_t normal; // 10-10-10 + 1 bit bitangent sign.
+    HALF px, py, pz;
+    HALF nx, ny; // 16 bit octahedral.
     HALF u, v;
 };
 
@@ -97,40 +96,10 @@ struct DrawData
     uint32_t renderPassFlags;
 };
 
-struct DrawCmd
+struct PushConstantsImgui
 {
-    uint32_t idx;
-    VkDrawIndexedIndirectCommand cmd;
-};
-
-struct PushConstants
-{
-    GPU_CONST_PTR(UniformData) uniformData;
-    GPU_CONST_PTR(Vertex) vertices;
-    GPU_CONST_PTR(Material) materials;
-    GPU_CONST_PTR(DrawData) drawData;
-    GPU_PTR(uint32_t) indirectCountPtr;
-    GPU_CONST_PTR(VkDrawIndexedIndirectCommand) drawCmds1;
-    GPU_PTR(DrawCmd) drawCmds2;
-    uint64_t tlas; // TODO: seems to be the only way in slang for now?
-
-    uint32_t renderPassFlags;
-};
-
-enum {
-    SAMPLER_TEXTURE_BINDING,
-    SAMPLER_LINEAR_BINDING,
-    SAMPLED_IMAGE_RENDER_BINDING,
-    SAMPLED_IMAGE_RESOLVED_RENDER_BINDING,
-    SAMPLED_IMAGE_PREV_RESOLVED_RENDER_BINDING,
-    SAMPLED_IMAGE_ALBEDO_BINDING,
-    SAMPLED_IMAGE_SHADOW_BINDING,
-    SAMPLED_IMAGE_DEPTH_BINDING,
-    SAMPLED_IMAGE_VELOCITY_BINDING,
-    STORAGE_IMAGE_RENDER_BINDING,
-    STORAGE_IMAGE_RESOLVED_RENDER_BINDING,
-    STORAGE_IMAGE_SHADOW_BINDING,
-    BINDING_COUNT,
+    FLOAT_2 scale;
+    FLOAT_2 translate;
 };
 
 enum RenderPassFlagBits

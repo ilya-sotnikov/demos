@@ -1,4 +1,6 @@
-Sampler2D fontTexture;
+#include "Common.slang"
+
+Sampler2D fontImage;
 
 struct VertexInput
 {
@@ -14,14 +16,8 @@ struct VertexOutput
     float4 color;
 };
 
-struct PushConstants
-{
-    float2 scale;
-    float2 translate;
-};
-
 [shader("vertex")]
-VertexOutput VertexMain(VertexInput input, uniform PushConstants pushConstants)
+VertexOutput VertexMain(VertexInput input, uniform PushConstantsImgui pushConstants)
 {
     VertexOutput output;
 
@@ -36,5 +32,5 @@ VertexOutput VertexMain(VertexInput input, uniform PushConstants pushConstants)
 [shader("fragment")]
 float4 FragmentMain(VertexOutput input)
 {
-    return input.color * fontTexture.Sample(input.uv);
+    return input.color * fontImage.Sample(input.uv);
 }

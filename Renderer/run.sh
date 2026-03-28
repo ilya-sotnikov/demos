@@ -39,8 +39,12 @@ then
     export LD_PRELOAD=/usr/lib/clang/$CLANG_VERSION/lib/linux/libclang_rt.asan-x86_64.so
 fi
 
-# ./$BUILD_DIRECTORY/DemoTest
 cd "$BUILD_DIRECTORY"
+
+if [ "$BUILD_TYPE" == "Debug" ]
+then
+    ./DemoTest
+fi
 
 # For protect_shadow_gap=0 see this (probably only relevant on NVIDIA hardware):
 # https://forums.developer.nvidia.com/t/vkcreatedevice-fails-when-enabling-vk-khr-acceleration-structure-and-vk-khr-ray-query-and-address-sanitizer-on-linux/361757/2

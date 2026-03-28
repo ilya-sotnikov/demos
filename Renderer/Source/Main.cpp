@@ -218,6 +218,9 @@ int main()
 
     renderer.mEnableUI = true;
     renderer.mUniformData.taaEnable = 1;
+    renderer.ChangeRenderMode(Renderer::RenderMode::Normal);
+
+    int gradErrorMaxPow = -3;
 
     sCamera.mPosition = {9.4f, 7.4f, 0.8f};
     sCamera.mYaw = Radians(-85.0f);
@@ -340,12 +343,34 @@ int main()
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
+            bool drawGradError = renderer.mRenderMode == Renderer::RenderMode::GradError;
+            if (ImGui::Checkbox("Grad error", &drawGradError))
+            {
+                if (drawGradError)
+                {
+                    renderer.ChangeRenderMode(Renderer::RenderMode::GradError);
+                }
+                else
+                {
+                    renderer.ChangeRenderMode(Renderer::RenderMode::Normal);
+                }
+            }
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::SliderInt("##GradErrorMax", &gradErrorMaxPow, -8, -1);
+            renderer.mUniformData.gradErrorMax = powf(10.0f, f32(gradErrorMaxPow));
+            ImGui::TableNextColumn();
+            ImGui::Text("Grad err max pow");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
             ImGui::SeparatorText("TAA");
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             bool taaEnable = renderer.mUniformData.taaEnable;
             ImGui::Checkbox("Enable", &taaEnable);
-            renderer.mUniformData.taaEnable = taaEnable;
+            renderer.mUniformData.taaEnable = taaEnable; // TODO: wrapper.
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
