@@ -4,6 +4,14 @@
 
 **WARNING for Windows users**: totally untested on windows and MSVC, expect issues.
 
+## TODO
+
+So far there are some bugs in Slang (such as [this](https://github.com/shader-slang/slang/issues/7019) or [that](https://github.com/shader-slang/slang/issues/10123)).
+
+- if mesh shader support doesn't improve in Slang, switch to HLSL (dxc)
+- use mesh shaders to generate triangle ids for a visibility buffer
+- meshlet frustum, backface, occlusion (Hi-Z) culling
+
 ## Preview
 
 ![](./Preview/Sponza.png)

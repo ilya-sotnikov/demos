@@ -250,7 +250,7 @@ bool ImGuiRenderer::Init(
 
     // Descriptor set.
     VkDescriptorSetLayout descriptorSetLayout{};
-    DEFER(vkDestroyDescriptorSetLayout(mDevice, descriptorSetLayout, nullptr));
+    DEFER(vkDestroyDescriptorSetLayout(mDevice, descriptorSetLayout, nullptr)); // TODO: wrong.
     {
         // Descriptor set layout.
         VkDescriptorSetLayoutBinding setLayoutBinding{};
