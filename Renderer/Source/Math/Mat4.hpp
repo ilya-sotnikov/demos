@@ -5,7 +5,7 @@
 #include "Vec4.hpp"
 #include "Quat.hpp"
 
-inline constexpr Mat4 Mat4::Identity()
+inline Mat4 Mat4::Identity()
 {
     Mat4 m{};
     m.col[0].val[0] = 1.0f;
@@ -15,12 +15,12 @@ inline constexpr Mat4 Mat4::Identity()
     return m;
 }
 
-inline constexpr Mat4 Mat4::Zero()
+inline Mat4 Mat4::Zero()
 {
     return {};
 }
 
-inline constexpr f32 Mat4::operator()(int row, int column) const
+inline f32 Mat4::operator()(int row, int column) const
 {
     DEBUG_ASSERT(row >= 0);
     DEBUG_ASSERT(column >= 0);
@@ -29,7 +29,7 @@ inline constexpr f32 Mat4::operator()(int row, int column) const
     return col[column].val[row];
 }
 
-inline constexpr f32& Mat4::operator()(int row, int column)
+inline f32& Mat4::operator()(int row, int column)
 {
     DEBUG_ASSERT(row >= 0);
     DEBUG_ASSERT(column >= 0);
@@ -38,12 +38,12 @@ inline constexpr f32& Mat4::operator()(int row, int column)
     return col[column].val[row];
 }
 
-inline constexpr Mat4 operator-(const Mat4& v)
+inline Mat4 operator-(const Mat4& v)
 {
     return {-v.col[0], -v.col[1], -v.col[2], -v.col[3]};
 }
 
-inline constexpr Mat4& operator+=(Mat4& lhs, const Mat4& rhs)
+inline Mat4& operator+=(Mat4& lhs, const Mat4& rhs)
 {
     lhs.col[0] += rhs.col[0];
     lhs.col[1] += rhs.col[1];
@@ -52,7 +52,7 @@ inline constexpr Mat4& operator+=(Mat4& lhs, const Mat4& rhs)
     return lhs;
 }
 
-inline constexpr Mat4& operator-=(Mat4& lhs, const Mat4& rhs)
+inline Mat4& operator-=(Mat4& lhs, const Mat4& rhs)
 {
     lhs.col[0] -= rhs.col[0];
     lhs.col[1] -= rhs.col[1];
@@ -61,7 +61,7 @@ inline constexpr Mat4& operator-=(Mat4& lhs, const Mat4& rhs)
     return lhs;
 }
 
-inline constexpr Mat4& operator*=(Mat4& lhs, f32 rhs)
+inline Mat4& operator*=(Mat4& lhs, f32 rhs)
 {
     lhs.col[0] *= rhs;
     lhs.col[1] *= rhs;
@@ -70,7 +70,7 @@ inline constexpr Mat4& operator*=(Mat4& lhs, f32 rhs)
     return lhs;
 }
 
-inline constexpr Mat4& operator/=(Mat4& lhs, f32 rhs)
+inline Mat4& operator/=(Mat4& lhs, f32 rhs)
 {
     lhs.col[0] /= rhs;
     lhs.col[1] /= rhs;
@@ -79,7 +79,7 @@ inline constexpr Mat4& operator/=(Mat4& lhs, f32 rhs)
     return lhs;
 }
 
-inline constexpr Mat4 operator+(const Mat4& lhs, const Mat4& rhs)
+inline Mat4 operator+(const Mat4& lhs, const Mat4& rhs)
 {
     return {
         lhs.col[0] + rhs.col[0],
@@ -89,7 +89,7 @@ inline constexpr Mat4 operator+(const Mat4& lhs, const Mat4& rhs)
     };
 }
 
-inline constexpr Mat4 operator-(const Mat4& lhs, const Mat4& rhs)
+inline Mat4 operator-(const Mat4& lhs, const Mat4& rhs)
 {
     return {
         lhs.col[0] - rhs.col[0],
@@ -99,22 +99,22 @@ inline constexpr Mat4 operator-(const Mat4& lhs, const Mat4& rhs)
     };
 }
 
-inline constexpr Mat4 operator*(const Mat4& lhs, f32 rhs)
+inline Mat4 operator*(const Mat4& lhs, f32 rhs)
 {
     return {lhs.col[0] * rhs, lhs.col[1] * rhs, lhs.col[2] * rhs, lhs.col[3] * rhs};
 }
 
-inline constexpr Mat4 operator/(const Mat4& lhs, f32 rhs)
+inline Mat4 operator/(const Mat4& lhs, f32 rhs)
 {
     return {lhs.col[0] / rhs, lhs.col[1] / rhs, lhs.col[2] / rhs, lhs.col[3] / rhs};
 }
 
-inline constexpr Mat4 operator*(f32 lhs, const Mat4& rhs)
+inline Mat4 operator*(f32 lhs, const Mat4& rhs)
 {
     return {lhs * rhs.col[0], lhs * rhs.col[1], lhs * rhs.col[2], lhs * rhs.col[3]};
 }
 
-inline constexpr Vec4 operator*(const Mat4& lhs, Vec4 rhs)
+inline Vec4 operator*(const Mat4& lhs, Vec4 rhs)
 {
     // clang-format off
     return {
@@ -141,12 +141,12 @@ inline constexpr Vec4 operator*(const Mat4& lhs, Vec4 rhs)
     // clang-format on
 }
 
-inline constexpr Mat4 operator*(const Mat4& lhs, const Mat4& rhs)
+inline Mat4 operator*(const Mat4& lhs, const Mat4& rhs)
 {
     return {lhs * rhs.col[0], lhs * rhs.col[1], lhs * rhs.col[2], lhs * rhs.col[3]};
 }
 
-inline constexpr Vec4 TMul(const Mat4& lhsT, Vec4 rhs)
+inline Vec4 TMul(const Mat4& lhsT, Vec4 rhs)
 {
     // clang-format off
     return {
@@ -186,8 +186,7 @@ inline Mat4 TMul(const Mat4& lhs, const Mat4& rhs)
     return res;
 }
 
-[[nodiscard]]
-inline constexpr bool operator==(const Mat4& lhs, const Mat4& rhs)
+inline bool operator==(const Mat4& lhs, const Mat4& rhs)
 {
     // clang-format off
     return
@@ -198,8 +197,7 @@ inline constexpr bool operator==(const Mat4& lhs, const Mat4& rhs)
     // clang-format on
 }
 
-[[nodiscard]]
-inline constexpr bool operator!=(const Mat4& lhs, const Mat4& rhs)
+inline bool operator!=(const Mat4& lhs, const Mat4& rhs)
 {
     // clang-format off
     return
@@ -210,8 +208,7 @@ inline constexpr bool operator!=(const Mat4& lhs, const Mat4& rhs)
     // clang-format on
 }
 
-[[nodiscard]]
-inline constexpr bool AlmostEqual(Mat4 lhs, Mat4 rhs, f32 tolerance = FLT_EPSILON)
+inline bool AlmostEqual(Mat4 lhs, Mat4 rhs, f32 tolerance = FLT_EPSILON)
 {
     return AlmostEqual(lhs.col[0], rhs.col[0], tolerance)
         && AlmostEqual(lhs.col[1], rhs.col[1], tolerance)
@@ -219,7 +216,7 @@ inline constexpr bool AlmostEqual(Mat4 lhs, Mat4 rhs, f32 tolerance = FLT_EPSILO
         && AlmostEqual(lhs.col[3], rhs.col[3], tolerance);
 }
 
-inline constexpr Mat4 Transpose(const Mat4& m)
+inline Mat4 Transpose(const Mat4& m)
 {
     // clang-format off
     return {
@@ -231,7 +228,7 @@ inline constexpr Mat4 Transpose(const Mat4& m)
     // clang-format on
 }
 
-inline constexpr Mat4 Translate(const Mat4& m, Vec3 v)
+inline Mat4 Translate(const Mat4& m, Vec3 v)
 {
     Mat4 res{m};
 
@@ -264,7 +261,7 @@ inline constexpr Mat4 Translate(const Mat4& m, Vec3 v)
     return res;
 }
 
-inline constexpr Mat4 Scale(const Mat4& m, Vec3 scale)
+inline Mat4 Scale(const Mat4& m, Vec3 scale)
 {
     Mat4 res{m};
 
@@ -285,7 +282,7 @@ inline constexpr Mat4 Scale(const Mat4& m, Vec3 scale)
     return res;
 }
 
-inline constexpr Mat4 Scale(const Mat4& m, f32 scale)
+inline Mat4 Scale(const Mat4& m, f32 scale)
 {
     Mat4 res{m};
 
@@ -341,7 +338,7 @@ inline Mat4 LookAt(Vec3 position, Vec3 target, Vec3 worldUp)
 // Infinite perspective projection with reversed Z.
 // https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
 // https://developer.nvidia.com/blog/visualizing-depth-precision/
-inline constexpr Mat4 Perspective(f32 fovYRad, f32 aspect, f32 zNear)
+inline Mat4 Perspective(f32 fovYRad, f32 aspect, f32 zNear)
 {
     DEBUG_ASSERT(fovYRad > 0.0f);
     DEBUG_ASSERT(aspect > 0.0f);
@@ -359,7 +356,7 @@ inline constexpr Mat4 Perspective(f32 fovYRad, f32 aspect, f32 zNear)
     return res;
 }
 
-inline constexpr Mat4 Ortho(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far)
+inline Mat4 Ortho(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far)
 {
     DEBUG_ASSERT(right - left != 0.0f);
     DEBUG_ASSERT(near - far != 0.0f);
@@ -378,7 +375,7 @@ inline constexpr Mat4 Ortho(f32 left, f32 right, f32 bottom, f32 top, f32 near, 
     return res;
 }
 
-inline constexpr Mat4 Viewport(u32 x, u32 y, u32 w, u32 h)
+inline Mat4 Viewport(u32 x, u32 y, u32 w, u32 h)
 {
     DEBUG_ASSERT(w > 0);
     DEBUG_ASSERT(h > 0);
@@ -393,7 +390,7 @@ inline constexpr Mat4 Viewport(u32 x, u32 y, u32 w, u32 h)
     // clang-format on
 }
 
-inline constexpr Mat4 Model(Vec3 position, Quat orientation, Vec3 scale)
+inline Mat4 Model(Vec3 position, Quat orientation, Vec3 scale)
 {
     Mat4 res = {};
 
@@ -427,7 +424,7 @@ inline constexpr Mat4 Model(Vec3 position, Quat orientation, Vec3 scale)
     return res;
 }
 
-inline constexpr Mat4 Model(Vec3 position, Quat orientation, f32 scale)
+inline Mat4 Model(Vec3 position, Quat orientation, f32 scale)
 {
     Mat4 res = {};
 
@@ -461,7 +458,7 @@ inline constexpr Mat4 Model(Vec3 position, Quat orientation, f32 scale)
     return res;
 }
 
-inline constexpr Mat3 ToMat3(const Mat4& m)
+inline Mat3 ToMat3(const Mat4& m)
 {
     // clang-format off
     return {

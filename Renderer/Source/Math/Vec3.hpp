@@ -2,86 +2,86 @@
 
 #include "MathCommon.hpp"
 
-inline constexpr f32 Vec3::X() const
+inline f32 Vec3::X() const
 {
     return val[0];
 }
 
-inline constexpr f32 Vec3::Y() const
+inline f32 Vec3::Y() const
 {
     return val[1];
 }
 
-inline constexpr f32 Vec3::Z() const
+inline f32 Vec3::Z() const
 {
     return val[2];
 }
 
-inline constexpr f32 Vec3::R() const
+inline f32 Vec3::R() const
 {
     return val[0];
 }
 
-inline constexpr f32 Vec3::G() const
+inline f32 Vec3::G() const
 {
     return val[1];
 }
 
-inline constexpr f32 Vec3::B() const
+inline f32 Vec3::B() const
 {
     return val[2];
 }
 
-inline constexpr f32& Vec3::X()
+inline f32& Vec3::X()
 {
     return val[0];
 }
 
-inline constexpr f32& Vec3::Y()
+inline f32& Vec3::Y()
 {
     return val[1];
 }
 
-inline constexpr f32& Vec3::Z()
+inline f32& Vec3::Z()
 {
     return val[2];
 }
 
-inline constexpr f32& Vec3::R()
+inline f32& Vec3::R()
 {
     return val[0];
 }
 
-inline constexpr f32& Vec3::G()
+inline f32& Vec3::G()
 {
     return val[1];
 }
 
-inline constexpr f32& Vec3::B()
+inline f32& Vec3::B()
 {
     return val[2];
 }
 
-inline constexpr f32 Vec3::operator[](int i) const
+inline f32 Vec3::operator[](int i) const
 {
     DEBUG_ASSERT(i >= 0);
     DEBUG_ASSERT(i < N);
     return val[i];
 }
 
-inline constexpr f32& Vec3::operator[](int i)
+inline f32& Vec3::operator[](int i)
 {
     DEBUG_ASSERT(i >= 0);
     DEBUG_ASSERT(i < N);
     return val[i];
 }
 
-inline constexpr Vec3 operator-(Vec3 v)
+inline Vec3 operator-(Vec3 v)
 {
     return {-v.val[0], -v.val[1], -v.val[2]};
 }
 
-inline constexpr Vec3& operator+=(Vec3& lhs, Vec3 rhs)
+inline Vec3& operator+=(Vec3& lhs, Vec3 rhs)
 {
     lhs.val[0] += rhs.val[0];
     lhs.val[1] += rhs.val[1];
@@ -89,7 +89,7 @@ inline constexpr Vec3& operator+=(Vec3& lhs, Vec3 rhs)
     return lhs;
 }
 
-inline constexpr Vec3& operator-=(Vec3& lhs, Vec3 rhs)
+inline Vec3& operator-=(Vec3& lhs, Vec3 rhs)
 {
     lhs.val[0] -= rhs.val[0];
     lhs.val[1] -= rhs.val[1];
@@ -97,7 +97,7 @@ inline constexpr Vec3& operator-=(Vec3& lhs, Vec3 rhs)
     return lhs;
 }
 
-inline constexpr Vec3& operator*=(Vec3& lhs, Vec3 rhs)
+inline Vec3& operator*=(Vec3& lhs, Vec3 rhs)
 {
     lhs.val[0] *= rhs.val[0];
     lhs.val[1] *= rhs.val[1];
@@ -105,7 +105,7 @@ inline constexpr Vec3& operator*=(Vec3& lhs, Vec3 rhs)
     return lhs;
 }
 
-inline constexpr Vec3& operator*=(Vec3& lhs, f32 rhs)
+inline Vec3& operator*=(Vec3& lhs, f32 rhs)
 {
     lhs.val[0] *= rhs;
     lhs.val[1] *= rhs;
@@ -113,7 +113,7 @@ inline constexpr Vec3& operator*=(Vec3& lhs, f32 rhs)
     return lhs;
 }
 
-inline constexpr Vec3& operator/=(Vec3& lhs, f32 rhs)
+inline Vec3& operator/=(Vec3& lhs, f32 rhs)
 {
     lhs.val[0] /= rhs;
     lhs.val[1] /= rhs;
@@ -121,87 +121,81 @@ inline constexpr Vec3& operator/=(Vec3& lhs, f32 rhs)
     return lhs;
 }
 
-inline constexpr Vec3 operator+(Vec3 lhs, Vec3 rhs)
+inline Vec3 operator+(Vec3 lhs, Vec3 rhs)
 {
     return {lhs.val[0] + rhs.val[0], lhs.val[1] + rhs.val[1], lhs.val[2] + rhs.val[2]};
 }
 
-inline constexpr Vec3 operator-(Vec3 lhs, Vec3 rhs)
+inline Vec3 operator-(Vec3 lhs, Vec3 rhs)
 {
     return {lhs.val[0] - rhs.val[0], lhs.val[1] - rhs.val[1], lhs.val[2] - rhs.val[2]};
 }
 
-inline constexpr Vec3 operator*(Vec3 lhs, Vec3 rhs)
+inline Vec3 operator*(Vec3 lhs, Vec3 rhs)
 {
     return {lhs.val[0] * rhs.val[0], lhs.val[1] * rhs.val[1], lhs.val[2] * rhs.val[2]};
 }
 
-inline constexpr Vec3 operator*(Vec3 lhs, f32 rhs)
+inline Vec3 operator*(Vec3 lhs, f32 rhs)
 {
     return {lhs.val[0] * rhs, lhs.val[1] * rhs, lhs.val[2] * rhs};
 }
 
-inline constexpr Vec3 operator/(Vec3 lhs, f32 rhs)
+inline Vec3 operator/(Vec3 lhs, f32 rhs)
 {
     return {lhs.val[0] / rhs, lhs.val[1] / rhs, lhs.val[2] / rhs};
 }
 
-inline constexpr Vec3 operator*(f32 lhs, Vec3 rhs)
+inline Vec3 operator*(f32 lhs, Vec3 rhs)
 {
     return {lhs * rhs.val[0], lhs * rhs.val[1], lhs * rhs.val[2]};
 }
 
-[[nodiscard]]
-inline constexpr bool operator==(Vec3 lhs, Vec3 rhs)
+inline bool operator==(Vec3 lhs, Vec3 rhs)
 {
     return (lhs.val[0] == rhs.val[0]) && (lhs.val[1] == rhs.val[1]) && (lhs.val[2] == rhs.val[2]);
 }
 
-[[nodiscard]]
-inline constexpr bool operator!=(Vec3 lhs, Vec3 rhs)
+inline bool operator!=(Vec3 lhs, Vec3 rhs)
 {
     return (lhs.val[0] != rhs.val[0]) || (lhs.val[1] != rhs.val[1]) || (lhs.val[2] != rhs.val[2]);
 }
 
-[[nodiscard]]
-inline constexpr bool AlmostEqual(Vec3 lhs, Vec3 rhs, f32 tolerance = FLT_EPSILON)
+inline bool AlmostEqual(Vec3 lhs, Vec3 rhs, f32 tolerance = FLT_EPSILON)
 {
     return AlmostEqual(lhs.val[0], rhs.val[0], tolerance)
         && AlmostEqual(lhs.val[1], rhs.val[1], tolerance)
         && AlmostEqual(lhs.val[2], rhs.val[2], tolerance);
 }
 
-inline constexpr Vec3 Abs(Vec3 v)
+inline Vec3 Abs(Vec3 v)
 {
     return {fabsf(v.val[0]), fabsf(v.val[1]), fabsf(v.val[2])};
 }
 
-[[nodiscard]]
-inline constexpr f32 Dot(Vec3 a, Vec3 b)
+inline f32 Dot(Vec3 a, Vec3 b)
 {
     return a.val[0] * b.val[0] + a.val[1] * b.val[1] + a.val[2] * b.val[2];
 }
 
-[[nodiscard]]
-inline constexpr f32 MagnitudeSq(Vec3 v)
+inline f32 MagnitudeSq(Vec3 v)
 {
     return v.val[0] * v.val[0] + v.val[1] * v.val[1] + v.val[2] * v.val[2];
 }
 
-[[nodiscard]]
-inline constexpr f32 Magnitude(Vec3 v)
+inline f32 Magnitude(Vec3 v)
 {
     return sqrtf(v.val[0] * v.val[0] + v.val[1] * v.val[1] + v.val[2] * v.val[2]);
 }
 
-inline constexpr Vec3 Normalize(Vec3 v)
+inline Vec3 Normalize(Vec3 v)
 {
     const f32 mag = sqrtf(v.val[0] * v.val[0] + v.val[1] * v.val[1] + v.val[2] * v.val[2]);
     DEBUG_ASSERT(mag != 0.0f);
     return {v.val[0] / mag, v.val[1] / mag, v.val[2] / mag};
 }
 
-inline constexpr Vec3 Cross(Vec3 a, Vec3 b)
+inline Vec3 Cross(Vec3 a, Vec3 b)
 {
     const f32 x = a.val[1] * b.val[2] - b.val[1] * a.val[2];
     const f32 y = a.val[2] * b.val[0] - a.val[0] * b.val[2];
@@ -209,7 +203,7 @@ inline constexpr Vec3 Cross(Vec3 a, Vec3 b)
     return {x, y, z};
 }
 
-inline constexpr f32 TripleProduct(Vec3 a, Vec3 b, Vec3 c)
+inline f32 TripleProduct(Vec3 a, Vec3 b, Vec3 c)
 {
     const f32 x = a.val[1] * b.val[2] - b.val[1] * a.val[2];
     const f32 y = a.val[2] * b.val[0] - a.val[0] * b.val[2];
@@ -217,7 +211,7 @@ inline constexpr f32 TripleProduct(Vec3 a, Vec3 b, Vec3 c)
     return x * c.val[0] + y * c.val[1] + z * c.val[2];
 }
 
-inline constexpr Vec3 Lerp(Vec3 a, Vec3 b, f32 t)
+inline Vec3 Lerp(Vec3 a, Vec3 b, f32 t)
 {
     const f32 x = 1.0f - t;
     return {
@@ -228,7 +222,7 @@ inline constexpr Vec3 Lerp(Vec3 a, Vec3 b, f32 t)
 }
 
 // https://box2d.org/posts/2014/02/computing-a-basis/
-inline constexpr void ComputeBasis(Vec3 normal, Vec3& tangent1, Vec3& tangent2)
+inline void ComputeBasis(Vec3 normal, Vec3& tangent1, Vec3& tangent2)
 {
     // Suppose vector a has all equal components and is a unit vector:
     // a = (s, s, s)
@@ -248,7 +242,7 @@ inline constexpr void ComputeBasis(Vec3 normal, Vec3& tangent1, Vec3& tangent2)
     tangent2 = Cross(normal, tangent1);
 }
 
-inline constexpr void Clear(Vec3& v)
+inline void Clear(Vec3& v)
 {
     v.val[0] = 0.0f;
     v.val[1] = 0.0f;

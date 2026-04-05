@@ -12,7 +12,7 @@ static bool IsPowerOfTwo(ptrdiff_t x)
 static ptrdiff_t AlignForward(ptrdiff_t ptr, ptrdiff_t align)
 {
     assert(IsPowerOfTwo(align));
-    (void)IsPowerOfTwo;
+    (void)IsPowerOfTwo(0);
 
     ptrdiff_t alignedPtr = ptr;
     const ptrdiff_t modulo = alignedPtr & (align - 1);

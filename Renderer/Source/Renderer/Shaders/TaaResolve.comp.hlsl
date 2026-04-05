@@ -1,12 +1,12 @@
-#include "Common.slang"
-#include "Math.slang"
+#include "Common.hlsli"
+#include "Math.hlsli"
 
 ConstantBuffer<UniformData> uniformBuffer;
 Texture2D renderImage;
 Texture2D depthImage;
 Texture2D velocityImage;
 Texture2D prevResolvedRenderImage;
-RWTexture2D resolvedRenderImageRW;
+RWTexture2D<float3> resolvedRenderImageRW;
 SamplerState linearSampler;
 
 // Took an implementation from this article:
@@ -40,16 +40,16 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     if (uniformBuffer.taaEnable == 0)
     {
-        resolvedRenderImageRW[dtid.xy] = renderImage[dtid.xy];
+        resolvedRenderImageRW[dtid.xy] = renderImage[dtid.xy].rgb;
         return;
     }
 
-    float3 currSampleTotal = float3(0.0);
+    float3 currSampleTotal = 0.0;
     float currSampleWeight = 0.0;
-    float3 neighborhoodMin = float3(10000.0);
-    float3 neighborhoodMax = float3(-10000.0);
-    float3 m1 = float3(0.0);
-    float3 m2 = float3(0.0);
+    float3 neighborhoodMin = 10000.0;
+    float3 neighborhoodMax = -10000.0;
+    float3 m1 = 0.0;
+    float3 m2 = 0.0;
     float closestDepth = 0.0;
     int2 closestDepthPixelPosition = int2(0, 0);
 
@@ -96,7 +96,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     if (any(prevUV != saturate(prevUV)))
     {
-        resolvedRenderImageRW[dtid.xy] = float4(currSample, 1.0);
+        resolvedRenderImageRW[dtid.xy] = currSample;
         return;
     }
 
@@ -130,5 +130,5 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float3 result =
         (currSample * currWeight + prevSample * prevWeight) / max(currWeight + prevWeight, 0.00001);
 
-    resolvedRenderImageRW[dtid.xy] = float4(result, 1.0);
+    resolvedRenderImageRW[dtid.xy] = result;
 }

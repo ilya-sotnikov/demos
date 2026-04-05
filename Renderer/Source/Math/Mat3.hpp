@@ -3,7 +3,7 @@
 #include "MathCommon.hpp"
 #include "Vec3.hpp"
 
-inline constexpr Mat3 Mat3::Identity()
+inline Mat3 Mat3::Identity()
 {
     Mat3 m{};
     m.col[0].val[0] = 1.0f;
@@ -12,12 +12,12 @@ inline constexpr Mat3 Mat3::Identity()
     return m;
 }
 
-inline constexpr Mat3 Mat3::Zero()
+inline Mat3 Mat3::Zero()
 {
     return {};
 }
 
-inline constexpr f32 Mat3::operator()(int row, int column) const
+inline f32 Mat3::operator()(int row, int column) const
 {
     DEBUG_ASSERT(row >= 0);
     DEBUG_ASSERT(column >= 0);
@@ -26,7 +26,7 @@ inline constexpr f32 Mat3::operator()(int row, int column) const
     return col[column].val[row];
 }
 
-inline constexpr f32& Mat3::operator()(int row, int column)
+inline f32& Mat3::operator()(int row, int column)
 {
     DEBUG_ASSERT(row >= 0);
     DEBUG_ASSERT(column >= 0);
@@ -35,7 +35,7 @@ inline constexpr f32& Mat3::operator()(int row, int column)
     return col[column].val[row];
 }
 
-inline constexpr Mat3 operator-(const Mat3& v)
+inline Mat3 operator-(const Mat3& v)
 {
     // clang-format off
     return {
@@ -46,7 +46,7 @@ inline constexpr Mat3 operator-(const Mat3& v)
     // clang-format on
 }
 
-inline constexpr Mat3& operator+=(Mat3& lhs, const Mat3& rhs)
+inline Mat3& operator+=(Mat3& lhs, const Mat3& rhs)
 {
     lhs.col[0] += rhs.col[0];
     lhs.col[1] += rhs.col[1];
@@ -54,7 +54,7 @@ inline constexpr Mat3& operator+=(Mat3& lhs, const Mat3& rhs)
     return lhs;
 }
 
-inline constexpr Mat3& operator-=(Mat3& lhs, const Mat3& rhs)
+inline Mat3& operator-=(Mat3& lhs, const Mat3& rhs)
 {
     lhs.col[0] -= rhs.col[0];
     lhs.col[1] -= rhs.col[1];
@@ -62,7 +62,7 @@ inline constexpr Mat3& operator-=(Mat3& lhs, const Mat3& rhs)
     return lhs;
 }
 
-inline constexpr Mat3& operator*=(Mat3& lhs, f32 rhs)
+inline Mat3& operator*=(Mat3& lhs, f32 rhs)
 {
     lhs.col[0] *= rhs;
     lhs.col[1] *= rhs;
@@ -70,7 +70,7 @@ inline constexpr Mat3& operator*=(Mat3& lhs, f32 rhs)
     return lhs;
 }
 
-inline constexpr Mat3& operator/=(Mat3& lhs, f32 rhs)
+inline Mat3& operator/=(Mat3& lhs, f32 rhs)
 {
     lhs.col[0] /= rhs;
     lhs.col[1] /= rhs;
@@ -78,32 +78,32 @@ inline constexpr Mat3& operator/=(Mat3& lhs, f32 rhs)
     return lhs;
 }
 
-inline constexpr Mat3 operator+(const Mat3& lhs, const Mat3& rhs)
+inline Mat3 operator+(const Mat3& lhs, const Mat3& rhs)
 {
     return {lhs.col[0] + rhs.col[0], lhs.col[1] + rhs.col[1], lhs.col[2] + rhs.col[2]};
 }
 
-inline constexpr Mat3 operator-(const Mat3& lhs, const Mat3& rhs)
+inline Mat3 operator-(const Mat3& lhs, const Mat3& rhs)
 {
     return {lhs.col[0] - rhs.col[0], lhs.col[1] - rhs.col[1], lhs.col[2] - rhs.col[2]};
 }
 
-inline constexpr Mat3 operator*(const Mat3& lhs, f32 rhs)
+inline Mat3 operator*(const Mat3& lhs, f32 rhs)
 {
     return {lhs.col[0] * rhs, lhs.col[1] * rhs, lhs.col[2] * rhs};
 }
 
-inline constexpr Mat3 operator/(const Mat3& lhs, f32 rhs)
+inline Mat3 operator/(const Mat3& lhs, f32 rhs)
 {
     return {lhs.col[0] / rhs, lhs.col[1] / rhs, lhs.col[2] / rhs};
 }
 
-inline constexpr Mat3 operator*(f32 lhs, const Mat3& rhs)
+inline Mat3 operator*(f32 lhs, const Mat3& rhs)
 {
     return {lhs * rhs.col[0], lhs * rhs.col[1], lhs * rhs.col[2]};
 }
 
-inline constexpr Vec3 operator*(const Mat3& lhs, Vec3 rhs)
+inline Vec3 operator*(const Mat3& lhs, Vec3 rhs)
 {
     // clang-format off
     return {
@@ -122,12 +122,12 @@ inline constexpr Vec3 operator*(const Mat3& lhs, Vec3 rhs)
     // clang-format on
 }
 
-inline constexpr Mat3 operator*(const Mat3& lhs, const Mat3& rhs)
+inline Mat3 operator*(const Mat3& lhs, const Mat3& rhs)
 {
     return {lhs * rhs.col[0], lhs * rhs.col[1], lhs * rhs.col[2]};
 }
 
-inline constexpr Vec3 TMul(const Mat3& lhsT, Vec3 rhs)
+inline Vec3 TMul(const Mat3& lhsT, Vec3 rhs)
 {
     // clang-format off
     return {
@@ -159,33 +159,29 @@ inline Mat3 TMul(const Mat3& lhs, const Mat3& rhs)
     return res;
 }
 
-[[nodiscard]]
-inline constexpr bool operator==(const Mat3& lhs, const Mat3& rhs)
+inline bool operator==(const Mat3& lhs, const Mat3& rhs)
 {
     return (lhs.col[0] == rhs.col[0]) && (lhs.col[1] == rhs.col[1]) && (lhs.col[2] == rhs.col[2]);
 }
 
-[[nodiscard]]
-inline constexpr bool operator!=(const Mat3& lhs, const Mat3& rhs)
+inline bool operator!=(const Mat3& lhs, const Mat3& rhs)
 {
     return (lhs.col[0] != rhs.col[0]) || (lhs.col[1] != rhs.col[1]) || (lhs.col[2] != rhs.col[2]);
 }
 
-[[nodiscard]]
-inline constexpr bool AlmostEqual(Mat3 lhs, Mat3 rhs, f32 tolerance = FLT_EPSILON)
+inline bool AlmostEqual(Mat3 lhs, Mat3 rhs, f32 tolerance = FLT_EPSILON)
 {
     return AlmostEqual(lhs.col[0], rhs.col[0], tolerance)
         && AlmostEqual(lhs.col[1], rhs.col[1], tolerance)
         && AlmostEqual(lhs.col[2], rhs.col[2], tolerance);
 }
 
-inline constexpr Mat3 Abs(const Mat3& m)
+inline Mat3 Abs(const Mat3& m)
 {
     return {Abs(m.col[0]), Abs(m.col[1]), Abs(m.col[2])};
 }
 
-[[nodiscard]]
-inline constexpr f32 Determinant(const Mat3& m)
+inline f32 Determinant(const Mat3& m)
 {
     const f32 m11 = m.col[1].val[1];
     const f32 m01 = m.col[0].val[1];
@@ -203,7 +199,7 @@ inline constexpr f32 Determinant(const Mat3& m)
     // clang-format on
 }
 
-inline constexpr Mat3 Transpose(const Mat3& m)
+inline Mat3 Transpose(const Mat3& m)
 {
     return {
         Vec3{m.col[0].val[0], m.col[1].val[0], m.col[2].val[0]},
@@ -212,7 +208,7 @@ inline constexpr Mat3 Transpose(const Mat3& m)
     };
 }
 
-inline constexpr Mat3 Inverse(const Mat3& m)
+inline Mat3 Inverse(const Mat3& m)
 {
     // a00 a01 a02
     // a10 a11 a12

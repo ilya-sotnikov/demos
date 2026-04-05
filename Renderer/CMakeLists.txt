@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(Demo)
 
+# if(("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC") AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))
+#     add_compile_options(/fsanitize=address)
+# endif()
+
 # TODO per target
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -51,8 +55,8 @@ set(SOURCES
     Source/Extern.cpp
     Source/Extern.c
 
-    Source/Renderer/Shaders/SharedDef.slang
-    Source/Renderer/Shaders/SharedConfig.slang
+    Source/Renderer/Shaders/SharedDef.hlsli
+    Source/Renderer/Shaders/SharedConfig.hlsli
 )
 
 set(LIBS
@@ -78,8 +82,8 @@ add_executable(${PROJECT_NAME}Test
 target_include_directories(${PROJECT_NAME}Test PRIVATE Source)
 target_link_libraries(${PROJECT_NAME}Test PRIVATE ${LIBS})
 
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    message(WARNING "Totally untested on windows and MSVC. Expect issues.")
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     set(COMPILE_OPTIONS /W4)
     target_compile_options(${PROJECT_NAME} PRIVATE ${COMPILE_OPTIONS})
     target_compile_options(${PROJECT_NAME}Test PRIVATE ${COMPILE_OPTIONS})
@@ -114,35 +118,83 @@ endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBS})
 
-set(SLANGC_EXECUTABLE slangc)
+if(NOT DEFINED DXC_EXECUTABLE)
+    if(UNIX)
+        if(DEFINED ENV{VULKAN_SDK})
+            set(DXC_EXECUTABLE "$ENV{VULKAN_SDK}/bin/dxc")
+        else()
+            set(DXC_EXECUTABLE "dxc")
+        endif()
+    else()
+        set(DXC_EXECUTABLE "$ENV{VULKAN_SDK}/Bin/dxc.exe")
+    endif()
+endif()
 
 set(SHADER_SOURCE_DIRECTORY ${CMAKE_SOURCE_DIR}/Source/Renderer/Shaders/)
 set(SHADER_SOURCE_FILES
-    ${SHADER_SOURCE_DIRECTORY}/Cull.slang
-    ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.slang
-    ${SHADER_SOURCE_DIRECTORY}/Renderer.slang
-    ${SHADER_SOURCE_DIRECTORY}/TaaResolve.slang
-    ${SHADER_SOURCE_DIRECTORY}/Fullscreen.slang
-    ${SHADER_SOURCE_DIRECTORY}/ImguiRenderer.slang
-
-    ${SHADER_SOURCE_DIRECTORY}/DebugGradError.slang
+    ${SHADER_SOURCE_DIRECTORY}/Cull.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/DebugGradError.vert.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/DebugGradError.frag.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/Fullscreen.vert.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/Fullscreen.frag.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/Imgui.vert.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/Imgui.frag.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/Renderer.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/TaaResolve.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.vert.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.frag.hlsl
 )
 set(SHADER_INCLUDE_FILES
-    ${SHADER_SOURCE_DIRECTORY}/SharedDef.slang
-    ${SHADER_SOURCE_DIRECTORY}/SharedConfig.slang
-    ${SHADER_SOURCE_DIRECTORY}/Common.slang
-    ${SHADER_SOURCE_DIRECTORY}/Math.slang
-    ${SHADER_SOURCE_DIRECTORY}/PBR.slang
+    ${SHADER_SOURCE_DIRECTORY}/Common.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/DebugGradError.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/Fullscreen.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/Imgui.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/Math.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/PBR.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/SharedConfig.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/SharedDef.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.hlsli
 )
+
+execute_process(COMMAND ${DXC_EXECUTABLE} --version)
 
 foreach(shader ${SHADER_SOURCE_FILES})
     message(STATUS "Building shaders")
     get_filename_component(FILE_NAME ${shader} NAME)
     set(SPIRV "${CMAKE_BINARY_DIR}/${FILE_NAME}.spv")
+    cmake_path(GET shader EXTENSION FILE_EXTENSION)
+
+    if("${FILE_EXTENSION}" STREQUAL ".vert.hlsl")
+        set(SHADER_TYPE vs)
+    elseif("${FILE_EXTENSION}" STREQUAL ".frag.hlsl")
+        set(SHADER_TYPE ps)
+    elseif("${FILE_EXTENSION}" STREQUAL ".comp.hlsl")
+        set(SHADER_TYPE cs)
+    elseif("${FILE_EXTENSION}" STREQUAL ".mesh.hlsl")
+        set(SHADER_TYPE ms)
+    elseif("${FILE_EXTENSION}" STREQUAL ".task.hlsl")
+        set(SHADER_TYPE as)
+    else()
+        message(FATAL_ERROR "unknown shader extension ${shader}")
+    endif()
+
     message(STATUS ${shader})
+
     add_custom_command(
         OUTPUT ${SPIRV}
-        COMMAND ${SLANGC_EXECUTABLE} ${shader} -O3 -target spirv -profile sm_6_6 -matrix-layout-column-major -fvk-use-entrypoint-name -fvk-use-scalar-layout -o ${SPIRV}
+        COMMAND ${DXC_EXECUTABLE}
+            -spirv
+            -O3 # -Zi -fspv-debug=vulkan-with-source
+            -T ${SHADER_TYPE}_6_6
+            -fvk-use-scalar-layout
+            -enable-16bit-types
+            -Zpc
+            -E Main
+            -fspv-target-env=vulkan1.3
+            -fspv-extension=SPV_EXT_mesh_shader
+            -fspv-extension=SPV_EXT_descriptor_indexing
+            -fspv-extension=SPV_KHR_ray_query
+            -Fo ${SPIRV} ${shader}
         DEPENDS ${shader} ${SHADER_INCLUDE_FILES}
     )
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})

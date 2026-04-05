@@ -2,7 +2,7 @@
 
 #include "../Math/Types.hpp"
 #include "RendererCommon.hpp"
-#include "Shaders/SharedDef.slang"
+#include "Shaders/SharedDef.hlsli"
 
 #include <vector>
 #include <string>

@@ -1,5 +1,7 @@
-#include "SharedConfig.slang"
-#include "SharedDef.slang"
+#pragma once
+
+#include "SharedConfig.hlsli"
+#include "SharedDef.hlsli"
 
 struct VkDrawIndexedIndirectCommand
 {

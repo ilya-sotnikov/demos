@@ -6,8 +6,8 @@
 #include "Scene.hpp"
 #include "../Math/Types.hpp"
 #include "../Math/Utils.hpp"
-#include "Shaders/SharedConfig.slang"
-#include "Shaders/SharedDef.slang"
+#include "Shaders/SharedConfig.hlsli"
+#include "Shaders/SharedDef.hlsli"
 
 struct SDL_Window;
 

@@ -7,19 +7,13 @@
 #include <float.h>
 
 // returns static data, not thread-safe
-[[nodiscard]]
+
 const char* ToString(Vec2 v);
-[[nodiscard]]
 const char* ToString(Vec3 v);
-[[nodiscard]]
 const char* ToString(Vec4 v);
-[[nodiscard]]
 const char* ToString(Mat2 m);
-[[nodiscard]]
 const char* ToString(Mat3 m);
-[[nodiscard]]
 const char* ToString(Mat4 m);
-[[nodiscard]]
 const char* ToString(Mat4 q);
 
 void Print(Vec2 v);
@@ -31,45 +25,37 @@ void Print(Mat4 m);
 void Print(Quat q);
 
 // xorshift LFSR, initial value should be != 0
-[[nodiscard]]
+
 u32 LfsrNext(u32 value);
-[[nodiscard]]
 f32 LfsrNextGetFloatAbs(u32& value, f32 amplitude);
-[[nodiscard]]
 f32 LfsrNextGetFloat(u32& value, f32 amplitude);
 
-[[nodiscard]]
 inline f32 Abs(f32 x)
 {
     return fabsf(x);
 }
 
-[[nodiscard]]
 inline f64 Abs(f64 x)
 {
     return fabs(x);
 }
 
-[[nodiscard]]
 inline f32 Sign(f32 x)
 {
     return x < 0.0f ? -1.0f : 1.0f;
 }
 
-[[nodiscard]]
-inline f32 Degrees(f32 radians)
+inline constexpr f32 Degrees(f32 radians)
 {
     return 180.0f * radians / M_PIf;
 }
 
-[[nodiscard]]
-constexpr inline f32 Radians(f32 degrees)
+inline constexpr f32 Radians(f32 degrees)
 {
     return M_PIf * degrees / 180.0f;
 }
 
 template <typename T>
-[[nodiscard]]
 T Min(T a, T b)
 {
     return a < b ? a : b;
@@ -100,7 +86,7 @@ inline Vec4 Min(Vec4 a, Vec4 b)
 }
 
 template <typename T>
-[[nodiscard]]
+
 T Max(T a, T b)
 {
     return a > b ? a : b;
@@ -131,7 +117,6 @@ inline Vec4 Max(Vec4 a, Vec4 b)
 }
 
 template <typename T>
-[[nodiscard]]
 T Max(T a, T b, T c)
 {
     T result = a;
@@ -147,54 +132,45 @@ T Max(T a, T b, T c)
 }
 
 template <typename Float>
-[[nodiscard]]
-inline constexpr bool AlmostEqual(
-    Float a,
-    Float b,
-    Float absoluteTolerance,
-    Float relativeTolerance
-)
+inline bool AlmostEqual(Float a, Float b, Float absoluteTolerance, Float relativeTolerance)
 {
     return Abs(a - b) <= Max(absoluteTolerance, relativeTolerance * Max(Abs(a), Abs(b)));
 }
 
 // When absoluteTolerance == relativeTolerance.
 template <typename Float>
-[[nodiscard]]
-inline constexpr bool AlmostEqual(Float a, Float b, Float tolerance = FLT_EPSILON)
+inline bool AlmostEqual(Float a, Float b, Float tolerance = FLT_EPSILON)
 {
     return Abs(a - b) <= tolerance * Max(Float(1), Abs(a), Abs(b));
 }
 
 // Not robust but fuck it.
-[[nodiscard]]
-inline constexpr f32 Fract(f32 x)
+inline f32 Fract(f32 x)
 {
     return x - f32(longlong(x));
 }
 
 template <typename T>
-[[nodiscard]]
-constexpr T Clamp(T x, T min, T max)
+T Clamp(T x, T min, T max)
 {
     return x > max ? max : x < min ? min : x;
 }
 
 template <typename T>
-constexpr void Swap(T& a, T& b)
+void Swap(T& a, T& b)
 {
     const T tmp = a;
     a = b;
     b = tmp;
 }
 
-inline constexpr f32 Square(f32 x)
+inline f32 Square(f32 x)
 {
     return x * x;
 }
 
 // https://en.wikipedia.org/wiki/Halton_sequence
-inline constexpr f32 HaltonSequence(u32 idx, u32 base)
+inline f32 HaltonSequence(u32 idx, u32 base)
 {
     DEBUG_ASSERT(idx > 0);
 
@@ -211,7 +187,7 @@ inline constexpr f32 HaltonSequence(u32 idx, u32 base)
     return r;
 }
 
-inline constexpr u32 PreviousPow2(u32 x)
+inline u32 PreviousPow2(u32 x)
 {
     u32 result = 1;
 

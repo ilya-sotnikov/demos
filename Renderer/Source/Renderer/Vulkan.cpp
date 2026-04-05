@@ -1,7 +1,7 @@
 #include "Vulkan.hpp"
 
 #include "RendererCommon.hpp"
-#include "Shaders/SharedConfig.slang"
+#include "Shaders/SharedConfig.hlsli"
 
 #include "../Utils.hpp"
 
@@ -84,6 +84,177 @@ static FileData FileRead(const char* path)
     return result;
 }
 
+struct Shader
+{
+    VkShaderModule module;
+    VkShaderStageFlagBits stage;
+    u32 pushConstantSize;
+};
+
+static bool CreateShader(
+    Shader& shader,
+    std::vector<VkDescriptorSetLayoutBinding>& descriptorSetLayoutBindings,
+    VkDevice device,
+    const char* shaderPath
+)
+{
+    DEBUG_ASSERT(device);
+    DEBUG_ASSERT(shaderPath);
+
+    FileData fileData = FileRead(shaderPath);
+    if (!fileData.data)
+    {
+        return false;
+    }
+    DEFER(SAFE_FREE(fileData.data));
+
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = size_t(fileData.size);
+    createInfo.pCode = static_cast<u32*>(fileData.data);
+
+    if (vkCreateShaderModule(device, &createInfo, nullptr, &shader.module) != VK_SUCCESS)
+    {
+        fprintf(stderr, "vulkan: vkCreateShaderModule failed for %s\n", shaderPath);
+        return false;
+    }
+
+    spirv_cross::Compiler compiler{
+        static_cast<u32*>(fileData.data),
+        size_t(fileData.size) / sizeof(u32)
+    };
+
+    const spirv_cross::SmallVector<spirv_cross::EntryPoint> entryPoints
+        = compiler.get_entry_points_and_stages();
+
+    // NOTE: AFAIK in dxc multiple entry points are buggy. Also, I've encountered a strange bug (?)
+    // with multiple compute shader entry points in Nsight Graphics, when profiling, some samples
+    // always end up in the first entry point in a file when in reality it should not execute at
+    // all. Maybe PEBKAC, but for now I'll just always use 1 entry point per file.
+    ASSERT(entryPoints.size() == 1);
+
+    switch (entryPoints[0].execution_model)
+    {
+    case spirv_cross::ExecutionModelVertex:
+        shader.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        break;
+    case spirv_cross::ExecutionModelFragment:
+        shader.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        break;
+    case spirv_cross::ExecutionModelGLCompute:
+        shader.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        break;
+    case spirv_cross::ExecutionModelMeshEXT:
+        shader.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+        break;
+    case spirv_cross::ExecutionModelTaskEXT:
+        shader.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
+        break;
+    default:
+        fprintf(stderr, "unhandled shader execution model: %d", entryPoints[0].execution_model);
+        return false;
+    }
+
+    spirv_cross::ShaderResources shaderResources = compiler.get_shader_resources();
+
+    for (const spirv_cross::Resource& r : shaderResources.separate_images)
+    {
+        VkDescriptorSetLayoutBinding binding{};
+        if (compiler.get_decoration(r.id, spv::DecorationDescriptorSet) == 1)
+        {
+            // Skip descriptor set 1 (bindless textures).
+            continue;
+        }
+
+        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_ALL;
+
+        descriptorSetLayoutBindings.push_back(binding);
+    }
+
+    for (const spirv_cross::Resource& r : shaderResources.separate_samplers)
+    {
+        VkDescriptorSetLayoutBinding binding{};
+        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_ALL;
+
+        descriptorSetLayoutBindings.push_back(binding);
+    }
+
+    for (const spirv_cross::Resource& r : shaderResources.storage_images)
+    {
+        VkDescriptorSetLayoutBinding binding{};
+        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_ALL;
+
+        descriptorSetLayoutBindings.push_back(binding);
+    }
+
+    for (const spirv_cross::Resource& r : shaderResources.sampled_images)
+    {
+        VkDescriptorSetLayoutBinding binding{};
+        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_ALL;
+
+        descriptorSetLayoutBindings.push_back(binding);
+    }
+
+    for (const spirv_cross::Resource& r : shaderResources.uniform_buffers)
+    {
+        VkDescriptorSetLayoutBinding binding{};
+        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_ALL;
+
+        descriptorSetLayoutBindings.push_back(binding);
+    }
+
+    for (const spirv_cross::Resource& r : shaderResources.storage_buffers)
+    {
+        VkDescriptorSetLayoutBinding binding{};
+        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_ALL;
+
+        descriptorSetLayoutBindings.push_back(binding);
+    }
+
+    for (const spirv_cross::Resource& r : shaderResources.acceleration_structures)
+    {
+        VkDescriptorSetLayoutBinding binding{};
+        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_ALL;
+
+        descriptorSetLayoutBindings.push_back(binding);
+    }
+
+    if (!shaderResources.push_constant_buffers.empty())
+    {
+        ASSERT(shaderResources.push_constant_buffers.size() == 1);
+
+        const spirv_cross::SPIRType type
+            = compiler.get_type(shaderResources.push_constant_buffers[0].base_type_id);
+        const size_t size = compiler.get_declared_struct_size(type);
+
+        shader.pushConstantSize = u32(size);
+    }
+
+    return true;
+}
+
 bool Vulkan::FindSupportedImageFormat(
     VkFormat& result,
     VkPhysicalDevice physicalDevice,
@@ -157,197 +328,6 @@ Vulkan::QueueInfo Vulkan::GetQueue(VkPhysicalDevice device, VkQueueFlagBits flag
     }
 
     return queueInfo;
-}
-
-bool Vulkan::CreateShader(Vulkan::Shader& shader, VkDevice device, const char* shaderPath)
-{
-    DEBUG_ASSERT(device);
-    DEBUG_ASSERT(shaderPath);
-
-    FileData fileData = FileRead(shaderPath);
-    if (!fileData.data)
-    {
-        return false;
-    }
-    DEFER(SAFE_FREE(fileData.data));
-
-    VkShaderModuleCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize = size_t(fileData.size);
-    createInfo.pCode = static_cast<u32*>(fileData.data);
-
-    if (vkCreateShaderModule(device, &createInfo, nullptr, &shader.module) != VK_SUCCESS)
-    {
-        fprintf(stderr, "vulkan: vkCreateShaderModule failed for %s\n", shaderPath);
-        return false;
-    }
-
-    std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
-    descriptorSetLayoutBindings.reserve(32);
-
-    spirv_cross::Compiler compiler{
-        static_cast<u32*>(fileData.data),
-        size_t(fileData.size) / sizeof(u32)
-    };
-
-    const spirv_cross::SmallVector<spirv_cross::EntryPoint> entryPoints
-        = compiler.get_entry_points_and_stages();
-
-    for (const spirv_cross::EntryPoint& entryPoint : entryPoints)
-    {
-        compiler.set_entry_point(entryPoint.name, entryPoint.execution_model);
-
-        spirv_cross::ShaderResources shaderResources = compiler.get_shader_resources();
-
-        for (const spirv_cross::Resource& r : shaderResources.separate_images)
-        {
-            VkDescriptorSetLayoutBinding binding{};
-            if (compiler.get_decoration(r.id, spv::DecorationDescriptorSet) == 1)
-            {
-                // Skip descriptor set 1 (bindless textures).
-                continue;
-            }
-
-            binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-            binding.descriptorCount = 1;
-            binding.stageFlags = VK_SHADER_STAGE_ALL;
-
-            descriptorSetLayoutBindings.push_back(binding);
-        }
-
-        for (const spirv_cross::Resource& r : shaderResources.separate_samplers)
-        {
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-            binding.descriptorCount = 1;
-            binding.stageFlags = VK_SHADER_STAGE_ALL;
-
-            descriptorSetLayoutBindings.push_back(binding);
-        }
-
-        for (const spirv_cross::Resource& r : shaderResources.storage_images)
-        {
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            binding.descriptorCount = 1;
-            binding.stageFlags = VK_SHADER_STAGE_ALL;
-
-            descriptorSetLayoutBindings.push_back(binding);
-        }
-
-        for (const spirv_cross::Resource& r : shaderResources.sampled_images)
-        {
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            binding.descriptorCount = 1;
-            binding.stageFlags = VK_SHADER_STAGE_ALL;
-
-            descriptorSetLayoutBindings.push_back(binding);
-        }
-
-        for (const spirv_cross::Resource& r : shaderResources.uniform_buffers)
-        {
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            binding.descriptorCount = 1;
-            binding.stageFlags = VK_SHADER_STAGE_ALL;
-
-            descriptorSetLayoutBindings.push_back(binding);
-        }
-
-        for (const spirv_cross::Resource& r : shaderResources.storage_buffers)
-        {
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            binding.descriptorCount = 1;
-            binding.stageFlags = VK_SHADER_STAGE_ALL;
-
-            descriptorSetLayoutBindings.push_back(binding);
-        }
-
-        for (const spirv_cross::Resource& r : shaderResources.acceleration_structures)
-        {
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-            binding.descriptorCount = 1;
-            binding.stageFlags = VK_SHADER_STAGE_ALL;
-
-            descriptorSetLayoutBindings.push_back(binding);
-        }
-
-        if (!shaderResources.push_constant_buffers.empty())
-        {
-            ASSERT(shaderResources.push_constant_buffers.size() == 1);
-
-            spirv_cross::SmallVector<spirv_cross::BufferRange> ranges
-                = compiler.get_active_buffer_ranges(shaderResources.push_constant_buffers[0].id);
-            ASSERT(ranges.size() == 1);
-
-            shader.pushConstantSize = u32(ranges[0].range);
-        }
-    }
-
-    // Remove duplicates, since we can have multiple shaders in one module.
-    // Also insert in binding order for stable indices
-    // TODO: eh.
-    bool bindingUsed[32]{};
-    std::vector<VkDescriptorSetLayoutBinding> uniqueDescriptorSetLayoutBindings;
-    uniqueDescriptorSetLayoutBindings.resize(descriptorSetLayoutBindings.size());
-    size_t uniqueBindingCount = 0;
-    for (const VkDescriptorSetLayoutBinding& b : descriptorSetLayoutBindings)
-    {
-        ASSERT(b.binding < 32);
-        if (!bindingUsed[b.binding])
-        {
-            ASSERT(b.binding < uniqueDescriptorSetLayoutBindings.size());
-            uniqueDescriptorSetLayoutBindings[b.binding] = b;
-            bindingUsed[b.binding] = true;
-            ++uniqueBindingCount;
-        }
-    }
-    uniqueDescriptorSetLayoutBindings.resize(uniqueBindingCount);
-
-    for (size_t i = 0; i < uniqueBindingCount; ++i)
-    {
-        ASSERT(bindingUsed[i]);
-    }
-
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
-    descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
-    descriptorSetLayoutInfo.bindingCount = u32(uniqueDescriptorSetLayoutBindings.size());
-    descriptorSetLayoutInfo.pBindings = uniqueDescriptorSetLayoutBindings.data();
-
-    VK_CHECK(vkCreateDescriptorSetLayout(
-        device,
-        &descriptorSetLayoutInfo,
-        nullptr,
-        &shader.descriptorSetLayout
-    ));
-
-    shader.descriptorUpdateTemplateEntries.reserve(uniqueDescriptorSetLayoutBindings.size());
-
-    for (size_t i = 0; i < uniqueDescriptorSetLayoutBindings.size(); ++i)
-    {
-        VkDescriptorUpdateTemplateEntry entry{};
-        entry.dstBinding = uniqueDescriptorSetLayoutBindings[i].binding;
-        entry.descriptorCount = 1;
-        entry.descriptorType = uniqueDescriptorSetLayoutBindings[i].descriptorType;
-        entry.offset = sizeof(DescriptorInfo) * i;
-        entry.stride = sizeof(DescriptorInfo);
-
-        shader.descriptorUpdateTemplateEntries.push_back(entry);
-    }
-
-    return true;
 }
 
 VkMemoryBarrier2 Vulkan::MemoryBarrier(
@@ -748,17 +728,60 @@ void Vulkan::DestroyImage(Vulkan::Image& image, VkDevice device, VmaAllocator vm
 bool Vulkan::CreateComputePipeline(
     Vulkan::Pipeline& pipeline,
     VkDevice device,
-    Vulkan::Shader& shader,
+    const char* shaderPath,
     VkDescriptorSetLayout extraDescriptorSetLayout,
-    const char* mainName,
     const char* debugName
 )
 {
     DEBUG_ASSERT(device);
-    DEBUG_ASSERT(shader.module);
-    DEBUG_ASSERT(shader.descriptorSetLayout);
-    DEBUG_ASSERT(!shader.descriptorUpdateTemplateEntries.empty());
-    DEBUG_ASSERT(mainName);
+    DEBUG_ASSERT(shaderPath);
+
+    std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
+    descriptorSetLayoutBindings.reserve(32);
+    Shader shader{};
+    DEFER(vkDestroyShaderModule(device, shader.module, nullptr));
+
+    if (!CreateShader(shader, descriptorSetLayoutBindings, device, shaderPath))
+    {
+        return false;
+    }
+
+    // Remove duplicates and insert in binding order for stable indices.
+    bool bindingUsed[32]{};
+    std::vector<VkDescriptorSetLayoutBinding> uniqueDescriptorSetLayoutBindings(
+        descriptorSetLayoutBindings.size()
+    );
+    size_t uniqueBindingCount = 0;
+    for (const VkDescriptorSetLayoutBinding& b : descriptorSetLayoutBindings)
+    {
+        ASSERT(b.binding < 32);
+        if (!bindingUsed[b.binding])
+        {
+            ASSERT(b.binding < uniqueDescriptorSetLayoutBindings.size());
+            uniqueDescriptorSetLayoutBindings[b.binding] = b;
+            bindingUsed[b.binding] = true;
+            ++uniqueBindingCount;
+        }
+    }
+    uniqueDescriptorSetLayoutBindings.resize(uniqueBindingCount);
+
+    for (size_t i = 0; i < uniqueDescriptorSetLayoutBindings.size(); ++i)
+    {
+        ASSERT(bindingUsed[i]);
+    }
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
+    descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorSetLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
+    descriptorSetLayoutInfo.bindingCount = u32(uniqueDescriptorSetLayoutBindings.size());
+    descriptorSetLayoutInfo.pBindings = uniqueDescriptorSetLayoutBindings.data();
+
+    VK_CHECK(vkCreateDescriptorSetLayout(
+        device,
+        &descriptorSetLayoutInfo,
+        nullptr,
+        &pipeline.descriptorSetLayout
+    ));
 
     VkPushConstantRange pushConstantRange{};
     const bool usesPushConstants = shader.pushConstantSize > 0;
@@ -768,9 +791,6 @@ bool Vulkan::CreateComputePipeline(
         pushConstantRange.size = shader.pushConstantSize;
         pipeline.pushConstantSize = shader.pushConstantSize;
     }
-
-    pipeline.descriptorSetLayout = shader.descriptorSetLayout;
-    shader.descriptorSetLayout = VK_NULL_HANDLE;
 
     const VkDescriptorSetLayout setLayouts[2] = {
         pipeline.descriptorSetLayout,
@@ -785,15 +805,12 @@ bool Vulkan::CreateComputePipeline(
     layoutInfo.pPushConstantRanges = &pushConstantRange;
     VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline.layout));
 
-    VkPipelineShaderStageCreateInfo shaderStageInfo{};
-    shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    shaderStageInfo.module = shader.module;
-    shaderStageInfo.pName = mainName;
-
     VkComputePipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    pipelineInfo.stage = shaderStageInfo;
+    pipelineInfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pipelineInfo.stage.stage = shader.stage;
+    pipelineInfo.stage.module = shader.module;
+    pipelineInfo.stage.pName = "Main";
     pipelineInfo.layout = pipeline.layout;
 
     VK_CHECK(vkCreateComputePipelines(
@@ -805,22 +822,40 @@ bool Vulkan::CreateComputePipeline(
         &pipeline.pipeline
     ));
 
+    std::vector<VkDescriptorUpdateTemplateEntry> descriptorUpdateTemplateEntries(
+        uniqueDescriptorSetLayoutBindings.size()
+    );
+
+    for (size_t i = 0; i < uniqueDescriptorSetLayoutBindings.size(); ++i)
+    {
+        VkDescriptorUpdateTemplateEntry entry{};
+        entry.dstBinding = uniqueDescriptorSetLayoutBindings[i].binding;
+        entry.descriptorCount = 1;
+        entry.descriptorType = uniqueDescriptorSetLayoutBindings[i].descriptorType;
+        entry.offset = sizeof(DescriptorInfo) * i;
+        entry.stride = sizeof(DescriptorInfo);
+
+        descriptorUpdateTemplateEntries[i] = entry;
+    }
+
     VkDescriptorUpdateTemplateCreateInfo descriptorUpdateTemplateInfo{};
     descriptorUpdateTemplateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO;
     descriptorUpdateTemplateInfo.descriptorUpdateEntryCount
-        = u32(shader.descriptorUpdateTemplateEntries.size());
-    descriptorUpdateTemplateInfo.pDescriptorUpdateEntries
-        = shader.descriptorUpdateTemplateEntries.data();
+        = u32(descriptorUpdateTemplateEntries.size());
+    descriptorUpdateTemplateInfo.pDescriptorUpdateEntries = descriptorUpdateTemplateEntries.data();
     descriptorUpdateTemplateInfo.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS;
     descriptorUpdateTemplateInfo.pipelineBindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
     descriptorUpdateTemplateInfo.pipelineLayout = pipeline.layout;
 
-    VK_CHECK(vkCreateDescriptorUpdateTemplate(
-        device,
-        &descriptorUpdateTemplateInfo,
-        nullptr,
-        &pipeline.descriptorUpdateTemplate
-    ));
+    if (!descriptorUpdateTemplateEntries.empty())
+    {
+        VK_CHECK(vkCreateDescriptorUpdateTemplate(
+            device,
+            &descriptorUpdateTemplateInfo,
+            nullptr,
+            &pipeline.descriptorUpdateTemplate
+        ));
+    }
 
     if (debugName)
     {
@@ -841,28 +876,96 @@ bool Vulkan::CreateComputePipeline(
 bool Vulkan::CreateGraphicsPipeline(
     Vulkan::Pipeline& pipeline,
     VkDevice device,
-    Vulkan::Shader& shader,
+    std::initializer_list<const char*> shaderPaths,
     VkDescriptorSetLayout extraDescriptorSetLayout,
     VkGraphicsPipelineCreateInfo& pipelineInfo,
     const char* debugName
 )
 {
     DEBUG_ASSERT(device);
-    DEBUG_ASSERT(shader.module);
-    DEBUG_ASSERT(shader.descriptorSetLayout);
-    DEBUG_ASSERT(!shader.descriptorUpdateTemplateEntries.empty());
+    DEBUG_ASSERT(shaderPaths.size() > 0);
+
+    std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
+    descriptorSetLayoutBindings.reserve(32);
+    std::vector<Shader> shaders(shaderPaths.size());
+
+    // clang-format off
+    DEFER(
+        for (Shader& shader : shaders)
+        {
+            vkDestroyShaderModule(device, shader.module, nullptr);
+        }
+    );
+    // clang-format on
+
+    for (size_t i = 0; i < shaderPaths.size(); ++i)
+    {
+        if (!CreateShader(
+                shaders[i],
+                descriptorSetLayoutBindings,
+                device,
+                *(shaderPaths.begin() + i)
+            ))
+        {
+            return false;
+        }
+    }
+
+    u32 pushConstantSize = 0;
+    for (Shader& shader : shaders)
+    {
+        ASSERT(
+            (pushConstantSize == 0 || shader.pushConstantSize == 0)
+            || (pushConstantSize == shader.pushConstantSize)
+        );
+        pushConstantSize = pushConstantSize == 0 ? shader.pushConstantSize : pushConstantSize;
+    }
+
+    // Remove duplicates and insert in binding order for stable indices.
+    bool bindingUsed[32]{};
+    std::vector<VkDescriptorSetLayoutBinding> uniqueDescriptorSetLayoutBindings(
+        descriptorSetLayoutBindings.size()
+    );
+    size_t uniqueBindingCount = 0;
+    for (const VkDescriptorSetLayoutBinding& b : descriptorSetLayoutBindings)
+    {
+        ASSERT(b.binding < 32);
+        if (!bindingUsed[b.binding])
+        {
+            ASSERT(b.binding < uniqueDescriptorSetLayoutBindings.size());
+            uniqueDescriptorSetLayoutBindings[b.binding] = b;
+            bindingUsed[b.binding] = true;
+            ++uniqueBindingCount;
+        }
+    }
+    uniqueDescriptorSetLayoutBindings.resize(uniqueBindingCount);
+
+    for (size_t i = 0; i < uniqueDescriptorSetLayoutBindings.size(); ++i)
+    {
+        ASSERT(bindingUsed[i]);
+    }
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
+    descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorSetLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
+    descriptorSetLayoutInfo.bindingCount = u32(uniqueDescriptorSetLayoutBindings.size());
+    descriptorSetLayoutInfo.pBindings = uniqueDescriptorSetLayoutBindings.data();
+
+    VK_CHECK(vkCreateDescriptorSetLayout(
+        device,
+        &descriptorSetLayoutInfo,
+        nullptr,
+        &pipeline.descriptorSetLayout
+    ));
 
     VkPushConstantRange pushConstantRange{};
-    const bool usesPushConstants = shader.pushConstantSize > 0;
+    const bool usesPushConstants = pushConstantSize > 0;
     if (usesPushConstants)
     {
         pushConstantRange.stageFlags = VK_SHADER_STAGE_ALL;
-        pushConstantRange.size = shader.pushConstantSize;
-        pipeline.pushConstantSize = shader.pushConstantSize;
+        pushConstantRange.size = pushConstantSize;
+        pipeline.pushConstantSize = pushConstantSize;
     }
-
-    pipeline.descriptorSetLayout = shader.descriptorSetLayout;
-    shader.descriptorSetLayout = VK_NULL_HANDLE;
 
     const VkDescriptorSetLayout setLayouts[2] = {
         pipeline.descriptorSetLayout,
@@ -877,6 +980,18 @@ bool Vulkan::CreateGraphicsPipeline(
     layoutInfo.pPushConstantRanges = &pushConstantRange;
     VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline.layout));
 
+    std::vector<VkPipelineShaderStageCreateInfo> shaderStageInfos(shaders.size());
+    for (size_t i = 0; i < shaders.size(); ++i)
+    {
+        shaderStageInfos[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStageInfos[i].stage = shaders[i].stage;
+        shaderStageInfos[i].module = shaders[i].module;
+        shaderStageInfos[i].pName = "Main";
+    }
+
+    pipelineInfo.layout = pipeline.layout;
+    pipelineInfo.stageCount = u32(shaderStageInfos.size());
+    pipelineInfo.pStages = shaderStageInfos.data();
     pipelineInfo.layout = pipeline.layout;
 
     VK_CHECK(vkCreateGraphicsPipelines(
@@ -888,22 +1003,40 @@ bool Vulkan::CreateGraphicsPipeline(
         &pipeline.pipeline
     ));
 
+    std::vector<VkDescriptorUpdateTemplateEntry> descriptorUpdateTemplateEntries(
+        uniqueDescriptorSetLayoutBindings.size()
+    );
+
+    for (size_t i = 0; i < uniqueDescriptorSetLayoutBindings.size(); ++i)
+    {
+        VkDescriptorUpdateTemplateEntry entry{};
+        entry.dstBinding = uniqueDescriptorSetLayoutBindings[i].binding;
+        entry.descriptorCount = 1;
+        entry.descriptorType = uniqueDescriptorSetLayoutBindings[i].descriptorType;
+        entry.offset = sizeof(DescriptorInfo) * i;
+        entry.stride = sizeof(DescriptorInfo);
+
+        descriptorUpdateTemplateEntries[i] = entry;
+    }
+
     VkDescriptorUpdateTemplateCreateInfo descriptorUpdateTemplateInfo{};
     descriptorUpdateTemplateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO;
     descriptorUpdateTemplateInfo.descriptorUpdateEntryCount
-        = u32(shader.descriptorUpdateTemplateEntries.size());
-    descriptorUpdateTemplateInfo.pDescriptorUpdateEntries
-        = shader.descriptorUpdateTemplateEntries.data();
+        = u32(descriptorUpdateTemplateEntries.size());
+    descriptorUpdateTemplateInfo.pDescriptorUpdateEntries = descriptorUpdateTemplateEntries.data();
     descriptorUpdateTemplateInfo.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS;
     descriptorUpdateTemplateInfo.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     descriptorUpdateTemplateInfo.pipelineLayout = pipeline.layout;
 
-    VK_CHECK(vkCreateDescriptorUpdateTemplate(
-        device,
-        &descriptorUpdateTemplateInfo,
-        nullptr,
-        &pipeline.descriptorUpdateTemplate
-    ));
+    if (!descriptorUpdateTemplateEntries.empty())
+    {
+        VK_CHECK(vkCreateDescriptorUpdateTemplate(
+            device,
+            &descriptorUpdateTemplateInfo,
+            nullptr,
+            &pipeline.descriptorUpdateTemplate
+        ));
+    }
 
     if (debugName)
     {
@@ -933,6 +1066,28 @@ void Vulkan::DestroyPipeline(Vulkan::Pipeline& pipeline, VkDevice device)
     pipeline.pipeline = VK_NULL_HANDLE;
     vkDestroyDescriptorUpdateTemplate(device, pipeline.descriptorUpdateTemplate, nullptr);
     pipeline.descriptorUpdateTemplate = VK_NULL_HANDLE;
+}
+
+void Vulkan::CmdPushDescriptors(
+    VkCommandBuffer cmd,
+    const Vulkan::Pipeline& pipeline,
+    std::initializer_list<Vulkan::DescriptorInfo> descriptorInfos
+)
+{
+    DEBUG_ASSERT(cmd);
+    DEBUG_ASSERT(pipeline.pipeline);
+    DEBUG_ASSERT(pipeline.descriptorSetLayout);
+    DEBUG_ASSERT(pipeline.descriptorUpdateTemplate);
+    DEBUG_ASSERT(pipeline.layout);
+    DEBUG_ASSERT(descriptorInfos.size() > 0);
+
+    vkCmdPushDescriptorSetWithTemplate(
+        cmd,
+        pipeline.descriptorUpdateTemplate,
+        pipeline.layout,
+        0,
+        descriptorInfos.begin()
+    );
 }
 
 bool Vulkan::DebugNameObject(

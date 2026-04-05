@@ -17,12 +17,20 @@
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wunused-private-field"
 #pragma clang diagnostic ignored "-Wunused-variable"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4100)
+#pragma warning(disable : 4189)
+#pragma warning(disable : 4324)
+#pragma warning(disable : 26110)
 #endif
 
 #include <vk_mem_alloc.h>
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
 #endif
 
 #include <vulkan/vk_enum_string_helper.h>

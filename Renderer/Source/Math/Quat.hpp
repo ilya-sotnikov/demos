@@ -3,47 +3,47 @@
 #include "MathCommon.hpp"
 #include "Vec3.hpp"
 
-inline constexpr f32 Quat::W() const
+inline f32 Quat::W() const
 {
     return val[0];
 }
 
-inline constexpr f32 Quat::X() const
+inline f32 Quat::X() const
 {
     return val[1];
 }
 
-inline constexpr f32 Quat::Y() const
+inline f32 Quat::Y() const
 {
     return val[2];
 }
 
-inline constexpr f32 Quat::Z() const
+inline f32 Quat::Z() const
 {
     return val[3];
 }
 
-inline constexpr f32& Quat::W()
+inline f32& Quat::W()
 {
     return val[0];
 }
 
-inline constexpr f32& Quat::X()
+inline f32& Quat::X()
 {
     return val[1];
 }
 
-inline constexpr f32& Quat::Y()
+inline f32& Quat::Y()
 {
     return val[2];
 }
 
-inline constexpr f32& Quat::Z()
+inline f32& Quat::Z()
 {
     return val[3];
 }
 
-// TODO: constexpr after reimplementing trigonometry
+// TODO:  after reimplementing trigonometry
 // (reimplementing them will also help with cross-compiler determinism).
 inline Quat Quat::FromAxis(f32 rad, f32 x, f32 y, f32 z)
 {
@@ -73,21 +73,21 @@ inline Quat Quat::FromAxis(f32 rad, Vec3 axis)
     return res;
 }
 
-inline constexpr f32 Quat::operator[](int i) const
+inline f32 Quat::operator[](int i) const
 {
     DEBUG_ASSERT(i > 0);
     DEBUG_ASSERT(i < N);
     return val[i];
 }
 
-inline constexpr f32& Quat::operator[](int i)
+inline f32& Quat::operator[](int i)
 {
     DEBUG_ASSERT(i > 0);
     DEBUG_ASSERT(i < N);
     return val[i];
 }
 
-inline constexpr Quat operator*(Quat lhs, Quat rhs)
+inline Quat operator*(Quat lhs, Quat rhs)
 {
     // clang-format off
     return {
@@ -106,7 +106,7 @@ inline constexpr Quat operator*(Quat lhs, Quat rhs)
     // clang-format on
 }
 
-inline constexpr Quat operator*(Quat lhs, Vec3 rhs)
+inline Quat operator*(Quat lhs, Vec3 rhs)
 {
     // clang-format off
     return {
@@ -118,7 +118,7 @@ inline constexpr Quat operator*(Quat lhs, Vec3 rhs)
     // clang-format on
 }
 
-inline constexpr Quat operator*(Vec3 lhs, Quat rhs)
+inline Quat operator*(Vec3 lhs, Quat rhs)
 {
     // clang-format off
     return {
@@ -130,22 +130,19 @@ inline constexpr Quat operator*(Vec3 lhs, Quat rhs)
     // clang-format on
 }
 
-[[nodiscard]]
-inline constexpr bool operator==(Quat lhs, Quat rhs)
+inline bool operator==(Quat lhs, Quat rhs)
 {
     return (lhs.val[0] == rhs.val[0]) && (lhs.val[1] == rhs.val[1]) && (lhs.val[2] == rhs.val[2])
         && (lhs.val[3] == rhs.val[3]);
 }
 
-[[nodiscard]]
-inline constexpr bool operator!=(Quat lhs, Quat rhs)
+inline bool operator!=(Quat lhs, Quat rhs)
 {
     return (lhs.val[0] != rhs.val[0]) || (lhs.val[1] != rhs.val[1]) || (lhs.val[2] != rhs.val[2])
         || (lhs.val[3] != lhs.val[3]);
 }
 
-[[nodiscard]]
-inline constexpr bool AlmostEqual(Quat lhs, Quat rhs, f32 tolerance = FLT_EPSILON)
+inline bool AlmostEqual(Quat lhs, Quat rhs, f32 tolerance = FLT_EPSILON)
 {
     return AlmostEqual(lhs.val[0], rhs.val[0], tolerance)
         && AlmostEqual(lhs.val[1], rhs.val[1], tolerance)
@@ -153,7 +150,7 @@ inline constexpr bool AlmostEqual(Quat lhs, Quat rhs, f32 tolerance = FLT_EPSILO
         && AlmostEqual(lhs.val[3], rhs.val[3], tolerance);
 }
 
-inline constexpr Quat Normalize(Quat q)
+inline Quat Normalize(Quat q)
 {
     const f32 magSq
         = q.val[0] * q.val[0] + q.val[1] * q.val[1] + q.val[2] * q.val[2] + q.val[3] * q.val[3];
@@ -166,12 +163,12 @@ inline constexpr Quat Normalize(Quat q)
     return q;
 }
 
-inline constexpr Quat Conjugate(Quat q)
+inline Quat Conjugate(Quat q)
 {
     return {q.val[0], -q.val[1], -q.val[2], -q.val[3]};
 }
 
-inline constexpr Vec3 Rotate(Quat lhs, Vec3 rhs)
+inline Vec3 Rotate(Quat lhs, Vec3 rhs)
 {
     const Vec3 v = {lhs.val[1], lhs.val[2], lhs.val[3]};
     const Vec3 uv = Cross(v, rhs);
@@ -180,7 +177,7 @@ inline constexpr Vec3 Rotate(Quat lhs, Vec3 rhs)
     return rhs + (uuv + uv * lhs.val[0]) * 2.0f;
 }
 
-inline constexpr Mat3 ToMat3(Quat quat)
+inline Mat3 ToMat3(Quat quat)
 {
     const f32 w = quat.val[0];
     const f32 x = quat.val[1];
@@ -205,7 +202,7 @@ inline constexpr Mat3 ToMat3(Quat quat)
     };
 }
 
-inline constexpr Mat4 ToMat4(Quat quat)
+inline Mat4 ToMat4(Quat quat)
 {
     const f32 w = quat.val[0];
     const f32 x = quat.val[1];
@@ -234,17 +231,17 @@ inline constexpr Mat4 ToMat4(Quat quat)
     };
 }
 
-inline constexpr Quat ToQuat(Vec3 v)
+inline Quat ToQuat(Vec3 v)
 {
     return {0.0f, v.val[0], v.val[1], v.val[2]};
 }
 
-inline constexpr Vec3 ToVec3(Quat q)
+inline Vec3 ToVec3(Quat q)
 {
     return {q.val[1], q.val[2], q.val[3]};
 }
 
-inline constexpr void Clear(Quat& q)
+inline void Clear(Quat& q)
 {
     q.val[0] = 0.0f;
     q.val[1] = 0.0f;

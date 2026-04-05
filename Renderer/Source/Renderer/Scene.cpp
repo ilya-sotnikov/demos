@@ -37,6 +37,8 @@ static const char* cgltf_result_to_string(cgltf_result result)
     case cgltf_result_max_enum:
         return "max enum (invalid enum value)";
     }
+
+    return "unhandled enum value";
 }
 
 // Stole from niagara:
@@ -116,6 +118,7 @@ static void LoadGeometry(
     std::vector<f32> tmp;
     std::vector<Vertex> primVertices;
     std::vector<u32> primIndices;
+    std::vector<Vec3> primPositions;
     std::vector<u32> remap;
 
     for (cgltf_size mi = 0; mi < cgltfData->meshes_count; ++mi)
@@ -135,6 +138,7 @@ static void LoadGeometry(
             const cgltf_size primVertexCount = prim.attributes[0].data->count;
 
             primVertices.resize(primVertexCount);
+            primPositions.resize(primVertexCount);
 
             tmp.resize(primVertexCount * 4);
 
@@ -151,6 +155,8 @@ static void LoadGeometry(
                     primVertices[vi].px = meshopt_quantizeHalf(tmp[vi * 3 + 0]);
                     primVertices[vi].py = meshopt_quantizeHalf(tmp[vi * 3 + 1]);
                     primVertices[vi].pz = meshopt_quantizeHalf(tmp[vi * 3 + 2]);
+
+                    primPositions[vi] = {tmp[vi * 3 + 0], tmp[vi * 3 + 1], tmp[vi * 3 + 2]};
                 }
             }
 
@@ -359,7 +365,7 @@ static void LoadMaterials(
                     d.materialIdx = materialOffset + u32(cgltf_material_index(cgltfData, material));
                     d.renderPassFlags = material->alpha_mode == cgltf_alpha_mode_opaque
                         ? RENDER_PASS_OPAQUE_BIT
-                        : RENDER_PASS_TRANSLUCENT;
+                        : RENDER_PASS_TRANSLUCENT_BIT;
                 }
                 d.sphereCenter = meshPrimitives[mesh.primitiveIdx + pi].sphereCenter;
                 d.sphereRadius = meshPrimitives[mesh.primitiveIdx + pi].sphereRadius;

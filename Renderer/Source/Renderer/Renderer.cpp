@@ -145,6 +145,7 @@ bool Renderer::Init()
         VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
         VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
     };
+
     // Physical device.
     {
         u32 physicalDeviceCount = 0;
@@ -279,7 +280,7 @@ bool Renderer::Init()
             vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures);
 
             // TODO: maybe check out profiles, this is getting ridiculous.
-            bool supportsRequiredFeatures = true;
+            VkBool32 supportsRequiredFeatures = true;
             supportsRequiredFeatures
                 &= physicalDeviceFeatures.features.vertexPipelineStoresAndAtomics;
             supportsRequiredFeatures &= vulkanFeatures14.pushDescriptor;
@@ -295,6 +296,7 @@ bool Renderer::Init()
             supportsRequiredFeatures &= vulkanFeatures12.descriptorBindingVariableDescriptorCount;
             supportsRequiredFeatures
                 &= vulkanFeatures12.descriptorBindingStorageImageUpdateAfterBind;
+            supportsRequiredFeatures &= vulkanFeatures12.shaderSampledImageArrayNonUniformIndexing;
             supportsRequiredFeatures &= vulkanFeatures12.runtimeDescriptorArray;
             supportsRequiredFeatures &= vulkanFeatures12.drawIndirectCount;
             supportsRequiredFeatures &= vulkanFeatures12.shaderFloat16;
@@ -320,7 +322,7 @@ bool Renderer::Init()
             deviceOk &= supportsVulkan13;
             deviceOk &= supportsGraphicsAndPresentation;
             deviceOk &= supportsRequiredExtensions;
-            deviceOk &= supportsRequiredFeatures;
+            deviceOk &= bool(supportsRequiredFeatures);
             deviceOk &= supportsSubgroup;
             if (deviceOk)
             {
@@ -389,6 +391,7 @@ bool Renderer::Init()
         vulkanFeatures12.descriptorBindingPartiallyBound = VK_TRUE;
         vulkanFeatures12.descriptorBindingVariableDescriptorCount = VK_TRUE;
         vulkanFeatures12.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
+        vulkanFeatures12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
         vulkanFeatures12.runtimeDescriptorArray = VK_TRUE;
         vulkanFeatures12.drawIndirectCount = VK_TRUE;
         vulkanFeatures12.shaderFloat16 = VK_TRUE;
@@ -531,25 +534,6 @@ bool Renderer::Init()
 
     // Visibility buffer pipeline.
     {
-        Vulkan::Shader shader{};
-        if (!Vulkan::CreateShader(shader, mDevice, "VisibilityBuffer.slang.spv"))
-        {
-            return false;
-        }
-        DEFER(vkDestroyShaderModule(mDevice, shader.module, nullptr));
-
-        VkPipelineShaderStageCreateInfo shaderStagesInfo[2]{};
-
-        shaderStagesInfo[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStagesInfo[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        shaderStagesInfo[0].module = shader.module;
-        shaderStagesInfo[0].pName = "VertexMain";
-
-        shaderStagesInfo[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStagesInfo[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        shaderStagesInfo[1].module = shader.module;
-        shaderStagesInfo[1].pName = "FragmentMain";
-
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -612,8 +596,6 @@ bool Renderer::Init()
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.pNext = &pipelineRenderingInfo;
-        pipelineInfo.stageCount = ARRAY_SIZE(shaderStagesInfo);
-        pipelineInfo.pStages = shaderStagesInfo;
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
         pipelineInfo.pViewportState = &viewportInfo;
@@ -627,7 +609,7 @@ bool Renderer::Init()
         if (!Vulkan::CreateGraphicsPipeline(
                 mVisibilityPipeline,
                 mDevice,
-                shader,
+                {"VisibilityBuffer.vert.hlsl.spv", "VisibilityBuffer.frag.hlsl.spv"},
                 VK_NULL_HANDLE,
                 pipelineInfo,
                 "VisibilityBufferPass"
@@ -639,25 +621,6 @@ bool Renderer::Init()
 
     // Fullscreen triangle pipeline.
     {
-        Vulkan::Shader shader{};
-        if (!Vulkan::CreateShader(shader, mDevice, "Fullscreen.slang.spv"))
-        {
-            return false;
-        }
-        DEFER(vkDestroyShaderModule(mDevice, shader.module, nullptr));
-
-        VkPipelineShaderStageCreateInfo shaderStagesInfo[2]{};
-
-        shaderStagesInfo[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStagesInfo[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        shaderStagesInfo[0].module = shader.module;
-        shaderStagesInfo[0].pName = "VertexMain";
-
-        shaderStagesInfo[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStagesInfo[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        shaderStagesInfo[1].module = shader.module;
-        shaderStagesInfo[1].pName = "FragmentMain";
-
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -715,8 +678,6 @@ bool Renderer::Init()
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.pNext = &pipelineRenderingInfo;
-        pipelineInfo.stageCount = ARRAY_SIZE(shaderStagesInfo);
-        pipelineInfo.pStages = shaderStagesInfo;
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
         pipelineInfo.pViewportState = &viewportInfo;
@@ -730,7 +691,7 @@ bool Renderer::Init()
         if (!Vulkan::CreateGraphicsPipeline(
                 mFullscreenPipeline,
                 mDevice,
-                shader,
+                {"Fullscreen.vert.hlsl.spv", "Fullscreen.frag.hlsl.spv"},
                 VK_NULL_HANDLE,
                 pipelineInfo,
                 "FullscreenPass"
@@ -742,25 +703,6 @@ bool Renderer::Init()
 
     // Debug grad error pipeline.
     {
-        Vulkan::Shader shader{};
-        if (!Vulkan::CreateShader(shader, mDevice, "DebugGradError.slang.spv"))
-        {
-            return false;
-        }
-        DEFER(vkDestroyShaderModule(mDevice, shader.module, nullptr));
-
-        VkPipelineShaderStageCreateInfo shaderStagesInfo[2]{};
-
-        shaderStagesInfo[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStagesInfo[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        shaderStagesInfo[0].module = shader.module;
-        shaderStagesInfo[0].pName = "VertexMain";
-
-        shaderStagesInfo[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStagesInfo[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        shaderStagesInfo[1].module = shader.module;
-        shaderStagesInfo[1].pName = "FragmentMain";
-
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -823,8 +765,6 @@ bool Renderer::Init()
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.pNext = &pipelineRenderingInfo;
-        pipelineInfo.stageCount = ARRAY_SIZE(shaderStagesInfo);
-        pipelineInfo.pStages = shaderStagesInfo;
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
         pipelineInfo.pViewportState = &viewportInfo;
@@ -838,7 +778,7 @@ bool Renderer::Init()
         if (!Vulkan::CreateGraphicsPipeline(
                 mDebugGradErrorPipeline,
                 mDevice,
-                shader,
+                {"DebugGradError.vert.hlsl.spv", "DebugGradError.frag.hlsl.spv"},
                 VK_NULL_HANDLE,
                 pipelineInfo,
                 "DebugGradErrorPass"
@@ -851,19 +791,11 @@ bool Renderer::Init()
     // Compute pipelines.
     {
         {
-            Vulkan::Shader shader{};
-            if (!Vulkan::CreateShader(shader, mDevice, "Cull.slang.spv"))
-            {
-                return false;
-            }
-            DEFER(vkDestroyShaderModule(mDevice, shader.module, nullptr));
-
             if (!Vulkan::CreateComputePipeline(
                     mCullPipeline,
                     mDevice,
-                    shader,
+                    "Cull.comp.hlsl.spv",
                     VK_NULL_HANDLE,
-                    "Main",
                     "CullPass"
                 ))
             {
@@ -872,19 +804,11 @@ bool Renderer::Init()
         }
 
         {
-            Vulkan::Shader shader{};
-            if (!Vulkan::CreateShader(shader, mDevice, "Renderer.slang.spv"))
-            {
-                return false;
-            }
-            DEFER(vkDestroyShaderModule(mDevice, shader.module, nullptr));
-
             if (!Vulkan::CreateComputePipeline(
                     mRenderPipeline,
                     mDevice,
-                    shader,
+                    "Renderer.comp.hlsl.spv",
                     mTextureDescriptorSetLayout,
-                    "Main",
                     "RenderPass"
                 ))
             {
@@ -893,19 +817,11 @@ bool Renderer::Init()
         }
 
         {
-            Vulkan::Shader shader{};
-            if (!Vulkan::CreateShader(shader, mDevice, "TaaResolve.slang.spv"))
-            {
-                return false;
-            }
-            DEFER(vkDestroyShaderModule(mDevice, shader.module, nullptr));
-
             if (!Vulkan::CreateComputePipeline(
                     mTaaResolvePipeline,
                     mDevice,
-                    shader,
+                    "TaaResolve.comp.hlsl.spv",
                     VK_NULL_HANDLE,
-                    "Main",
                     "TaaResolvePass"
                 ))
             {
@@ -1140,6 +1056,8 @@ bool Renderer::Init()
 
         memcpy(mDrawDataBuffer.mapped, drawData.data(), VEC_SIZE_BYTES(drawData));
 
+        // TODO: would be nice if something like VK_NV_cluster_acceleration_structure
+        // would become core eventually.
         if (!CreateAndUploadBlas(meshPrimitives, drawCmds))
         {
             printf("vulkan: BLAS creating and uploading failed\n");
@@ -1983,18 +1901,15 @@ void Renderer::VisibilityBufferPass(VkCommandBuffer cmd)
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mVisibilityPipeline.pipeline);
 
-    const Vulkan::DescriptorInfo descInfos[] = {
-        mFrame[mFrameIdx].uniformBuffer.buffer,
-        mDrawIndicesBuffer.buffer,
-        mDrawDataBuffer.buffer,
-        mVertexBuffer.buffer,
-    };
-    vkCmdPushDescriptorSetWithTemplate(
+    Vulkan::CmdPushDescriptors(
         cmd,
-        mVisibilityPipeline.descriptorUpdateTemplate,
-        mVisibilityPipeline.layout,
-        0,
-        descInfos
+        mVisibilityPipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            mDrawIndicesBuffer.buffer,
+            mDrawDataBuffer.buffer,
+            mVertexBuffer.buffer,
+        }
     );
 
     VkViewport viewport{};
@@ -2054,20 +1969,17 @@ void Renderer::CullPass(VkCommandBuffer cmd)
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, mCullPipeline.pipeline);
 
-    const Vulkan::DescriptorInfo descInfos[] = {
-        mFrame[mFrameIdx].uniformBuffer.buffer,
-        mDrawDataBuffer.buffer,
-        mIndirectCountBuffer.buffer,
-        mIndirectBuffer1.buffer,
-        mIndirectBuffer2.buffer,
-        mDrawIndicesBuffer.buffer,
-    };
-    vkCmdPushDescriptorSetWithTemplate(
+    Vulkan::CmdPushDescriptors(
         cmd,
-        mCullPipeline.descriptorUpdateTemplate,
-        mCullPipeline.layout,
-        0,
-        descInfos
+        mCullPipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            mDrawDataBuffer.buffer,
+            mIndirectCountBuffer.buffer,
+            mIndirectBuffer1.buffer,
+            mIndirectBuffer2.buffer,
+            mDrawIndicesBuffer.buffer,
+        }
     );
 
     vkCmdDispatch(cmd, GetDispatchSize(mUniformData.drawCount, RENDERER_CULL_WORKGROUP_SIZE), 1, 1);
@@ -2079,26 +1991,23 @@ void Renderer::RenderPass(VkCommandBuffer cmd)
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, mRenderPipeline.pipeline);
 
-    const Vulkan::DescriptorInfo descInfos[] = {
-        mFrame[mFrameIdx].uniformBuffer.buffer,
-        mDrawIndicesBuffer.buffer,
-        mIndirectBuffer2.buffer,
-        mDrawDataBuffer.buffer,
-        mIndexBuffer.buffer,
-        mVertexBuffer.buffer,
-        mMaterialBuffer.buffer,
-        mTextureSampler,
-        mTlas,
-        {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-        {mVelocityImage.view, VK_IMAGE_LAYOUT_GENERAL},
-        {mRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
-    };
-    vkCmdPushDescriptorSetWithTemplate(
+    Vulkan::CmdPushDescriptors(
         cmd,
-        mRenderPipeline.descriptorUpdateTemplate,
-        mRenderPipeline.layout,
-        0,
-        descInfos
+        mRenderPipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            mDrawIndicesBuffer.buffer,
+            mIndirectBuffer2.buffer,
+            mDrawDataBuffer.buffer,
+            mIndexBuffer.buffer,
+            mVertexBuffer.buffer,
+            mMaterialBuffer.buffer,
+            mTextureSampler,
+            mTlas,
+            {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mVelocityImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            {mRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
+        }
     );
 
     vkCmdBindDescriptorSets(
@@ -2126,26 +2035,23 @@ void Renderer::TaaResolvePass(VkCommandBuffer cmd)
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, mTaaResolvePipeline.pipeline);
 
-    const Vulkan::DescriptorInfo descInfos[] = {
-        mFrame[mFrameIdx].uniformBuffer.buffer,
-        {mRenderImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-        {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-        {mVelocityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-        {
-            mSwapchainRecreated || mRenderModeChanged
-                ? mFrame[mFrameIdx].resolvedRenderImage.view
-                : mFrame[mPrevFrameIdx].resolvedRenderImage.view,
-            VK_IMAGE_LAYOUT_GENERAL,
-        },
-        {mFrame[mFrameIdx].resolvedRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
-        mLinearSampler,
-    };
-    vkCmdPushDescriptorSetWithTemplate(
+    Vulkan::CmdPushDescriptors(
         cmd,
-        mTaaResolvePipeline.descriptorUpdateTemplate,
-        mTaaResolvePipeline.layout,
-        0,
-        descInfos
+        mTaaResolvePipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            {mRenderImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mVelocityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {
+                mSwapchainRecreated || mRenderModeChanged
+                    ? mFrame[mFrameIdx].resolvedRenderImage.view
+                    : mFrame[mPrevFrameIdx].resolvedRenderImage.view,
+                VK_IMAGE_LAYOUT_GENERAL,
+            },
+            {mFrame[mFrameIdx].resolvedRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            mLinearSampler,
+        }
     );
 
     vkCmdDispatch(
@@ -2162,16 +2068,13 @@ void Renderer::FullscreenPass(VkCommandBuffer cmd, u32 imageIdx)
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mFullscreenPipeline.pipeline);
 
-    const Vulkan::DescriptorInfo descInfos[] = {
-        {mFrame[mFrameIdx].resolvedRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
-        mLinearSampler,
-    };
-    vkCmdPushDescriptorSetWithTemplate(
+    Vulkan::CmdPushDescriptors(
         cmd,
-        mFullscreenPipeline.descriptorUpdateTemplate,
-        mFullscreenPipeline.layout,
-        0,
-        descInfos
+        mFullscreenPipeline,
+        {
+            {mFrame[mFrameIdx].resolvedRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            mLinearSampler,
+        }
     );
 
     VkViewport viewport{};
@@ -2287,21 +2190,17 @@ bool Renderer::RecordDebugGradErrorCommandBuffer(u32 imageIdx)
     {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mDebugGradErrorPipeline.pipeline);
 
-        const Vulkan::DescriptorInfo descInfos[] = {
-            mFrame[mFrameIdx].uniformBuffer.buffer,
-            mDrawIndicesBuffer.buffer,
-            mIndirectBuffer2.buffer,
-            mDrawDataBuffer.buffer,
-            mIndexBuffer.buffer,
-            mVertexBuffer.buffer,
-            mMaterialBuffer.buffer,
-        };
-        vkCmdPushDescriptorSetWithTemplate(
+        Vulkan::CmdPushDescriptors(
             cmd,
-            mDebugGradErrorPipeline.descriptorUpdateTemplate,
-            mDebugGradErrorPipeline.layout,
-            0,
-            descInfos
+            mDebugGradErrorPipeline,
+            {
+                mFrame[mFrameIdx].uniformBuffer.buffer,
+                mDrawIndicesBuffer.buffer,
+                mIndirectBuffer2.buffer,
+                mDrawDataBuffer.buffer,
+                mIndexBuffer.buffer,
+                mVertexBuffer.buffer,
+            }
         );
 
         VkViewport viewport{};

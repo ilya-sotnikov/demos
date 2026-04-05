@@ -1,4 +1,8 @@
-// Stole from GNU libc since it's non-standard.
+#pragma once
+
+#include "Common.hlsli"
+
+// Stole from GNU libc.
 #ifndef M_Ef
 #define M_Ef 2.7182818284590452354f // e
 #endif
@@ -62,7 +66,6 @@ struct Pcg32
     uint64_t mState; // RNG state.  All values are possible.
     uint64_t mInc; // Controls which RNG sequence (stream) is selected. Must *always* be odd.
 
-    [mutating]
     void Init(uint64_t seed, uint64_t seq)
     {
         mState = 0U;
@@ -72,7 +75,6 @@ struct Pcg32
         Next();
     }
 
-    [mutating]
     uint32_t Next()
     {
         const uint64_t oldState = mState;
@@ -82,7 +84,6 @@ struct Pcg32
         return (xorShifted >> rot) | (xorShifted << ((-rot) & 31U));
     }
 
-    [mutating]
     float NextFloat()
     {
         // 23 bit mantissa => 32 - 23 = 9.
@@ -90,13 +91,11 @@ struct Pcg32
         return asfloat(raw) - 1.0; // Float range [0, 1].
     }
 
-    [mutating]
     float2 NextFloat2()
     {
         return float2(NextFloat(), NextFloat());
     }
 
-    [mutating]
     float3 NextFloat3()
     {
         return float3(NextFloat(), NextFloat(), NextFloat());
@@ -119,22 +118,13 @@ float Max(float3 x)
 }
 
 // [0, 1] -> [-x, x]
-T IntervalUnitToSymmetric<T>(T val, float x) where T : IFloat
+template<typename Float>
+Float IntervalUnitToSymmetric(Float val, float x)
 {
-    return ((val - T(0.5)) * T(2.0)) * T(x);
+    return ((val - 0.5) * 2.0) * x;
 }
 
 // https://www.elopezr.com/the-art-of-packing-data/
-uint8_t PackFloatToUnorm(float val)
-{
-    return uint8_t(val * 255.0 + 0.5);
-}
-
-float UnpackUnormToFloat(uint8_t packed)
-{
-    return float(packed) / 255.0;
-}
-
 uint32_t PackFloat4ToRGBA8Unorm(float4 val)
 {
     const uint4 uval = uint4(val * 255.0 + 0.5);
@@ -169,12 +159,12 @@ float3 UnpackNormalOctahedral(float2 packed)
 // TODO: SRGB functions are approximations.
 float3 SrgbToLinear(float3 color)
 {
-    return pow(color, float3(2.2));
+    return pow(color, 2.2);
 }
 
 float3 LinearToSrgb(float3 color)
 {
-    return pow(color, float3(1.0 / 2.2));
+    return pow(color, 1.0 / 2.2);
 }
 
 float Luminance(float3 linearColor)
@@ -199,13 +189,13 @@ float3 OffsetRay(float3 position, float3 normal)
     const float3 posInt = float3(
         asfloat(asint(position.x) + (position.x < 0.0 ? -offsetInt.x : offsetInt.x)),
         asfloat(asint(position.y) + (position.y < 0.0 ? -offsetInt.y : offsetInt.y)),
-        asfloat(asint(position.z) + (position.z < 0.0 ? -offsetInt.z : offsetInt.z)),
+        asfloat(asint(position.z) + (position.z < 0.0 ? -offsetInt.z : offsetInt.z))
     );
 
     return float3(
         abs(position.x) < origin ? position.x + floatScale * normal.x : posInt.x,
         abs(position.y) < origin ? position.y + floatScale * normal.y : posInt.y,
-        abs(position.z) < origin ? position.z + floatScale * normal.z : posInt.z,
+        abs(position.z) < origin ? position.z + floatScale * normal.z : posInt.z
     );
 }
 
@@ -327,7 +317,7 @@ float4 SampleTextureCatmullRom(
     texPos3 /= texSize;
     texPos12 /= texSize;
 
-    float4 result = float4(0.0f);
+    float4 result = 0.0;
 
     result += tex.SampleLevel(linearSampler, float2(texPos0.x, texPos0.y), 0.0) * w0.x * w0.y;
     result += tex.SampleLevel(linearSampler, float2(texPos12.x, texPos0.y), 0.0) * w12.x * w0.y;

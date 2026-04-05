@@ -1,48 +1,8 @@
-#include "Common.slang"
-#include "Math.slang"
+#include "Common.hlsli"
+#include "Math.hlsli"
+#include "DebugGradError.hlsli"
 
-struct VertexOutput
-{
-    float4 positionClip : SV_Position;
-    float2 uv;
-    nointerpolation uint rawDrawIdx;
-};
-
-ConstantBuffer<UniformData> uniformBuffer;
-StructuredBuffer<uint32_t> drawIndicesBuffer;
-StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdBuffer;
-StructuredBuffer<DrawData> drawDataBuffer;
-StructuredBuffer<uint32_t> indexBuffer;
-StructuredBuffer<Vertex> vertexBuffer;
-StructuredBuffer<Material> materialBuffer;
-
-[shader("vertex")]
-void VertexMain(
-    uint vertexId : SV_VulkanVertexID,
-    uint rawDrawIdx : SV_DrawIndex,
-    out VertexOutput output,
-)
-{
-    const uint drawIdx = drawIndicesBuffer[rawDrawIdx];
-    const DrawData drawData = drawDataBuffer[drawIdx];
-    const Vertex vertex = vertexBuffer[vertexId];
-
-    const float3 pos = float3(vertex.px, vertex.py, vertex.pz);
-    const float4 positionWorld = float4(
-        QuatRotate(drawData.orientation, pos) * drawData.scale + drawData.position,
-        1.0
-    );
-
-    output.positionClip = mul(uniformBuffer.worldToClip, positionWorld);
-    output.uv = float2(vertex.u, vertex.v);
-    output.rawDrawIdx = rawDrawIdx;
-}
-
-[shader("fragment")]
-float4 FragmentMain(
-    VertexOutput input,
-    uint primitiveId : SV_PrimitiveID,
-) : SV_Target
+float4 Main(VertexOutput input, uint primitiveId : SV_PrimitiveID) : SV_Target
 {
     const uint rawDrawIdx = input.rawDrawIdx;
     const uint triangleIdx = primitiveId;
@@ -50,7 +10,6 @@ float4 FragmentMain(
 
     const VkDrawIndexedIndirectCommand drawCmd = drawCmdBuffer[rawDrawIdx];
     const DrawData drawData = drawDataBuffer[drawIdx];
-    const Material material = materialBuffer[drawData.materialIdx];
 
     const uint indexBufferIdx0 = drawCmd.firstIndex + (triangleIdx * 3 + 0);
     const uint indexBufferIdx1 = drawCmd.firstIndex + (triangleIdx * 3 + 1);

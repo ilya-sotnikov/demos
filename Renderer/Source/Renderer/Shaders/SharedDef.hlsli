@@ -2,7 +2,7 @@
 
 // Shared with C++.
 
-#include "SharedConfig.slang"
+#include "SharedConfig.hlsli"
 
 #ifdef __cplusplus
 #define HALF f16
@@ -15,6 +15,8 @@
 #define QUAT Quat
 #define MAT_4X4 Mat4
 #else
+#define uint32_t uint
+#define int32_t int
 #define HALF half
 #define HALF_2 half2
 #define HALF_3 half3
@@ -104,6 +106,6 @@ struct PushConstantsImgui
 
 enum RenderPassFlagBits
 {
-    RENDER_PASS_OPAQUE_BIT  = (1U << 0),
-    RENDER_PASS_TRANSLUCENT = (1U << 1),
+    RENDER_PASS_OPAQUE_BIT      = (1U << 0),
+    RENDER_PASS_TRANSLUCENT_BIT = (1U << 1),
 };

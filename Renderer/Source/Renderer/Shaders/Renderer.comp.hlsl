@@ -1,6 +1,6 @@
-#include "Common.slang"
-#include "Math.slang"
-#include "PBR.slang"
+#include "Common.hlsli"
+#include "Math.hlsli"
+#include "PBR.hlsli"
 
 // https://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
 // Derivations of interpolation formulas and stuff are in this article:
@@ -17,8 +17,9 @@ SamplerState textureSampler;
 RaytracingAccelerationStructure tlas;
 
 Texture2D<uint2> visibilityImage;
+[[vk::image_format("rg16f")]]
 RWTexture2D<float2> velocityImageRW;
-RWTexture2D renderImageRW;
+RWTexture2D<float3> renderImageRW;
 
 // NOTE: full bindless is not practical yet since it messes up synchronization validation.
 // For now it's only for read-only resources (textures).
@@ -93,7 +94,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     if (rawDrawIdx == 0)
     {
-        renderImageRW[dtid.xy] = float4(0.7, 0.8, 0.9, 1.0);
+        renderImageRW[dtid.xy] = float3(0.7, 0.8, 0.9);
         velocityImageRW[dtid.xy] = float2(0.0, 0.0);
         return;
     }
@@ -191,7 +192,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
             interpPosWorld.dcdx,
             interpPosWorld.dcdy,
             interpUV.dcdx,
-            interpUV.dcdy,
+            interpUV.dcdy
         );
     }
 
@@ -217,7 +218,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float3 specular = num / denom;
 
     const float3 kSpecular = fresnel;
-    float3 kDiffuse = float3(1.0) - kSpecular;
+    float3 kDiffuse = 1.0 - kSpecular;
     kDiffuse *= 1.0 - metallic;
 
     const float3 radianceOut =
@@ -233,7 +234,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     const float3 color = radianceOut * shadow + ambient;
 
-    renderImageRW[dtid.xy] = float4(color, 1.0);
+    renderImageRW[dtid.xy] = color;
 
     // TODO: support movable objects (double-buffered draw data).
     const float3 prevPixelWorld = pixelWorld;

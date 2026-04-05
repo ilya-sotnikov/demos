@@ -286,31 +286,6 @@ bool ImguiRenderer::Init(
         vertexInputInfo.pVertexAttributeDescriptions = vertexInputAttributes;
         vertexInputInfo.vertexAttributeDescriptionCount = ARRAY_SIZE(vertexInputAttributes);
 
-        Vulkan::Shader shader{};
-
-        const bool result = Vulkan::CreateShader(shader, mDevice, "ImguiRenderer.slang.spv");
-        if (!result)
-        {
-            fprintf(stderr, "Vulkan failed to build a vertex/fragment shader\n");
-            return false;
-        }
-        DEFER(vkDestroyShaderModule(mDevice, shader.module, nullptr));
-
-        VkPipelineShaderStageCreateInfo vertexShaderStageInfo{};
-        vertexShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        vertexShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertexShaderStageInfo.module = shader.module;
-        vertexShaderStageInfo.pName = "VertexMain";
-
-        VkPipelineShaderStageCreateInfo fragmentShaderStageInfo{};
-        fragmentShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        fragmentShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragmentShaderStageInfo.module = shader.module;
-        fragmentShaderStageInfo.pName = "FragmentMain";
-
-        const VkPipelineShaderStageCreateInfo shaderStages[]
-            = {vertexShaderStageInfo, fragmentShaderStageInfo};
-
         VkPipelineColorBlendStateCreateInfo colorBlendInfo{};
         colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         colorBlendInfo.attachmentCount = 1;
@@ -359,8 +334,6 @@ bool ImguiRenderer::Init(
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.pNext = &renderingInfo;
-        pipelineInfo.stageCount = ARRAY_SIZE(shaderStages);
-        pipelineInfo.pStages = shaderStages;
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
         pipelineInfo.pViewportState = &viewportInfo;
@@ -372,7 +345,7 @@ bool ImguiRenderer::Init(
         if (!Vulkan::CreateGraphicsPipeline(
                 mPipeline,
                 mDevice,
-                shader,
+                {"Imgui.vert.hlsl.spv", "Imgui.frag.hlsl.spv"},
                 VK_NULL_HANDLE,
                 pipelineInfo,
                 "ImguiPass"

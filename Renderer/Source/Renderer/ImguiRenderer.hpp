@@ -2,9 +2,9 @@
 
 #include "RendererCommon.hpp"
 #include "Vulkan.hpp"
-#include "Shaders/SharedConfig.slang"
+#include "Shaders/SharedConfig.hlsli"
 #include "../Math/Types.hpp"
-#include "Shaders/SharedDef.slang"
+#include "Shaders/SharedDef.hlsli"
 
 #include "../Math/Types.hpp"
 

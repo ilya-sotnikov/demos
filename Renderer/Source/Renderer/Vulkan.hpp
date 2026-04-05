@@ -68,19 +68,11 @@ union DescriptorInfo
     { }
 };
 
-struct Shader
-{
-    VkShaderModule module;
-    VkDescriptorSetLayout descriptorSetLayout; // Gives ownership.
-    std::vector<VkDescriptorUpdateTemplateEntry> descriptorUpdateTemplateEntries;
-    u32 pushConstantSize;
-};
-
 struct Pipeline
 {
     VkPipeline pipeline;
     VkPipelineLayout layout;
-    VkDescriptorSetLayout descriptorSetLayout; // Takes ownership.
+    VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorUpdateTemplate descriptorUpdateTemplate;
     u32 pushConstantSize;
 };
@@ -93,7 +85,6 @@ bool FindSupportedImageFormat(
 );
 bool ExtensionIsAvailable(const char* name, Slice<VkExtensionProperties> extensions);
 QueueInfo GetQueue(VkPhysicalDevice device, VkQueueFlagBits flags);
-bool CreateShader(Vulkan::Shader& result, VkDevice device, const char* shaderPath);
 
 VkImageMemoryBarrier2 ImageMemoryBarrier(
     VkImage image,
@@ -173,20 +164,25 @@ void DestroyImage(Vulkan::Image& image, VkDevice device, VmaAllocator vmaAllocat
 bool CreateComputePipeline(
     Vulkan::Pipeline& pipeline,
     VkDevice device,
-    Vulkan::Shader& shader,
+    const char* shaderPath,
     VkDescriptorSetLayout extraDescriptorSetLayout,
-    const char* mainName,
     const char* debugName
 );
 bool CreateGraphicsPipeline(
     Vulkan::Pipeline& pipeline,
     VkDevice device,
-    Vulkan::Shader& shader,
+    std::initializer_list<const char*> shaderPaths,
     VkDescriptorSetLayout extraDescriptorSetLayout,
     VkGraphicsPipelineCreateInfo& pipelineInfo,
     const char* debugName
 );
 void DestroyPipeline(Vulkan::Pipeline& pipeline, VkDevice device);
+
+void CmdPushDescriptors(
+    VkCommandBuffer cmd,
+    const Vulkan::Pipeline& pipeline,
+    std::initializer_list<Vulkan::DescriptorInfo> descriptorInfos
+);
 
 bool DebugNameObject(
     VkDevice device,
