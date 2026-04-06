@@ -529,5 +529,7 @@ bool LoadScene(
 
     LoadTexturePaths(texturePaths, gltfPath, cgltfData);
 
+    // TODO: scene cache.
+
     return true;
 }

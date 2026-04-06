@@ -96,6 +96,7 @@ struct Renderer
     bool mSwapchainRecreated;
     bool mEnableUI;
     bool mRenderModeChanged;
+    bool mCullCameraFrozen;
     RenderMode mRenderMode;
 
     bool Init();
@@ -105,6 +106,7 @@ struct Renderer
     void UpdateCamera(Vec3 position, const Mat4& worldToView);
     void PauseRendering(bool paused);
     void ChangeRenderMode(RenderMode mode);
+    void FreezeCullCamera(bool frozen);
 
 private:
     bool UploadTextures(const std::vector<std::string>& texturePaths);

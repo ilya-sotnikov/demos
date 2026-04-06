@@ -39,6 +39,7 @@
 struct UniformData
 {
     MAT_4X4 worldToView;
+    MAT_4X4 cullWorldToView;
     MAT_4X4 worldToClip;
     MAT_4X4 viewToClip;
     MAT_4X4 prevWorldToClip;
@@ -49,10 +50,10 @@ struct UniformData
     FLOAT_2 taaJitter;
     FLOAT_2 prevTaaJitter;
     float taaBlendWeight;
-    float frustumPlaneXX;
-    float frustumPlaneXZ;
-    float frustumPlaneYY;
-    float frustumPlaneYZ;
+    float cullFrustumPlaneXX;
+    float cullFrustumPlaneXZ;
+    float cullFrustumPlaneYY;
+    float cullFrustumPlaneYZ;
     float deltaTime;
     float sunIntensity;
     float ambientIntensity;

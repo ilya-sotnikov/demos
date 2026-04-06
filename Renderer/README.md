@@ -2,8 +2,6 @@
 
  GPU-driven renderer (Vulkan 1.4).
 
-**WARNING for Windows users**: totally untested on windows and MSVC, expect issues.
-
 ## TODO
 
 So far there are some bugs in Slang (such as [this](https://github.com/shader-slang/slang/issues/7019) or [that](https://github.com/shader-slang/slang/issues/10123)).
@@ -80,3 +78,4 @@ This will take a while.
 - . -- toggle fullscreen
 - u -- toggle UI
 - m -- toggle mouse
+- c -- freeze camera to visualize culling

@@ -48,7 +48,6 @@ bool Renderer::Init()
             SDL_PRINT_ERROR("SDL_InitSubSystem");
             return false;
         }
-        // DEFER(SDL_Quit());
 
         VK_CHECK(volkInitialize());
 
@@ -64,7 +63,6 @@ bool Renderer::Init()
             SDL_PRINT_ERROR("SDL_CreateWindow");
             return false;
         }
-        // DEFER(SDL_DestroyWindow(window));
 
         (void)SDL_SetWindowPosition(mWindow, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
         (void)SDL_SetWindowRelativeMouseMode(mWindow, true);
@@ -1297,17 +1295,22 @@ bool Renderer::Render(f32 deltaTime)
     // https://fgiesen.wordpress.com/2012/08/31/frustum-planes-from-the-projection-matrix/
     // Also, niagara:
     // https://github.com/zeux/niagara
-    const Mat4 viewToClipT = Transpose(mUniformData.viewToClip);
+    if (!mCullCameraFrozen)
+    {
+        const Mat4 viewToClipT = Transpose(mUniformData.viewToClip);
 
-    // -w <= x; x + w >= 0
-    const Vec4 frustumPlaneX = NormalizePlane(viewToClipT.col[0] + viewToClipT.col[3]);
-    // -w <= y; y + w >= 0
-    const Vec4 frustumPlaneY = NormalizePlane(viewToClipT.col[1] + viewToClipT.col[3]);
+        // -w <= x; x + w >= 0
+        const Vec4 frustumPlaneX = NormalizePlane(viewToClipT.col[0] + viewToClipT.col[3]);
+        // -w <= y; y + w >= 0
+        const Vec4 frustumPlaneY = NormalizePlane(viewToClipT.col[1] + viewToClipT.col[3]);
 
-    mUniformData.frustumPlaneXX = frustumPlaneX.X();
-    mUniformData.frustumPlaneXZ = frustumPlaneX.Z();
-    mUniformData.frustumPlaneYY = frustumPlaneY.Y();
-    mUniformData.frustumPlaneYZ = frustumPlaneY.Z();
+        mUniformData.cullFrustumPlaneXX = frustumPlaneX.X();
+        mUniformData.cullFrustumPlaneXZ = frustumPlaneX.Z();
+        mUniformData.cullFrustumPlaneYY = frustumPlaneY.Y();
+        mUniformData.cullFrustumPlaneYZ = frustumPlaneY.Z();
+
+        mUniformData.cullWorldToView = mUniformData.worldToView;
+    }
 
     memcpy(frame.uniformBuffer.mapped, &mUniformData, sizeof(mUniformData));
 
@@ -1387,6 +1390,11 @@ void Renderer::ChangeRenderMode(RenderMode mode)
         mRenderModeChanged = true;
         mRenderMode = mode;
     }
+}
+
+void Renderer::FreezeCullCamera(bool frozen)
+{
+    mCullCameraFrozen = frozen;
 }
 
 bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)

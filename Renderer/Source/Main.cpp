@@ -16,6 +16,7 @@ bool sWindowShouldClose = false;
 static bool sMouseRelativeMode = true;
 static bool sNeedUpdateViewMatrix = true;
 static bool sFullscreen = true;
+static bool sCullCameraFrozen = false;
 
 static bool SaveCamera(const Camera& camera, const char* path = "Camera.bin")
 {
@@ -200,6 +201,13 @@ static void ProcessInput(SDL_Window* window, f32 deltaTime, Renderer& renderer)
     {
         sKeys[SDL_SCANCODE_U] = 0;
         renderer.mEnableUI ^= true;
+    }
+
+    if (sKeys[SDL_SCANCODE_C])
+    {
+        sKeys[SDL_SCANCODE_C] = 0;
+        sCullCameraFrozen ^= true;
+        renderer.FreezeCullCamera(sCullCameraFrozen);
     }
 }
 

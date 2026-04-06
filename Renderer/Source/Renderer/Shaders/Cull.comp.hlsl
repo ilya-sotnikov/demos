@@ -35,7 +35,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float3 sphereCenterWorld =
         QuatRotate(drawData.orientation, drawData.sphereCenter) * drawData.scale + drawData.position;
     const float3 sphereCenterView = mul(
-        uniformBuffer.worldToView,
+        uniformBuffer.cullWorldToView,
         float4(sphereCenterWorld, 1.0)
     ).xyz;
     const float sphereRadius = drawData.scale * drawData.sphereRadius;
@@ -44,15 +44,13 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     // https://github.com/zeux/niagara
     bool visible = true;
     // View frustum is symmetrical, therefore we can cull against two opposite planes simultaneously.
-    visible = visible && sphereCenterView.z * uniformBuffer.frustumPlaneXZ -
-        abs(sphereCenterView.x) * uniformBuffer.frustumPlaneXX > -sphereRadius;
+    visible = visible && sphereCenterView.z * uniformBuffer.cullFrustumPlaneXZ -
+        abs(sphereCenterView.x) * uniformBuffer.cullFrustumPlaneXX > -sphereRadius;
 
-    visible = visible && sphereCenterView.z * uniformBuffer.frustumPlaneYZ -
-        abs(sphereCenterView.y) * uniformBuffer.frustumPlaneYY > -sphereRadius;
+    visible = visible && sphereCenterView.z * uniformBuffer.cullFrustumPlaneYZ -
+        abs(sphereCenterView.y) * uniformBuffer.cullFrustumPlaneYY > -sphereRadius;
 
     visible = visible && sphereCenterView.z - sphereRadius < -RENDERER_NEAR_PLANE;
-
-    // TODO: visualize frustum culling.
 
     if (visible)
     {
