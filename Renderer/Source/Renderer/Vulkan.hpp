@@ -5,6 +5,9 @@
 #include <initializer_list>
 #include <vector>
 
+// TODO: try Sebastian Aaltonen's approach with designated initializers.
+// https://youtu.be/m3bW8d4Brec?si=7V8xsxykqCHbskvu&t=2233
+
 namespace Vulkan
 {
 
@@ -166,7 +169,8 @@ bool CreateComputePipeline(
     VkDevice device,
     const char* shaderPath,
     VkDescriptorSetLayout extraDescriptorSetLayout,
-    const char* debugName
+    std::initializer_list<i32> specializationConstants = {},
+    const char* debugName = ""
 );
 bool CreateGraphicsPipeline(
     Vulkan::Pipeline& pipeline,
@@ -174,7 +178,8 @@ bool CreateGraphicsPipeline(
     std::initializer_list<const char*> shaderPaths,
     VkDescriptorSetLayout extraDescriptorSetLayout,
     VkGraphicsPipelineCreateInfo& pipelineInfo,
-    const char* debugName
+    std::initializer_list<i32> specializationConstants = {},
+    const char* debugName = ""
 );
 void DestroyPipeline(Vulkan::Pipeline& pipeline, VkDevice device);
 

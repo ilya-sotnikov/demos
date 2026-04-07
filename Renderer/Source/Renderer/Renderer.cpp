@@ -610,6 +610,7 @@ bool Renderer::Init()
                 {"VisibilityBuffer.vert.hlsl.spv", "VisibilityBuffer.frag.hlsl.spv"},
                 VK_NULL_HANDLE,
                 pipelineInfo,
+                {},
                 "VisibilityBufferPass"
             ))
         {
@@ -692,6 +693,7 @@ bool Renderer::Init()
                 {"Fullscreen.vert.hlsl.spv", "Fullscreen.frag.hlsl.spv"},
                 VK_NULL_HANDLE,
                 pipelineInfo,
+                {},
                 "FullscreenPass"
             ))
         {
@@ -779,6 +781,7 @@ bool Renderer::Init()
                 {"DebugGradError.vert.hlsl.spv", "DebugGradError.frag.hlsl.spv"},
                 VK_NULL_HANDLE,
                 pipelineInfo,
+                {},
                 "DebugGradErrorPass"
             ))
         {
@@ -794,6 +797,7 @@ bool Renderer::Init()
                     mDevice,
                     "Cull.comp.hlsl.spv",
                     VK_NULL_HANDLE,
+                    {},
                     "CullPass"
                 ))
             {
@@ -807,6 +811,7 @@ bool Renderer::Init()
                     mDevice,
                     "Renderer.comp.hlsl.spv",
                     mTextureDescriptorSetLayout,
+                    {},
                     "RenderPass"
                 ))
             {
@@ -820,6 +825,7 @@ bool Renderer::Init()
                     mDevice,
                     "TaaResolve.comp.hlsl.spv",
                     VK_NULL_HANDLE,
+                    {},
                     "TaaResolvePass"
                 ))
             {

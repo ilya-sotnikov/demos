@@ -348,6 +348,7 @@ bool ImguiRenderer::Init(
                 {"Imgui.vert.hlsl.spv", "Imgui.frag.hlsl.spv"},
                 VK_NULL_HANDLE,
                 pipelineInfo,
+                {},
                 "ImguiPass"
             ))
         {

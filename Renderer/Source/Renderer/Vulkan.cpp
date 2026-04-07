@@ -255,6 +255,28 @@ static bool CreateShader(
     return true;
 }
 
+static void FillSpecializationInfo(
+    VkSpecializationInfo& specializationInfo,
+    std::vector<VkSpecializationMapEntry>& specializationMapEntries,
+    std::initializer_list<i32> specializationConstants
+)
+{
+    DEBUG_ASSERT(specializationMapEntries.empty());
+
+    specializationMapEntries.resize(specializationConstants.size());
+
+    for (size_t i = 0; i < specializationConstants.size(); ++i)
+    {
+        specializationMapEntries[i] = {u32(i), u32(i * sizeof(i32)), sizeof(i32)};
+    }
+
+    specializationInfo = {};
+    specializationInfo.mapEntryCount = u32(specializationMapEntries.size());
+    specializationInfo.pMapEntries = specializationMapEntries.data();
+    specializationInfo.dataSize = specializationConstants.size() * sizeof(i32);
+    specializationInfo.pData = specializationConstants.begin();
+}
+
 bool Vulkan::FindSupportedImageFormat(
     VkFormat& result,
     VkPhysicalDevice physicalDevice,
@@ -730,6 +752,7 @@ bool Vulkan::CreateComputePipeline(
     VkDevice device,
     const char* shaderPath,
     VkDescriptorSetLayout extraDescriptorSetLayout,
+    std::initializer_list<i32> specializationConstants,
     const char* debugName
 )
 {
@@ -805,12 +828,17 @@ bool Vulkan::CreateComputePipeline(
     layoutInfo.pPushConstantRanges = &pushConstantRange;
     VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline.layout));
 
+    VkSpecializationInfo specializationInfo{};
+    std::vector<VkSpecializationMapEntry> specializationMapEntries;
+    FillSpecializationInfo(specializationInfo, specializationMapEntries, specializationConstants);
+
     VkComputePipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     pipelineInfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     pipelineInfo.stage.stage = shader.stage;
     pipelineInfo.stage.module = shader.module;
     pipelineInfo.stage.pName = "Main";
+    pipelineInfo.stage.pSpecializationInfo = &specializationInfo;
     pipelineInfo.layout = pipeline.layout;
 
     VK_CHECK(vkCreateComputePipelines(
@@ -879,6 +907,7 @@ bool Vulkan::CreateGraphicsPipeline(
     std::initializer_list<const char*> shaderPaths,
     VkDescriptorSetLayout extraDescriptorSetLayout,
     VkGraphicsPipelineCreateInfo& pipelineInfo,
+    std::initializer_list<i32> specializationConstants,
     const char* debugName
 )
 {
@@ -980,6 +1009,10 @@ bool Vulkan::CreateGraphicsPipeline(
     layoutInfo.pPushConstantRanges = &pushConstantRange;
     VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline.layout));
 
+    VkSpecializationInfo specializationInfo{};
+    std::vector<VkSpecializationMapEntry> specializationMapEntries;
+    FillSpecializationInfo(specializationInfo, specializationMapEntries, specializationConstants);
+
     std::vector<VkPipelineShaderStageCreateInfo> shaderStageInfos(shaders.size());
     for (size_t i = 0; i < shaders.size(); ++i)
     {
@@ -987,6 +1020,7 @@ bool Vulkan::CreateGraphicsPipeline(
         shaderStageInfos[i].stage = shaders[i].stage;
         shaderStageInfos[i].module = shaders[i].module;
         shaderStageInfos[i].pName = "Main";
+        shaderStageInfos[i].pSpecializationInfo = &specializationInfo;
     }
 
     pipelineInfo.layout = pipeline.layout;

@@ -59,6 +59,7 @@ float4 Main(VertexOutput input, uint primitiveId : SV_PrimitiveID) : SV_Target
     const float2 hwDdx = ddx(input.uv);
     const float2 hwDdy = ddy(input.uv);
 
+    // TODO: relative error.
     const float gradError = length(interpUV.dcdx - hwDdx) + length(interpUV.dcdy - hwDdy);
     const float3 color = lerp(
         float3(0.0, 0.0, 1.0),

@@ -1,17 +1,11 @@
 #include "Common.hlsli"
 #include "Math.hlsli"
 
-[[vk::binding(0)]]
 ConstantBuffer<UniformData> uniformBuffer;
-[[vk::binding(1)]]
 StructuredBuffer<DrawData> drawDataBuffer;
-[[vk::binding(2)]]
 RWByteAddressBuffer indirectCountBuffer;
-[[vk::binding(3)]]
 StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdsBuffer1;
-[[vk::binding(4)]]
 RWStructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdsBuffer2;
-[[vk::binding(5)]]
 RWStructuredBuffer<uint32_t> drawIndicesBuffer;
 
 [numthreads(RENDERER_CULL_WORKGROUP_SIZE, 1, 1)]
