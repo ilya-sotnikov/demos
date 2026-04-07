@@ -1263,7 +1263,7 @@ bool Renderer::Render(f32 deltaTime)
 
     mUniformData.deltaTime = deltaTime;
 
-    if (mUniformData.taaEnable == 1)
+    if ((mUniformData.taaEnable == 1) && (mRenderMode == RenderMode::Normal))
     {
         const f32 haltonX = 2.0f * HaltonSequence(mTaaJitterIdx + 1, 2) - 1.0f;
         const f32 haltonY = 2.0f * HaltonSequence(mTaaJitterIdx + 1, 3) - 1.0f;
