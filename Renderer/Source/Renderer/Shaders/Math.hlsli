@@ -462,4 +462,3 @@ InterpolatedData3D Interpolate3D(BarycentricData data, float3 attr0, float3 attr
 
     return result;
 }
-

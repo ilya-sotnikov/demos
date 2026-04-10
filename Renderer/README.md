@@ -1,6 +1,8 @@
 # \[WIP\] Renderer
 
- GPU-driven renderer (Vulkan 1.4).
+GPU-driven renderer (Vulkan 1.4).
+
+I've learned a lot from [niagara](https://github.com/zeux/niagara) (Vulkan renderer by Arseny Kapoulkine) and recommend checking out his streams and blog posts, it's a goldmine of knowledge about graphics, Vulkan and optimizations.
 
 ## TODO
 
@@ -17,12 +19,13 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 ## Features
 
 - visibility buffer -> "forward" rendering
+- GPU frustum culling
+- GPU 2-pass Hi-Z occlusion culling
 - PBR (metallic workflow, no IBL)
 - normal mapping
 - HDR (HDR -> SDR)
 - TAA
 - hardware raytraced hard directional shadow
-- GPU frustum culling
 - bindless textures (descriptor indexing)
 - indirect drawing
 - SPIR-V reflection to manage push descriptors

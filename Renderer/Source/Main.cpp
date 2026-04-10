@@ -351,6 +351,12 @@ int main()
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
+            bool drawCullAABB = renderer.mUniformData.drawCullAABB;
+            ImGui::Checkbox("Draw cull AABB", &drawCullAABB);
+            renderer.mUniformData.drawCullAABB = drawCullAABB;
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
             bool drawGradError = renderer.mRenderMode == Renderer::RenderMode::GradError;
             if (ImGui::Checkbox("Grad error", &drawGradError))
             {

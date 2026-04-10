@@ -58,6 +58,8 @@ struct UniformData
     float sunIntensity;
     float ambientIntensity;
     float gradErrorMax;
+    float depthPyramidWidth;
+    float depthPyramidHeight;
     uint64_t frameCount;
     uint32_t swapchainWidth;
     uint32_t swapchainHeight;
@@ -65,6 +67,7 @@ struct UniformData
     uint32_t renderHeight;
     uint32_t drawCount;
     uint32_t taaEnable;
+    uint32_t drawCullAABB;
 };
 
 struct Vertex
@@ -99,10 +102,28 @@ struct DrawData
     uint32_t renderPassFlags;
 };
 
+struct DebugDrawRectData
+{
+    FLOAT_4 lbrtScreen;
+    uint32_t color;
+};
+
 struct PushConstantsImgui
 {
     FLOAT_2 scale;
     FLOAT_2 translate;
+};
+
+struct PushConstantsVisibilityBuffer
+{
+    uint32_t cullLate;
+};
+
+struct PushConstantsDepthReduce
+{
+    uint32_t mipLevel;
+    uint32_t outWidth;
+    uint32_t outHeight;
 };
 
 enum RenderPassFlagBits

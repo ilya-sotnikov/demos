@@ -45,19 +45,3 @@ struct Arena
         return static_cast<T*>(AllocOrDie(count * ptrdiff_t(sizeof(T)), alignof(T), flags));
     }
 };
-
-// For static resources (whole program lifetime).
-inline Arena gArenaStatic;
-// For resources that are reset on restart (right now it's physics in ResetWorld).
-inline Arena gArenaReset;
-// For per-frame resources, reset at the beginning of each frame.
-inline Arena gArenaFrame;
-// For swapchain resources that are recreated upon resizing.
-inline Arena gArenaSwapchain;
-
-inline constexpr Arena* gArenas[] = {
-    &gArenaStatic,
-    &gArenaReset,
-    &gArenaFrame,
-    &gArenaSwapchain,
-};

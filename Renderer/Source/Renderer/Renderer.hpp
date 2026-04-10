@@ -17,11 +17,15 @@ struct Renderer
     static constexpr int MAX_DRAW_CALLS = 4096;
     static constexpr u32 MAX_DESCRIPTOR_COUNT = 16384;
     static constexpr int UNIFORM_BUFFER_MAX_SIZE_BYTES = 16384;
+    static constexpr int PUSH_CONSTANTS_MAX_SIZE_BYTES = 16384;
     // NOTE: can set to 2 to torture my GPU since it's powerful but my monitor is 1080p.
     // TODO: UI toggle?
     static constexpr int RENDER_SCALE = 1;
 
     static_assert(sizeof(UniformData) <= UNIFORM_BUFFER_MAX_SIZE_BYTES);
+    static_assert(sizeof(PushConstantsImgui) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
+    static_assert(sizeof(PushConstantsVisibilityBuffer) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
+    static_assert(sizeof(PushConstantsDepthReduce) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
 
     enum class RenderMode
     {
@@ -51,23 +55,36 @@ struct Renderer
     Vulkan::Image mVelocityImage;
     Vulkan::Image mGradImage;
     VkExtent2D mRenderImageExtent;
+    VkExtent2D mDepthPyramidImageExtent;
     Vulkan::Image mDepthImage;
+    Vulkan::Image mDepthPyramidImage;
+    std::vector<VkImageView> mDepthPyramidMipImageViews;
     Vulkan::Pipeline mVisibilityPipeline;
     Vulkan::Pipeline mRenderPipeline;
     Vulkan::Pipeline mFullscreenPipeline;
-    Vulkan::Pipeline mCullPipeline;
+    Vulkan::Pipeline mCullEarlyPipeline;
+    Vulkan::Pipeline mCullLatePipeline;
     Vulkan::Pipeline mTaaResolvePipeline;
     Vulkan::Pipeline mDebugGradErrorPipeline;
+    Vulkan::Pipeline mDepthReducePipeline;
+    Vulkan::Pipeline mDebugDrawRectPipeline;
+    Vulkan::Pipeline mDebugDrawFillCmdPipeline;
     Vulkan::Buffer mVertexBuffer;
     Vulkan::Buffer mIndexBuffer;
-    Vulkan::Buffer mIndirectBuffer1;
-    Vulkan::Buffer mIndirectBuffer2;
-    Vulkan::Buffer mDrawIndicesBuffer;
+    Vulkan::Buffer mDrawCmdBuffer1;
+    Vulkan::Buffer mDrawCmdEarlyBuffer2;
+    Vulkan::Buffer mDrawCmdLateBuffer2;
+    Vulkan::Buffer mDrawIndicesEarlyBuffer;
+    Vulkan::Buffer mDrawIndicesLateBuffer;
     Vulkan::Buffer mMaterialBuffer;
     Vulkan::Buffer mDrawDataBuffer;
-    Vulkan::Buffer mIndirectCountBuffer;
+    Vulkan::Buffer mDrawCountBuffer;
     Vulkan::Buffer mBlasBuffer;
     Vulkan::Buffer mTlasBuffer;
+    Vulkan::Buffer mMeshPrimitiveVisibleBuffer;
+    Vulkan::Buffer mDebugDrawCountBuffer;
+    Vulkan::Buffer mDebugDrawRectBuffer;
+    Vulkan::Buffer mDebugDrawCmdBuffer;
     std::vector<VkAccelerationStructureKHR> mBlas;
     VkAccelerationStructureKHR mTlas;
     ImguiRenderer mImguiRenderer;
@@ -76,7 +93,9 @@ struct Renderer
     VkDescriptorSetLayout mTextureDescriptorSetLayout;
     VkSampler mTextureSampler;
     VkSampler mLinearSampler;
+    VkSampler mMinSampler;
     VkFormat mVisibilityImageFormat;
+    VkFormat mRenderImageFormat;
     VkFormat mGradImageFormat;
     VkFormat mDepthFormat;
     VkCommandPool mCommandPool;
@@ -119,10 +138,12 @@ private:
         const std::vector<DrawData>& drawData
     );
 
-    void VisibilityBufferPass(VkCommandBuffer cmd);
-    void CullPass(VkCommandBuffer cmd);
+    void VisibilityBufferPass(VkCommandBuffer cmd, bool cullLate);
+    void CullPass(VkCommandBuffer cmd, bool late);
+    void DepthReducePass(VkCommandBuffer cmd);
     void RenderPass(VkCommandBuffer cmd);
     void TaaResolvePass(VkCommandBuffer cmd);
+    void DebugDrawPass(VkCommandBuffer cmd);
     void FullscreenPass(VkCommandBuffer cmd, u32 imageIdx);
 
     bool RecordDebugGradErrorCommandBuffer(u32 imageIdx);

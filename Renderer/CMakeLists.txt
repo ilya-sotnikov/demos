@@ -143,6 +143,10 @@ set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/TaaResolve.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.frag.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/DepthReduce.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/DebugDrawRect.vert.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/DebugDrawRect.frag.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/DebugDrawFillCmd.comp.hlsl
 )
 set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Common.hlsli
@@ -154,6 +158,8 @@ set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/SharedConfig.hlsli
     ${SHADER_SOURCE_DIRECTORY}/SharedDef.hlsli
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/DebugDrawRect.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/DebugDraw.hlsli
 )
 
 execute_process(COMMAND ${DXC_EXECUTABLE} --version)
@@ -184,7 +190,7 @@ foreach(shader ${SHADER_SOURCE_FILES})
         OUTPUT ${SPIRV}
         COMMAND ${DXC_EXECUTABLE}
             -spirv
-            -O3 # -Zi -fspv-debug=vulkan-with-source
+            -O3 -Zi -fspv-debug=vulkan-with-source
             -T ${SHADER_TYPE}_6_6
             -fvk-use-scalar-layout
             -enable-16bit-types

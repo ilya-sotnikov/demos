@@ -7,8 +7,10 @@
 // https://chaojia.github.io/posts/21-11-29-vertex-attrib-interp/
 
 ConstantBuffer<UniformData> uniformBuffer;
-StructuredBuffer<uint32_t> drawIndicesBuffer;
-StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdBuffer;
+StructuredBuffer<uint32_t> drawIndicesEarlyBuffer;
+StructuredBuffer<uint32_t> drawIndicesLateBuffer;
+StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdEarlyBuffer;
+StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdLateBuffer;
 StructuredBuffer<DrawData> drawDataBuffer;
 StructuredBuffer<uint32_t> indexBuffer;
 StructuredBuffer<Vertex> vertexBuffer;
@@ -92,6 +94,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const uint2 visibilityData = visibilityImage[dtid.xy];
     uint rawDrawIdx = visibilityData.y;
 
+    const bool isCullLate = rawDrawIdx & 0x80000000;
+    rawDrawIdx &= 0x7fffffff;
+
     if (rawDrawIdx == 0)
     {
         renderImageRW[dtid.xy] = float3(0.7, 0.8, 0.9);
@@ -102,9 +107,27 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     --rawDrawIdx;
 
     const uint triangleIdx = visibilityData.x;
-    const uint drawIdx = drawIndicesBuffer[rawDrawIdx];
 
-    const VkDrawIndexedIndirectCommand drawCmd = drawCmdBuffer[rawDrawIdx];
+    uint drawIdx;
+    if (isCullLate)
+    {
+        drawIdx = drawIndicesLateBuffer[rawDrawIdx];
+    }
+    else
+    {
+        drawIdx = drawIndicesEarlyBuffer[rawDrawIdx];
+    }
+
+    VkDrawIndexedIndirectCommand drawCmd;
+    if (isCullLate)
+    {
+        drawCmd = drawCmdLateBuffer[rawDrawIdx];
+    }
+    else
+    {
+        drawCmd = drawCmdEarlyBuffer[rawDrawIdx];
+    }
+
     const DrawData drawData = drawDataBuffer[drawIdx];
     const Material material = materialBuffer[drawData.materialIdx];
 

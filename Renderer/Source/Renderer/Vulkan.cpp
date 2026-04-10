@@ -17,6 +17,7 @@
 #endif
 
 #include <string.h>
+#include <algorithm>
 
 struct FileData
 {
@@ -258,14 +259,15 @@ static bool CreateShader(
 static void FillSpecializationInfo(
     VkSpecializationInfo& specializationInfo,
     std::vector<VkSpecializationMapEntry>& specializationMapEntries,
-    std::initializer_list<i32> specializationConstants
+    const i32* specializationConstants,
+    size_t specializationConstantCount
 )
 {
     DEBUG_ASSERT(specializationMapEntries.empty());
 
-    specializationMapEntries.resize(specializationConstants.size());
+    specializationMapEntries.resize(specializationConstantCount);
 
-    for (size_t i = 0; i < specializationConstants.size(); ++i)
+    for (size_t i = 0; i < specializationConstantCount; ++i)
     {
         specializationMapEntries[i] = {u32(i), u32(i * sizeof(i32)), sizeof(i32)};
     }
@@ -273,8 +275,8 @@ static void FillSpecializationInfo(
     specializationInfo = {};
     specializationInfo.mapEntryCount = u32(specializationMapEntries.size());
     specializationInfo.pMapEntries = specializationMapEntries.data();
-    specializationInfo.dataSize = specializationConstants.size() * sizeof(i32);
-    specializationInfo.pData = specializationConstants.begin();
+    specializationInfo.dataSize = specializationConstantCount * sizeof(i32);
+    specializationInfo.pData = specializationConstants;
 }
 
 bool Vulkan::FindSupportedImageFormat(
@@ -769,7 +771,7 @@ bool Vulkan::CreateComputePipeline(
         return false;
     }
 
-    // Remove duplicates and insert in binding order for stable indices.
+    // Remove duplicates.
     bool bindingUsed[32]{};
     std::vector<VkDescriptorSetLayoutBinding> uniqueDescriptorSetLayoutBindings(
         descriptorSetLayoutBindings.size()
@@ -777,21 +779,23 @@ bool Vulkan::CreateComputePipeline(
     size_t uniqueBindingCount = 0;
     for (const VkDescriptorSetLayoutBinding& b : descriptorSetLayoutBindings)
     {
-        ASSERT(b.binding < 32);
+        ASSERT(b.binding < ARRAY_SIZE(bindingUsed));
         if (!bindingUsed[b.binding])
         {
-            ASSERT(b.binding < uniqueDescriptorSetLayoutBindings.size());
-            uniqueDescriptorSetLayoutBindings[b.binding] = b;
+            uniqueDescriptorSetLayoutBindings[uniqueBindingCount] = b;
             bindingUsed[b.binding] = true;
             ++uniqueBindingCount;
         }
     }
     uniqueDescriptorSetLayoutBindings.resize(uniqueBindingCount);
 
-    for (size_t i = 0; i < uniqueDescriptorSetLayoutBindings.size(); ++i)
-    {
-        ASSERT(bindingUsed[i]);
-    }
+    // Sort for stable indices.
+    std::sort(
+        uniqueDescriptorSetLayoutBindings.begin(),
+        uniqueDescriptorSetLayoutBindings.end(),
+        [](VkDescriptorSetLayoutBinding a, VkDescriptorSetLayoutBinding b)
+        { return a.binding < b.binding; }
+    );
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
     descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -830,7 +834,12 @@ bool Vulkan::CreateComputePipeline(
 
     VkSpecializationInfo specializationInfo{};
     std::vector<VkSpecializationMapEntry> specializationMapEntries;
-    FillSpecializationInfo(specializationInfo, specializationMapEntries, specializationConstants);
+    FillSpecializationInfo(
+        specializationInfo,
+        specializationMapEntries,
+        specializationConstants.begin(),
+        specializationConstants.size()
+    );
 
     VkComputePipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -950,7 +959,7 @@ bool Vulkan::CreateGraphicsPipeline(
         pushConstantSize = pushConstantSize == 0 ? shader.pushConstantSize : pushConstantSize;
     }
 
-    // Remove duplicates and insert in binding order for stable indices.
+    // Remove duplicates.
     bool bindingUsed[32]{};
     std::vector<VkDescriptorSetLayoutBinding> uniqueDescriptorSetLayoutBindings(
         descriptorSetLayoutBindings.size()
@@ -958,21 +967,23 @@ bool Vulkan::CreateGraphicsPipeline(
     size_t uniqueBindingCount = 0;
     for (const VkDescriptorSetLayoutBinding& b : descriptorSetLayoutBindings)
     {
-        ASSERT(b.binding < 32);
+        ASSERT(b.binding < ARRAY_SIZE(bindingUsed));
         if (!bindingUsed[b.binding])
         {
-            ASSERT(b.binding < uniqueDescriptorSetLayoutBindings.size());
-            uniqueDescriptorSetLayoutBindings[b.binding] = b;
+            uniqueDescriptorSetLayoutBindings[uniqueBindingCount] = b;
             bindingUsed[b.binding] = true;
             ++uniqueBindingCount;
         }
     }
     uniqueDescriptorSetLayoutBindings.resize(uniqueBindingCount);
 
-    for (size_t i = 0; i < uniqueDescriptorSetLayoutBindings.size(); ++i)
-    {
-        ASSERT(bindingUsed[i]);
-    }
+    // Sort for stable indices.
+    std::sort(
+        uniqueDescriptorSetLayoutBindings.begin(),
+        uniqueDescriptorSetLayoutBindings.end(),
+        [](VkDescriptorSetLayoutBinding a, VkDescriptorSetLayoutBinding b)
+        { return a.binding < b.binding; }
+    );
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
     descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1011,7 +1022,12 @@ bool Vulkan::CreateGraphicsPipeline(
 
     VkSpecializationInfo specializationInfo{};
     std::vector<VkSpecializationMapEntry> specializationMapEntries;
-    FillSpecializationInfo(specializationInfo, specializationMapEntries, specializationConstants);
+    FillSpecializationInfo(
+        specializationInfo,
+        specializationMapEntries,
+        specializationConstants.begin(),
+        specializationConstants.size()
+    );
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStageInfos(shaders.size());
     for (size_t i = 0; i < shaders.size(); ++i)
