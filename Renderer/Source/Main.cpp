@@ -228,8 +228,6 @@ int main()
     renderer.mUniformData.taaEnable = 1;
     renderer.ChangeRenderMode(Renderer::RenderMode::Normal);
 
-    int gradErrorMaxPow = -3;
-
     sCamera.mPosition = {9.4f, 7.4f, 0.8f};
     sCamera.mYaw = Radians(-85.0f);
     sCamera.mPitch = Radians(0.0f);
@@ -372,10 +370,13 @@ int main()
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::SliderInt("##GradErrorMax", &gradErrorMaxPow, -8, -1);
-            renderer.mUniformData.gradErrorMax = powf(10.0f, f32(gradErrorMaxPow));
-            ImGui::TableNextColumn();
-            ImGui::Text("Grad err max pow");
+            ImGui::SliderFloat(
+                "Grad err max",
+                &renderer.mUniformData.gradErrorMax,
+                0.01f,
+                0.1f,
+                "%.2f"
+            );
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();

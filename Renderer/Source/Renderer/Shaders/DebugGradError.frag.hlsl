@@ -56,11 +56,14 @@ float4 Main(VertexOutput input, uint primitiveId : SV_PrimitiveID) : SV_Target
     const float2 uv2 = float2(v2.u, v2.v);
     const InterpolatedData2D interpUV = Interpolate2D(baryData, uv0, uv1, uv2);
 
-    const float2 hwDdx = ddx(input.uv);
-    const float2 hwDdy = ddy(input.uv);
+    const float2 hwDdx = ddx_fine(input.uv);
+    const float2 hwDdy = ddy_fine(input.uv);
 
-    // TODO: relative error.
-    const float gradError = length(interpUV.dcdx - hwDdx) + length(interpUV.dcdy - hwDdy);
+    const float gradError = max(
+        length(interpUV.dcdx - hwDdx) / length(hwDdx),
+        length(interpUV.dcdy - hwDdy) / length(hwDdy)
+    );
+
     const float3 color = lerp(
         float3(0.0, 0.0, 1.0),
         float3(1.0, 0.0, 0.0),

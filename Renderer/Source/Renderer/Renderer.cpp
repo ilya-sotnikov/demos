@@ -1365,7 +1365,7 @@ bool Renderer::Init()
     mUniformData.taaBlendWeight = 0.1f;
     mUniformData.ambientIntensity = 0.1f;
     mUniformData.sunIntensity = 5.0f;
-    mUniformData.gradErrorMax = 1e-3f;
+    mUniformData.gradErrorMax = 0.01f;
 
     return true;
 }
@@ -2186,13 +2186,13 @@ void Renderer::VisibilityBufferPass(VkCommandBuffer cmd, bool cullLate)
     scissor.extent = mRenderImageExtent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    VkRenderingAttachmentInfo renderingAttachmentInfo{};
-    renderingAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    renderingAttachmentInfo.imageView = mVisibilityImage.view;
-    renderingAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    renderingAttachmentInfo.loadOp
+    VkRenderingAttachmentInfo renderingAttachmentInfos[1]{};
+    renderingAttachmentInfos[0].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    renderingAttachmentInfos[0].imageView = mVisibilityImage.view;
+    renderingAttachmentInfos[0].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    renderingAttachmentInfos[0].loadOp
         = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-    renderingAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    renderingAttachmentInfos[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
     VkRenderingAttachmentInfo depthAttachmentInfo{};
     depthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -2206,8 +2206,8 @@ void Renderer::VisibilityBufferPass(VkCommandBuffer cmd, bool cullLate)
     renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     renderingInfo.renderArea.extent = mRenderImageExtent;
     renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &renderingAttachmentInfo;
+    renderingInfo.colorAttachmentCount = ARRAY_SIZE(renderingAttachmentInfos);
+    renderingInfo.pColorAttachments = renderingAttachmentInfos;
     renderingInfo.pDepthAttachment = &depthAttachmentInfo;
 
     vkCmdBeginRendering(cmd, &renderingInfo);
@@ -2909,15 +2909,6 @@ bool Renderer::RecordCommandBuffer(u32 imageIdx)
                 VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
                 VK_IMAGE_ASPECT_DEPTH_BIT
             ),
-            Vulkan::ImageMemoryBarrier(
-                mGradImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
         }
     );
 
@@ -3052,15 +3043,6 @@ bool Renderer::RecordCommandBuffer(u32 imageIdx)
                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mGradImage.image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
             ),
         }
     );
@@ -3498,33 +3480,6 @@ bool Renderer::CreateColorResources()
         return false;
     }
 
-    if (!Vulkan::FindSupportedImageFormat(
-            mGradImageFormat,
-            mPhysicalDevice,
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            {VK_FORMAT_R32G32B32A32_SFLOAT}
-        ))
-    {
-        fprintf(stderr, "vulkan: failed to find a suitable grad image format\n");
-        return false;
-    }
-
-    // TODO: wrapper that takes std::initializer_list of formats.
-    if (!Vulkan::CreateImage(
-            mGradImage,
-            mDevice,
-            mVmaAllocator,
-            mGradImageFormat,
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            mRenderImageExtent.width,
-            mRenderImageExtent.height,
-            1,
-            "GradImage"
-        ))
-    {
-        return false;
-    }
-
     return true;
 }
 
@@ -3534,7 +3489,6 @@ void Renderer::CleanupColorResources()
     {
         Vulkan::DestroyImage(mFrame[i].resolvedRenderImage, mDevice, mVmaAllocator);
     }
-    Vulkan::DestroyImage(mGradImage, mDevice, mVmaAllocator);
     Vulkan::DestroyImage(mVisibilityImage, mDevice, mVmaAllocator);
     Vulkan::DestroyImage(mRenderImage, mDevice, mVmaAllocator);
     Vulkan::DestroyImage(mVelocityImage, mDevice, mVmaAllocator);

@@ -53,7 +53,6 @@ struct Renderer
     Vulkan::Image mVisibilityImage;
     Vulkan::Image mRenderImage;
     Vulkan::Image mVelocityImage;
-    Vulkan::Image mGradImage;
     VkExtent2D mRenderImageExtent;
     VkExtent2D mDepthPyramidImageExtent;
     Vulkan::Image mDepthImage;
@@ -96,7 +95,6 @@ struct Renderer
     VkSampler mMinSampler;
     VkFormat mVisibilityImageFormat;
     VkFormat mRenderImageFormat;
-    VkFormat mGradImageFormat;
     VkFormat mDepthFormat;
     VkCommandPool mCommandPool;
     VkSampleCountFlagBits mSampleCount;
