@@ -120,6 +120,7 @@ static bool CreateShader(
         return false;
     }
 
+    // TODO: C API.
     spirv_cross::Compiler compiler{
         static_cast<u32*>(fileData.data),
         size_t(fileData.size) / sizeof(u32)

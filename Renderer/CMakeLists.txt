@@ -190,7 +190,7 @@ foreach(shader ${SHADER_SOURCE_FILES})
         OUTPUT ${SPIRV}
         COMMAND ${DXC_EXECUTABLE}
             -spirv
-            -O3 -Zi -fspv-debug=vulkan-with-source
+            -O3 #-Zi -fspv-debug=vulkan-with-source
             -T ${SHADER_TYPE}_6_6
             -fvk-use-scalar-layout
             -enable-16bit-types

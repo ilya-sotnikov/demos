@@ -2,7 +2,7 @@
 
 GPU-driven renderer (Vulkan 1.4).
 
-I've learned a lot from [niagara](https://github.com/zeux/niagara) (Vulkan renderer by Arseny Kapoulkine) and recommend checking out his streams and blog posts, it's a goldmine of knowledge about graphics, Vulkan and optimizations.
+I've learned a lot from [niagara](https://github.com/zeux/niagara) (Vulkan renderer by Arseny Kapoulkine) and recommend checking out his streams and blog posts, it's a gold mine of knowledge about graphics, Vulkan and optimizations.
 
 ## TODO
 

@@ -146,6 +146,8 @@ private:
     void DebugDrawPass(VkCommandBuffer cmd);
     void FullscreenPass(VkCommandBuffer cmd, u32 imageIdx);
 
+    void DebugDrawGradErrorPass(VkCommandBuffer cmd, bool cullLate, u32 imageIdx);
+
     bool RecordDebugGradErrorCommandBuffer(u32 imageIdx);
     bool RecordCommandBuffer(u32 imageIdx);
     bool CreateSwapchain();

@@ -2,7 +2,7 @@
 
 // Shared with C++.
 
-#define VULKAN_ENABLE_DEBUG_UTILS
+// #define VULKAN_ENABLE_DEBUG_UTILS
 
 static const float RENDERER_NEAR_PLANE = 0.1f;
 static const int RENDERER_MAX_FRAMES_IN_FLIGHT = 2;
