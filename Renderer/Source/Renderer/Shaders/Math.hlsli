@@ -156,7 +156,7 @@ float3 UnpackNormalOctahedral(float2 packed)
     return normalize(n);
 }
 
-// TODO: SRGB functions are approximations.
+// These SRGB functions are approximations.
 float3 SrgbToLinear(float3 color)
 {
     return pow(color, 2.2);

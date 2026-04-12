@@ -211,6 +211,13 @@ static void ProcessInput(SDL_Window* window, f32 deltaTime, Renderer& renderer)
     }
 }
 
+static void ImguiCheckbox(const char* label, u32& value)
+{
+    bool boolValue = value;
+    ImGui::Checkbox(label, &boolValue);
+    value = boolValue;
+}
+
 int main()
 {
     Renderer renderer{};
@@ -349,13 +356,12 @@ int main()
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            bool drawCullAABB = renderer.mUniformData.drawCullAABB;
-            ImGui::Checkbox("Draw cull AABB", &drawCullAABB);
-            renderer.mUniformData.drawCullAABB = drawCullAABB;
+            ImguiCheckbox("Draw cull AABB", renderer.mUniformData.drawCullAABB);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             bool drawGradError = renderer.mRenderMode == Renderer::RenderMode::GradError;
+            // TODO: enum when > 2 render modes, not bool.
             if (ImGui::Checkbox("Grad error", &drawGradError))
             {
                 if (drawGradError)
@@ -383,9 +389,7 @@ int main()
             ImGui::SeparatorText("TAA");
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            bool taaEnable = renderer.mUniformData.taaEnable;
-            ImGui::Checkbox("Enable", &taaEnable);
-            renderer.mUniformData.taaEnable = taaEnable; // TODO: wrapper.
+            ImguiCheckbox("Enable", renderer.mUniformData.taaEnable);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();

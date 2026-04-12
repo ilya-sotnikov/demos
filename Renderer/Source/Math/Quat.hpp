@@ -43,8 +43,6 @@ inline f32& Quat::Z()
     return val[3];
 }
 
-// TODO:  after reimplementing trigonometry
-// (reimplementing them will also help with cross-compiler determinism).
 inline Quat Quat::FromAxis(f32 rad, f32 x, f32 y, f32 z)
 {
     Quat res;
