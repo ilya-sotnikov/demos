@@ -109,10 +109,11 @@ static bool CreateShader(
     }
     DEFER(SAFE_FREE(fileData.data));
 
-    VkShaderModuleCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize = size_t(fileData.size);
-    createInfo.pCode = static_cast<u32*>(fileData.data);
+    const VkShaderModuleCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = size_t(fileData.size),
+        .pCode = static_cast<u32*>(fileData.data),
+    };
 
     if (vkCreateShaderModule(device, &createInfo, nullptr, &shader.module) != VK_SUCCESS)
     {
@@ -161,84 +162,90 @@ static bool CreateShader(
 
     for (const spirv_cross::Resource& r : shaderResources.separate_images)
     {
-        VkDescriptorSetLayoutBinding binding{};
         if (compiler.get_decoration(r.id, spv::DecorationDescriptorSet) == 1)
         {
             // Skip descriptor set 1 (bindless textures).
             continue;
         }
 
-        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-
-        binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        binding.descriptorCount = 1;
-        binding.stageFlags = VK_SHADER_STAGE_ALL;
+        const VkDescriptorSetLayoutBinding binding = {
+            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_ALL,
+        };
 
         descriptorSetLayoutBindings.push_back(binding);
     }
 
     for (const spirv_cross::Resource& r : shaderResources.separate_samplers)
     {
-        VkDescriptorSetLayoutBinding binding{};
-        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-        binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-        binding.descriptorCount = 1;
-        binding.stageFlags = VK_SHADER_STAGE_ALL;
+        const VkDescriptorSetLayoutBinding binding = {
+            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_ALL,
+        };
 
         descriptorSetLayoutBindings.push_back(binding);
     }
 
     for (const spirv_cross::Resource& r : shaderResources.storage_images)
     {
-        VkDescriptorSetLayoutBinding binding{};
-        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-        binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        binding.descriptorCount = 1;
-        binding.stageFlags = VK_SHADER_STAGE_ALL;
+        const VkDescriptorSetLayoutBinding binding = {
+            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_ALL,
+        };
 
         descriptorSetLayoutBindings.push_back(binding);
     }
 
     for (const spirv_cross::Resource& r : shaderResources.sampled_images)
     {
-        VkDescriptorSetLayoutBinding binding{};
-        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-        binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        binding.descriptorCount = 1;
-        binding.stageFlags = VK_SHADER_STAGE_ALL;
+        const VkDescriptorSetLayoutBinding binding = {
+            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_ALL,
+        };
 
         descriptorSetLayoutBindings.push_back(binding);
     }
 
     for (const spirv_cross::Resource& r : shaderResources.uniform_buffers)
     {
-        VkDescriptorSetLayoutBinding binding{};
-        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-        binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        binding.descriptorCount = 1;
-        binding.stageFlags = VK_SHADER_STAGE_ALL;
+        const VkDescriptorSetLayoutBinding binding = {
+            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_ALL,
+        };
 
         descriptorSetLayoutBindings.push_back(binding);
     }
 
     for (const spirv_cross::Resource& r : shaderResources.storage_buffers)
     {
-        VkDescriptorSetLayoutBinding binding{};
-        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-        binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        binding.descriptorCount = 1;
-        binding.stageFlags = VK_SHADER_STAGE_ALL;
+        const VkDescriptorSetLayoutBinding binding = {
+            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_ALL,
+        };
 
         descriptorSetLayoutBindings.push_back(binding);
     }
 
     for (const spirv_cross::Resource& r : shaderResources.acceleration_structures)
     {
-        VkDescriptorSetLayoutBinding binding{};
-        binding.binding = compiler.get_decoration(r.id, spv::DecorationBinding);
-        binding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-        binding.descriptorCount = 1;
-        binding.stageFlags = VK_SHADER_STAGE_ALL;
+        const VkDescriptorSetLayoutBinding binding = {
+            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
+            .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_ALL,
+        };
 
         descriptorSetLayoutBindings.push_back(binding);
     }
@@ -273,11 +280,12 @@ static void FillSpecializationInfo(
         specializationMapEntries[i] = {u32(i), u32(i * sizeof(i32)), sizeof(i32)};
     }
 
-    specializationInfo = {};
-    specializationInfo.mapEntryCount = u32(specializationMapEntries.size());
-    specializationInfo.pMapEntries = specializationMapEntries.data();
-    specializationInfo.dataSize = specializationConstantCount * sizeof(i32);
-    specializationInfo.pData = specializationConstants;
+    specializationInfo = {
+        .mapEntryCount = u32(specializationMapEntries.size()),
+        .pMapEntries = specializationMapEntries.data(),
+        .dataSize = specializationConstantCount * sizeof(i32),
+        .pData = specializationConstants,
+    };
 }
 
 bool Vulkan::FindSupportedImageFormat(
@@ -289,15 +297,17 @@ bool Vulkan::FindSupportedImageFormat(
 {
     for (VkFormat format : formats)
     {
-        VkPhysicalDeviceImageFormatInfo2 formatInfo{};
-        formatInfo.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
-        formatInfo.format = format;
-        formatInfo.type = VK_IMAGE_TYPE_2D;
-        formatInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        formatInfo.usage = usageFlags;
+        const VkPhysicalDeviceImageFormatInfo2 formatInfo = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+            .format = format,
+            .type = VK_IMAGE_TYPE_2D,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = usageFlags,
+        };
 
-        VkImageFormatProperties2 imageProperties{};
-        imageProperties.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
+        VkImageFormatProperties2 imageProperties = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
+        };
 
         if (vkGetPhysicalDeviceImageFormatProperties2(physicalDevice, &formatInfo, &imageProperties)
             == VK_SUCCESS)
@@ -337,9 +347,10 @@ Vulkan::QueueInfo Vulkan::GetQueue(VkPhysicalDevice device, VkQueueFlagBits flag
     }
     vkGetPhysicalDeviceQueueFamilyProperties2(device, &queueFamilyCount, queueFamilies.data());
 
-    Vulkan::QueueInfo queueInfo{};
-    queueInfo.queueIdx = UINT32_MAX;
-    queueInfo.familyIdx = UINT32_MAX;
+    Vulkan::QueueInfo queueInfo = {
+        .familyIdx = UINT32_MAX,
+        .queueIdx = UINT32_MAX,
+    };
     for (u32 i = 0; i < queueFamilyCount; ++i)
     {
         if (queueFamilies[i].queueFamilyProperties.queueFlags & flags)
@@ -362,12 +373,13 @@ VkMemoryBarrier2 Vulkan::MemoryBarrier(
     VkAccessFlags2 dstAccessMask
 )
 {
-    VkMemoryBarrier2 barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = srcStageMask;
-    barrier.srcAccessMask = srcAccessMask;
-    barrier.dstStageMask = dstStageMask;
-    barrier.dstAccessMask = dstAccessMask;
+    const VkMemoryBarrier2 barrier = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+        .srcStageMask = srcStageMask,
+        .srcAccessMask = srcAccessMask,
+        .dstStageMask = dstStageMask,
+        .dstAccessMask = dstAccessMask,
+    };
 
     return barrier;
 }
@@ -384,14 +396,15 @@ VkBufferMemoryBarrier2 Vulkan::BufferMemoryBarrier(
     DEBUG_ASSERT(buffer);
     DEBUG_ASSERT(size > 0);
 
-    VkBufferMemoryBarrier2 barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-    barrier.srcStageMask = srcStageMask;
-    barrier.srcAccessMask = srcAccessMask;
-    barrier.dstStageMask = dstStageMask;
-    barrier.dstAccessMask = dstAccessMask;
-    barrier.buffer = buffer;
-    barrier.size = size;
+    const VkBufferMemoryBarrier2 barrier = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+        .srcStageMask = srcStageMask,
+        .srcAccessMask = srcAccessMask,
+        .dstStageMask = dstStageMask,
+        .dstAccessMask = dstAccessMask,
+        .buffer = buffer,
+        .size = size,
+    };
 
     return barrier;
 }
@@ -411,23 +424,23 @@ VkImageMemoryBarrier2 Vulkan::ImageMemoryBarrier(
 {
     DEBUG_ASSERT(image);
 
-    VkImageSubresourceRange subresourceRange{};
-    subresourceRange.aspectMask = aspectMask;
-    subresourceRange.levelCount = levelCount;
-    subresourceRange.layerCount = layerCount;
-
-    VkImageMemoryBarrier2 barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = srcStageMask;
-    barrier.srcAccessMask = srcAccessMask;
-    barrier.dstStageMask = dstStageMask;
-    barrier.dstAccessMask = dstAccessMask;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange = subresourceRange;
+    const VkImageMemoryBarrier2 barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = srcStageMask,
+        .srcAccessMask = srcAccessMask,
+        .dstStageMask = dstStageMask,
+        .dstAccessMask = dstAccessMask,
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = {
+            .aspectMask = aspectMask,
+            .levelCount = levelCount,
+            .layerCount = layerCount,
+        },
+    };
 
     return barrier;
 }
@@ -437,10 +450,11 @@ void Vulkan::CmdMemoryBarrier(VkCommandBuffer cmd, std::initializer_list<VkMemor
     DEBUG_ASSERT(cmd);
     DEBUG_ASSERT(barriers.size() > 0);
 
-    VkDependencyInfo dependencyInfo{};
-    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.memoryBarrierCount = u32(barriers.size());
-    dependencyInfo.pMemoryBarriers = barriers.begin();
+    const VkDependencyInfo dependencyInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .memoryBarrierCount = u32(barriers.size()),
+        .pMemoryBarriers = barriers.begin(),
+    };
     vkCmdPipelineBarrier2(cmd, &dependencyInfo);
 }
 
@@ -452,10 +466,11 @@ void Vulkan::CmdBufferMemoryBarrier(
     DEBUG_ASSERT(cmd);
     DEBUG_ASSERT(barriers.size() > 0);
 
-    VkDependencyInfo dependencyInfo{};
-    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.bufferMemoryBarrierCount = u32(barriers.size());
-    dependencyInfo.pBufferMemoryBarriers = barriers.begin();
+    const VkDependencyInfo dependencyInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .bufferMemoryBarrierCount = u32(barriers.size()),
+        .pBufferMemoryBarriers = barriers.begin(),
+    };
     vkCmdPipelineBarrier2(cmd, &dependencyInfo);
 }
 
@@ -467,10 +482,11 @@ void Vulkan::CmdImageMemoryBarrier(
     DEBUG_ASSERT(cmd);
     DEBUG_ASSERT(barriers.size() > 0);
 
-    VkDependencyInfo dependencyInfo{};
-    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.imageMemoryBarrierCount = u32(barriers.size());
-    dependencyInfo.pImageMemoryBarriers = barriers.begin();
+    const VkDependencyInfo dependencyInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = u32(barriers.size()),
+        .pImageMemoryBarriers = barriers.begin(),
+    };
     vkCmdPipelineBarrier2(cmd, &dependencyInfo);
 }
 
@@ -487,14 +503,15 @@ void Vulkan::CmdBarrier(
         || (imageMemoryBarriers.size() > 0)
     );
 
-    VkDependencyInfo dependencyInfo{};
-    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    dependencyInfo.memoryBarrierCount = u32(memoryBarriers.size());
-    dependencyInfo.pMemoryBarriers = memoryBarriers.begin();
-    dependencyInfo.bufferMemoryBarrierCount = u32(bufferMemoryBarriers.size());
-    dependencyInfo.pBufferMemoryBarriers = bufferMemoryBarriers.begin();
-    dependencyInfo.imageMemoryBarrierCount = u32(imageMemoryBarriers.size());
-    dependencyInfo.pImageMemoryBarriers = imageMemoryBarriers.begin();
+    const VkDependencyInfo dependencyInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .memoryBarrierCount = u32(memoryBarriers.size()),
+        .pMemoryBarriers = memoryBarriers.begin(),
+        .bufferMemoryBarrierCount = u32(bufferMemoryBarriers.size()),
+        .pBufferMemoryBarriers = bufferMemoryBarriers.begin(),
+        .imageMemoryBarrierCount = u32(imageMemoryBarriers.size()),
+        .pImageMemoryBarriers = imageMemoryBarriers.begin(),
+    };
     vkCmdPipelineBarrier2(cmd, &dependencyInfo);
 }
 
@@ -507,8 +524,9 @@ bool Vulkan::FindMemoryType(
 {
     DEBUG_ASSERT(physicalDevice);
 
-    VkPhysicalDeviceMemoryProperties2 memProp{};
-    memProp.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+    VkPhysicalDeviceMemoryProperties2 memProp = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+    };
     vkGetPhysicalDeviceMemoryProperties2(physicalDevice, &memProp);
 
     ASSERT(memProp.memoryProperties.memoryTypeCount <= 32);
@@ -545,14 +563,16 @@ bool Vulkan::CreateBuffer(
 
     usage |= VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
 
-    VkBufferCreateInfo bufferInfo{};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = size;
-    bufferInfo.usage = usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    const VkBufferCreateInfo bufferInfo = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
 
-    VmaAllocationCreateInfo allocationInfo{};
-    allocationInfo.requiredFlags = requiredFlags;
+    const VmaAllocationCreateInfo allocationInfo = {
+        .requiredFlags = requiredFlags,
+    };
 
     if (minAlignment > 0)
     {
@@ -583,9 +603,10 @@ bool Vulkan::CreateBuffer(
         VK_CHECK(vmaMapMemory(vmaAllocator, buffer.allocation, &buffer.mapped));
     }
 
-    VkBufferDeviceAddressInfo addressInfo{};
-    addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    addressInfo.buffer = buffer.buffer;
+    const VkBufferDeviceAddressInfo addressInfo = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+        .buffer = buffer.buffer,
+    };
     buffer.deviceAddress = vkGetBufferDeviceAddress(device, &addressInfo);
 
     if (debugName)
@@ -663,23 +684,27 @@ bool Vulkan::CreateImage(
         imageViewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
     }
 
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = imageType;
-    imageInfo.format = format;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = depth;
-    imageInfo.mipLevels = mipLevels;
-    imageInfo.arrayLayers = arrayLayers;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.usage = usage;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    const VkImageCreateInfo imageInfo = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = imageType,
+        .format = format,
+        .extent = {
+            .width = width,
+            .height = height,
+            .depth = depth,
+        },
+        .mipLevels = mipLevels,
+        .arrayLayers = arrayLayers,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
 
-    VmaAllocationCreateInfo allocationInfo{};
-    allocationInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    const VmaAllocationCreateInfo allocationInfo = {
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    };
 
     VK_CHECK(vmaCreateImage(
         vmaAllocator,
@@ -701,15 +726,17 @@ bool Vulkan::CreateImage(
         break;
     }
 
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.viewType = imageViewType;
-    viewInfo.image = image.image;
-    viewInfo.format = format;
-    viewInfo.subresourceRange = {};
-    viewInfo.subresourceRange.aspectMask = aspectMask;
-    viewInfo.subresourceRange.layerCount = arrayLayers;
-    viewInfo.subresourceRange.levelCount = mipLevels;
+    const VkImageViewCreateInfo viewInfo = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image.image,
+        .viewType = imageViewType,
+        .format = format,
+        .subresourceRange = {
+            .aspectMask = aspectMask,
+            .levelCount = mipLevels,
+            .layerCount = arrayLayers,
+        },
+    };
     VK_CHECK(vkCreateImageView(device, &viewInfo, nullptr, &image.view));
 
     if (name)
@@ -798,11 +825,12 @@ bool Vulkan::CreateComputePipeline(
         { return a.binding < b.binding; }
     );
 
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
-    descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
-    descriptorSetLayoutInfo.bindingCount = u32(uniqueDescriptorSetLayoutBindings.size());
-    descriptorSetLayoutInfo.pBindings = uniqueDescriptorSetLayoutBindings.data();
+    const VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
+        .bindingCount = u32(uniqueDescriptorSetLayoutBindings.size()),
+        .pBindings = uniqueDescriptorSetLayoutBindings.data(),
+    };
 
     VK_CHECK(vkCreateDescriptorSetLayout(
         device,
@@ -825,12 +853,13 @@ bool Vulkan::CreateComputePipeline(
         extraDescriptorSetLayout,
     };
 
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = extraDescriptorSetLayout ? 2 : 1;
-    layoutInfo.pSetLayouts = setLayouts;
-    layoutInfo.pushConstantRangeCount = usesPushConstants ? 1 : 0;
-    layoutInfo.pPushConstantRanges = &pushConstantRange;
+    const VkPipelineLayoutCreateInfo layoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = extraDescriptorSetLayout ? 2u : 1u,
+        .pSetLayouts = setLayouts,
+        .pushConstantRangeCount = usesPushConstants ? 1u : 0u,
+        .pPushConstantRanges = &pushConstantRange,
+    };
     VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline.layout));
 
     VkSpecializationInfo specializationInfo{};
@@ -842,14 +871,17 @@ bool Vulkan::CreateComputePipeline(
         specializationConstants.size()
     );
 
-    VkComputePipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    pipelineInfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    pipelineInfo.stage.stage = shader.stage;
-    pipelineInfo.stage.module = shader.module;
-    pipelineInfo.stage.pName = "Main";
-    pipelineInfo.stage.pSpecializationInfo = &specializationInfo;
-    pipelineInfo.layout = pipeline.layout;
+    const VkComputePipelineCreateInfo pipelineInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .stage = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = shader.stage,
+            .module = shader.module,
+            .pName = "Main",
+            .pSpecializationInfo = &specializationInfo,
+        },
+        .layout = pipeline.layout,
+    };
 
     VK_CHECK(vkCreateComputePipelines(
         device,
@@ -866,24 +898,25 @@ bool Vulkan::CreateComputePipeline(
 
     for (size_t i = 0; i < uniqueDescriptorSetLayoutBindings.size(); ++i)
     {
-        VkDescriptorUpdateTemplateEntry entry{};
-        entry.dstBinding = uniqueDescriptorSetLayoutBindings[i].binding;
-        entry.descriptorCount = 1;
-        entry.descriptorType = uniqueDescriptorSetLayoutBindings[i].descriptorType;
-        entry.offset = sizeof(DescriptorInfo) * i;
-        entry.stride = sizeof(DescriptorInfo);
+        const VkDescriptorUpdateTemplateEntry entry = {
+            .dstBinding = uniqueDescriptorSetLayoutBindings[i].binding,
+            .descriptorCount = 1,
+            .descriptorType = uniqueDescriptorSetLayoutBindings[i].descriptorType,
+            .offset = sizeof(DescriptorInfo) * i,
+            .stride = sizeof(DescriptorInfo),
+        };
 
         descriptorUpdateTemplateEntries[i] = entry;
     }
 
-    VkDescriptorUpdateTemplateCreateInfo descriptorUpdateTemplateInfo{};
-    descriptorUpdateTemplateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO;
-    descriptorUpdateTemplateInfo.descriptorUpdateEntryCount
-        = u32(descriptorUpdateTemplateEntries.size());
-    descriptorUpdateTemplateInfo.pDescriptorUpdateEntries = descriptorUpdateTemplateEntries.data();
-    descriptorUpdateTemplateInfo.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS;
-    descriptorUpdateTemplateInfo.pipelineBindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
-    descriptorUpdateTemplateInfo.pipelineLayout = pipeline.layout;
+    const VkDescriptorUpdateTemplateCreateInfo descriptorUpdateTemplateInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO,
+        .descriptorUpdateEntryCount = u32(descriptorUpdateTemplateEntries.size()),
+        .pDescriptorUpdateEntries = descriptorUpdateTemplateEntries.data(),
+        .templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS,
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_COMPUTE,
+        .pipelineLayout = pipeline.layout,
+    };
 
     if (!descriptorUpdateTemplateEntries.empty())
     {
@@ -986,11 +1019,12 @@ bool Vulkan::CreateGraphicsPipeline(
         { return a.binding < b.binding; }
     );
 
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
-    descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
-    descriptorSetLayoutInfo.bindingCount = u32(uniqueDescriptorSetLayoutBindings.size());
-    descriptorSetLayoutInfo.pBindings = uniqueDescriptorSetLayoutBindings.data();
+    const VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
+        .bindingCount = u32(uniqueDescriptorSetLayoutBindings.size()),
+        .pBindings = uniqueDescriptorSetLayoutBindings.data(),
+    };
 
     VK_CHECK(vkCreateDescriptorSetLayout(
         device,
@@ -1013,12 +1047,13 @@ bool Vulkan::CreateGraphicsPipeline(
         extraDescriptorSetLayout,
     };
 
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = extraDescriptorSetLayout ? 2 : 1;
-    layoutInfo.pSetLayouts = setLayouts;
-    layoutInfo.pushConstantRangeCount = usesPushConstants ? 1 : 0;
-    layoutInfo.pPushConstantRanges = &pushConstantRange;
+    const VkPipelineLayoutCreateInfo layoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = extraDescriptorSetLayout ? 2u : 1u,
+        .pSetLayouts = setLayouts,
+        .pushConstantRangeCount = usesPushConstants ? 1u : 0u,
+        .pPushConstantRanges = &pushConstantRange,
+    };
     VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline.layout));
 
     VkSpecializationInfo specializationInfo{};
@@ -1033,11 +1068,13 @@ bool Vulkan::CreateGraphicsPipeline(
     std::vector<VkPipelineShaderStageCreateInfo> shaderStageInfos(shaders.size());
     for (size_t i = 0; i < shaders.size(); ++i)
     {
-        shaderStageInfos[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStageInfos[i].stage = shaders[i].stage;
-        shaderStageInfos[i].module = shaders[i].module;
-        shaderStageInfos[i].pName = "Main";
-        shaderStageInfos[i].pSpecializationInfo = &specializationInfo;
+        shaderStageInfos[i] = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = shaders[i].stage,
+            .module = shaders[i].module,
+            .pName = "Main",
+            .pSpecializationInfo = &specializationInfo,
+        };
     }
 
     pipelineInfo.layout = pipeline.layout;
@@ -1060,24 +1097,25 @@ bool Vulkan::CreateGraphicsPipeline(
 
     for (size_t i = 0; i < uniqueDescriptorSetLayoutBindings.size(); ++i)
     {
-        VkDescriptorUpdateTemplateEntry entry{};
-        entry.dstBinding = uniqueDescriptorSetLayoutBindings[i].binding;
-        entry.descriptorCount = 1;
-        entry.descriptorType = uniqueDescriptorSetLayoutBindings[i].descriptorType;
-        entry.offset = sizeof(DescriptorInfo) * i;
-        entry.stride = sizeof(DescriptorInfo);
+        const VkDescriptorUpdateTemplateEntry entry = {
+            .dstBinding = uniqueDescriptorSetLayoutBindings[i].binding,
+            .descriptorCount = 1,
+            .descriptorType = uniqueDescriptorSetLayoutBindings[i].descriptorType,
+            .offset = sizeof(DescriptorInfo) * i,
+            .stride = sizeof(DescriptorInfo),
+        };
 
         descriptorUpdateTemplateEntries[i] = entry;
     }
 
-    VkDescriptorUpdateTemplateCreateInfo descriptorUpdateTemplateInfo{};
-    descriptorUpdateTemplateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO;
-    descriptorUpdateTemplateInfo.descriptorUpdateEntryCount
-        = u32(descriptorUpdateTemplateEntries.size());
-    descriptorUpdateTemplateInfo.pDescriptorUpdateEntries = descriptorUpdateTemplateEntries.data();
-    descriptorUpdateTemplateInfo.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS;
-    descriptorUpdateTemplateInfo.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    descriptorUpdateTemplateInfo.pipelineLayout = pipeline.layout;
+    const VkDescriptorUpdateTemplateCreateInfo descriptorUpdateTemplateInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO,
+        .descriptorUpdateEntryCount = u32(descriptorUpdateTemplateEntries.size()),
+        .pDescriptorUpdateEntries = descriptorUpdateTemplateEntries.data(),
+        .templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS,
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .pipelineLayout = pipeline.layout,
+    };
 
     if (!descriptorUpdateTemplateEntries.empty())
     {
@@ -1152,13 +1190,15 @@ bool Vulkan::DebugNameObject(
     DEBUG_ASSERT(objectHandle);
     DEBUG_ASSERT(objectName);
 
-    (void)device;
+    const VkDebugUtilsObjectNameInfoEXT nameInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = objectType,
+        .objectHandle = objectHandle,
+        .pObjectName = objectName,
+    };
 
-    VkDebugUtilsObjectNameInfoEXT nameInfo{};
-    nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-    nameInfo.objectType = objectType;
-    nameInfo.objectHandle = objectHandle;
-    nameInfo.pObjectName = objectName;
+    (void)device;
+    (void)nameInfo;
 
 #ifdef VULKAN_ENABLE_DEBUG_UTILS
     VK_CHECK(vkSetDebugUtilsObjectNameEXT(device, &nameInfo));

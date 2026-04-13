@@ -1,0 +1,2 @@
+Diagnostics:
+  Suppress: 'missing-designated-field-initializers'

@@ -260,18 +260,20 @@ static void LoadGeometry(
                 VEC_SIZE_BYTES(primVertices)
             );
 
-            VkDrawIndexedIndirectCommand drawCmd{};
-            drawCmd.indexCount = u32(primIndexCount);
-            drawCmd.instanceCount = 1;
-            drawCmd.firstIndex = u32(indexCount);
-            drawCmd.vertexOffset = i32(vertexCount);
-            drawCmd.firstInstance = 0;
+            const VkDrawIndexedIndirectCommand drawCmd = {
+                .indexCount = u32(primIndexCount),
+                .instanceCount = 1,
+                .firstIndex = u32(indexCount),
+                .vertexOffset = i32(vertexCount),
+                .firstInstance = 0,
+            };
             drawCmds.push_back(drawCmd);
 
-            MeshPrimitive meshPrimitive{};
-            meshPrimitive.vertexCount = uniqueVertexCount;
-            meshPrimitive.meshIdx = mi;
-            meshPrimitive.material = prim.material;
+            const MeshPrimitive meshPrimitive = {
+                .vertexCount = uniqueVertexCount,
+                .meshIdx = mi,
+                .material = prim.material,
+            };
 
             meshPrimitives.push_back(meshPrimitive);
         }

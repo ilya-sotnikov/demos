@@ -91,19 +91,22 @@ bool ImguiRenderer::Init(
             return false;
         }
 
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.format = fontImageFormat;
-        imageInfo.extent = {u32(texWidth), u32(texHeight), 1};
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        const VkImageCreateInfo imageInfo = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = fontImageFormat,
+            .extent = {u32(texWidth), u32(texHeight), 1},
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        };
 
-        VmaAllocationCreateInfo allocationInfo{};
-        allocationInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        const VmaAllocationCreateInfo allocationInfo = {
+            .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        };
 
+        // TODO: why did I not use my own wrapper? Forgot to change it?
         VK_CHECK(vmaCreateImage(
             mVmaAllocator,
             &imageInfo,
@@ -113,17 +116,18 @@ bool ImguiRenderer::Init(
             nullptr
         ));
 
-        VkImageSubresourceRange subresourceRange{};
-        subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subresourceRange.levelCount = 1;
-        subresourceRange.layerCount = 1;
+        const VkImageViewCreateInfo viewInfo = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = mFontImage.image,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = fontImageFormat,
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1,
+            },
+        };
 
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = mFontImage.image;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = fontImageFormat;
-        viewInfo.subresourceRange = subresourceRange;
         VK_CHECK(vkCreateImageView(mDevice, &viewInfo, nullptr, &mFontImage.view));
     }
 
@@ -148,18 +152,20 @@ bool ImguiRenderer::Init(
 
         memcpy(stagingBuffer.mapped, fontData, uploadSize);
 
-        VkCommandBufferAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocateInfo.commandBufferCount = 1;
-        allocateInfo.commandPool = mCommandPool;
-        allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        const VkCommandBufferAllocateInfo allocateInfo = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = mCommandPool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+        };
 
         VkCommandBuffer copyCmdBuffer{};
         VK_CHECK(vkAllocateCommandBuffers(mDevice, &allocateInfo, &copyCmdBuffer));
         DEFER(vkFreeCommandBuffers(mDevice, mCommandPool, 1, &copyCmdBuffer));
 
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        const VkCommandBufferBeginInfo beginInfo = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        };
         VK_CHECK(vkBeginCommandBuffer(copyCmdBuffer, &beginInfo));
 
         Vulkan::CmdImageMemoryBarrier(
@@ -178,13 +184,15 @@ bool ImguiRenderer::Init(
             }
         );
 
-        VkImageSubresourceLayers imageSubresource{};
-        imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        imageSubresource.layerCount = 1;
+        const VkImageSubresourceLayers imageSubresource = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .layerCount = 1,
+        };
 
-        VkBufferImageCopy bufferCopyRegion{};
-        bufferCopyRegion.imageSubresource = imageSubresource;
-        bufferCopyRegion.imageExtent = {u32(texWidth), u32(texHeight), 1};
+        const VkBufferImageCopy bufferCopyRegion = {
+            .imageSubresource = imageSubresource,
+            .imageExtent = {u32(texWidth), u32(texHeight), 1},
+        };
         vkCmdCopyBufferToImage(
             copyCmdBuffer,
             stagingBuffer.buffer,
@@ -212,13 +220,13 @@ bool ImguiRenderer::Init(
 
         VK_CHECK(vkEndCommandBuffer(copyCmdBuffer));
 
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &copyCmdBuffer;
+        const VkSubmitInfo submitInfo = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &copyCmdBuffer,
+        };
 
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        const VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
         VkFence fence{};
         VK_CHECK(vkCreateFence(mDevice, &fenceInfo, nullptr, &fence));
         DEFER(vkDestroyFence(mDevice, fence, nullptr));
@@ -230,88 +238,97 @@ bool ImguiRenderer::Init(
 
     // Font texture sampler.
     {
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        const VkSamplerCreateInfo samplerInfo = {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+        };
         VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mFontSampler));
     }
 
     // Pipeline.
     {
-        VkPushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        pushConstantRange.size = sizeof(PushConstantBlock);
+        const VkPushConstantRange pushConstantRange = {
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+            .size = sizeof(PushConstantBlock),
+        };
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
-        inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        };
 
-        VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
-        rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterizationInfo.lineWidth = 1.0f;
+        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.0f,
+        };
 
-        VkPipelineColorBlendAttachmentState blendAttachmentState{};
-        blendAttachmentState.blendEnable = VK_TRUE;
-        blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        blendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
-        blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        blendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
-        blendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-            | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        const VkPipelineColorBlendAttachmentState blendAttachmentState = {
+            .blendEnable = VK_TRUE,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+            .alphaBlendOp = VK_BLEND_OP_ADD,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+        };
 
-        // clang-format off
-        constexpr VkVertexInputBindingDescription vertexInputBindingDescriptions[] = {
+        const VkVertexInputBindingDescription vertexInputBindingDescriptions[] = {
             {0, sizeof(ImDrawVert), VK_VERTEX_INPUT_RATE_VERTEX},
         };
-        constexpr VkVertexInputAttributeDescription vertexInputAttributes[] = {
+        const VkVertexInputAttributeDescription vertexInputAttributes[] = {
             {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ImDrawVert, pos)},
             {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ImDrawVert, uv)},
             {2, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(ImDrawVert, col)},
         };
-        // clang-format on
 
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vertexInputInfo.pVertexBindingDescriptions = vertexInputBindingDescriptions;
-        vertexInputInfo.vertexBindingDescriptionCount = ARRAY_SIZE(vertexInputBindingDescriptions);
-        vertexInputInfo.pVertexAttributeDescriptions = vertexInputAttributes;
-        vertexInputInfo.vertexAttributeDescriptionCount = ARRAY_SIZE(vertexInputAttributes);
+        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            .vertexBindingDescriptionCount = ARRAY_SIZE(vertexInputBindingDescriptions),
+            .pVertexBindingDescriptions = vertexInputBindingDescriptions,
+            .vertexAttributeDescriptionCount = ARRAY_SIZE(vertexInputAttributes),
+            .pVertexAttributeDescriptions = vertexInputAttributes,
+        };
 
-        VkPipelineColorBlendStateCreateInfo colorBlendInfo{};
-        colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlendInfo.attachmentCount = 1;
-        colorBlendInfo.pAttachments = &blendAttachmentState;
+        const VkPipelineColorBlendStateCreateInfo colorBlendInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .attachmentCount = 1,
+            .pAttachments = &blendAttachmentState,
+        };
 
-        VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
-        depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencilInfo.depthCompareOp = VK_COMPARE_OP_ALWAYS;
-        depthStencilInfo.back.compareOp = VK_COMPARE_OP_ALWAYS;
+        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+            .back = {.compareOp = VK_COMPARE_OP_ALWAYS},
+        };
 
-        VkPipelineViewportStateCreateInfo viewportInfo{};
-        viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportInfo.viewportCount = 1;
-        viewportInfo.scissorCount = 1;
+        const VkPipelineViewportStateCreateInfo viewportInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1,
+            .scissorCount = 1,
+        };
 
-        VkPipelineMultisampleStateCreateInfo multisampleInfo{};
-        multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        };
 
-        constexpr VkDynamicState dynamicStates[]
+        const VkDynamicState dynamicStates[]
             = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
-        VkPipelineDynamicStateCreateInfo dynamicInfo{};
-        dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicInfo.dynamicStateCount = ARRAY_SIZE(dynamicStates);
-        dynamicInfo.pDynamicStates = dynamicStates;
+        const VkPipelineDynamicStateCreateInfo dynamicInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount = ARRAY_SIZE(dynamicStates),
+            .pDynamicStates = dynamicStates,
+        };
 
         VkFormat stencilFormat{};
         if (!Vulkan::FindSupportedImageFormat(
@@ -325,23 +342,25 @@ bool ImguiRenderer::Init(
             return false;
         }
 
-        VkPipelineRenderingCreateInfo renderingInfo{};
-        renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-        renderingInfo.colorAttachmentCount = 1;
-        renderingInfo.pColorAttachmentFormats = &colorFormat;
-        renderingInfo.stencilAttachmentFormat = stencilFormat;
+        const VkPipelineRenderingCreateInfo renderingInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = 1,
+            .pColorAttachmentFormats = &colorFormat,
+            .stencilAttachmentFormat = stencilFormat,
+        };
 
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.pNext = &renderingInfo;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
-        pipelineInfo.pViewportState = &viewportInfo;
-        pipelineInfo.pRasterizationState = &rasterizationInfo;
-        pipelineInfo.pMultisampleState = &multisampleInfo;
-        pipelineInfo.pDepthStencilState = &depthStencilInfo;
-        pipelineInfo.pColorBlendState = &colorBlendInfo;
-        pipelineInfo.pDynamicState = &dynamicInfo;
+        VkGraphicsPipelineCreateInfo pipelineInfo = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &renderingInfo,
+            .pVertexInputState = &vertexInputInfo,
+            .pInputAssemblyState = &inputAssemblyInfo,
+            .pViewportState = &viewportInfo,
+            .pRasterizationState = &rasterizationInfo,
+            .pMultisampleState = &multisampleInfo,
+            .pDepthStencilState = &depthStencilInfo,
+            .pColorBlendState = &colorBlendInfo,
+            .pDynamicState = &dynamicInfo,
+        };
         if (!Vulkan::CreateGraphicsPipeline(
                 mPipeline,
                 mDevice,
@@ -511,24 +530,22 @@ bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline.pipeline);
 
-    const Vulkan::DescriptorInfo descInfos[] = {
-        {
-            mFontImage.view,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            mFontSampler,
-        },
-    };
-    vkCmdPushDescriptorSetWithTemplate(
+    Vulkan::CmdPushDescriptors(
         cmd,
-        mPipeline.descriptorUpdateTemplate,
-        mPipeline.layout,
-        0,
-        &descInfos
+        mPipeline,
+        {
+            {
+                mFontImage.view,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                mFontSampler,
+            },
+        }
     );
 
-    PushConstantsImgui pushConstants{};
-    pushConstants.scale = Vec2{2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y};
-    pushConstants.translate = Vec2{-1.0f};
+    const PushConstantsImgui pushConstants = {
+        .scale = Vec2{2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y},
+        .translate = Vec2{-1.0f},
+    };
     vkCmdPushConstants(
         cmd,
         mPipeline.layout,
@@ -542,9 +559,10 @@ bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
     vkCmdBindVertexBuffers(cmd, 0, 1, &frame.vertexBuffer.buffer, offsets);
     vkCmdBindIndexBuffer(cmd, frame.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 
-    VkViewport viewport{};
-    viewport.width = io.DisplaySize.x;
-    viewport.height = io.DisplaySize.y;
+    const VkViewport viewport = {
+        .width = io.DisplaySize.x,
+        .height = io.DisplaySize.y,
+    };
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
     for (int i = 0; i < drawData->CmdListsCount; ++i)
@@ -555,9 +573,10 @@ bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
             const ImDrawCmd& imCmd = cmdList->CmdBuffer[j];
             const ImVec4 rect = imCmd.ClipRect;
 
-            VkRect2D scissorRect{};
-            scissorRect.offset = {Max(i32(rect.x), 0), Max(i32(rect.y), 0)};
-            scissorRect.extent = {u32(rect.z - rect.x), u32(rect.w - rect.y)};
+            const VkRect2D scissorRect = {
+                .offset = {Max(i32(rect.x), 0), Max(i32(rect.y), 0)},
+                .extent = {u32(rect.z - rect.x), u32(rect.w - rect.y)},
+            };
             vkCmdSetScissor(cmd, 0, 1, &scissorRect);
 
             vkCmdDrawIndexed(cmd, imCmd.ElemCount, 1, indexOffset, vertexOffset, 0);

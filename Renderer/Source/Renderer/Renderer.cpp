@@ -78,13 +78,14 @@ bool Renderer::Init()
             return false;
         }
 
-        VkApplicationInfo appInfo{};
-        appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "None";
-        appInfo.applicationVersion = 1;
-        appInfo.pEngineName = "None";
-        appInfo.engineVersion = 1;
-        appInfo.apiVersion = VK_API_VERSION_1_4;
+        const VkApplicationInfo appInfo = {
+            .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .pApplicationName = "None",
+            .applicationVersion = 1,
+            .pEngineName = "None",
+            .engineVersion = 1,
+            .apiVersion = VK_API_VERSION_1_4,
+        };
 
         u32 sdlExtCount = 0;
 
@@ -119,11 +120,12 @@ bool Renderer::Init()
             }
         }
 
-        VkInstanceCreateInfo instanceInfo{};
-        instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        instanceInfo.pApplicationInfo = &appInfo;
-        instanceInfo.enabledExtensionCount = u32(requiredExtensions.size());
-        instanceInfo.ppEnabledExtensionNames = requiredExtensions.data();
+        const VkInstanceCreateInfo instanceInfo = {
+            .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pApplicationInfo = &appInfo,
+            .enabledExtensionCount = u32(requiredExtensions.size()),
+            .ppEnabledExtensionNames = requiredExtensions.data(),
+        };
 
         VK_CHECK(vkCreateInstance(&instanceInfo, nullptr, &mInstance));
 
@@ -158,12 +160,14 @@ bool Renderer::Init()
         {
             const VkPhysicalDevice physicalDevice = physicalDevices[i];
 
-            VkPhysicalDeviceSubgroupProperties subgroupProperties{};
-            subgroupProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
+            VkPhysicalDeviceSubgroupProperties subgroupProperties = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES,
+            };
 
-            VkPhysicalDeviceProperties2 physicalDeviceProperties{};
-            physicalDeviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-            physicalDeviceProperties.pNext = &subgroupProperties;
+            VkPhysicalDeviceProperties2 physicalDeviceProperties = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                .pNext = &subgroupProperties,
+            };
             vkGetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceProperties);
             const bool supportsVulkan13
                 = physicalDeviceProperties.properties.apiVersion >= VK_API_VERSION_1_3;
@@ -242,38 +246,37 @@ bool Renderer::Init()
             }
 
             // Required features.
-            VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{};
-            rayTracingPipelineFeatures.sType
-                = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-
-            VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{};
-            rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
-            rayQueryFeatures.pNext = &rayTracingPipelineFeatures;
-
-            VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures{};
-            accelStructFeatures.sType
-                = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-            accelStructFeatures.pNext = &rayQueryFeatures;
-
-            VkPhysicalDeviceVulkan14Features vulkanFeatures14{};
-            vulkanFeatures14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
-            vulkanFeatures14.pNext = &accelStructFeatures;
-
-            VkPhysicalDeviceVulkan13Features vulkanFeatures13{};
-            vulkanFeatures13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-            vulkanFeatures13.pNext = &vulkanFeatures14;
-
-            VkPhysicalDeviceVulkan12Features vulkanFeatures12{};
-            vulkanFeatures12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-            vulkanFeatures12.pNext = &vulkanFeatures13;
-
-            VkPhysicalDeviceVulkan11Features vulkanFeatures11{};
-            vulkanFeatures11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-            vulkanFeatures11.pNext = &vulkanFeatures12;
-
-            VkPhysicalDeviceFeatures2 physicalDeviceFeatures{};
-            physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-            physicalDeviceFeatures.pNext = &vulkanFeatures11;
+            VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+            };
+            VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+                .pNext = &rayTracingPipelineFeatures,
+            };
+            VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+                .pNext = &rayQueryFeatures,
+            };
+            VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+                .pNext = &accelStructFeatures,
+            };
+            VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+                .pNext = &vulkanFeatures14,
+            };
+            VkPhysicalDeviceVulkan12Features vulkanFeatures12 = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                .pNext = &vulkanFeatures13,
+            };
+            VkPhysicalDeviceVulkan11Features vulkanFeatures11 = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+                .pNext = &vulkanFeatures12,
+            };
+            VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                .pNext = &vulkanFeatures11,
+            };
 
             vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures);
 
@@ -338,8 +341,9 @@ bool Renderer::Init()
 
         mPhysicalDevice = physicalDevices[size_t(physicalDeviceIndex)];
 
-        VkPhysicalDeviceProperties2 properties{};
-        properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        VkPhysicalDeviceProperties2 properties = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        };
         vkGetPhysicalDeviceProperties2(mPhysicalDevice, &properties);
 
         Utils::strlcpy(mGpuName, properties.properties.deviceName, sizeof(mGpuName));
@@ -351,89 +355,92 @@ bool Renderer::Init()
         // Already checked when picking a physical device.
         Vulkan::QueueInfo queueInfo = Vulkan::GetQueue(mPhysicalDevice, VK_QUEUE_GRAPHICS_BIT);
 
-        VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures{};
-        rayTracingPipelineFeatures.sType
-            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-        rayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
+        VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+            .rayTracingPipeline = VK_TRUE,
+        };
+        VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+            .pNext = &rayTracingPipelineFeatures,
+            .rayQuery = VK_TRUE,
+        };
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+            .pNext = &rayQueryFeatures,
+            .accelerationStructure = VK_TRUE,
+        };
+        VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+            .pNext = &accelStructFeatures,
+            .pushDescriptor = VK_TRUE,
+        };
+        VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            .pNext = &vulkanFeatures14,
+            .shaderDemoteToHelperInvocation = VK_TRUE,
+            .synchronization2 = VK_TRUE,
+            .dynamicRendering = VK_TRUE,
+        };
+        VkPhysicalDeviceVulkan12Features vulkanFeatures12 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+            .pNext = &vulkanFeatures13,
+            .drawIndirectCount = VK_TRUE,
+            .storageBuffer8BitAccess = VK_TRUE,
+            .uniformAndStorageBuffer8BitAccess = VK_TRUE,
+            .shaderFloat16 = VK_TRUE,
+            .shaderInt8 = VK_TRUE,
+            .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+            .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+            .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
+            .descriptorBindingPartiallyBound = VK_TRUE,
+            .descriptorBindingVariableDescriptorCount = VK_TRUE,
+            .runtimeDescriptorArray = VK_TRUE,
+            .samplerFilterMinmax = VK_TRUE,
+            .scalarBlockLayout = VK_TRUE,
+            .bufferDeviceAddress = VK_TRUE,
+        };
+        VkPhysicalDeviceVulkan11Features vulkanFeatures11 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+            .pNext = &vulkanFeatures12,
+            .storageBuffer16BitAccess = VK_TRUE,
+            .uniformAndStorageBuffer16BitAccess = VK_TRUE,
+            .storagePushConstant16 = VK_TRUE,
+            .shaderDrawParameters = VK_TRUE,
+        };
+        const VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &vulkanFeatures11,
+            .features = {
+                // TODO: remove, use mesh shaders instead.
+                .geometryShader = VK_TRUE,
 
-        VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{};
-        rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
-        rayQueryFeatures.pNext = &rayTracingPipelineFeatures;
-        rayQueryFeatures.rayQuery = VK_TRUE;
-
-        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures{};
-        accelStructFeatures.sType
-            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-        accelStructFeatures.pNext = &rayQueryFeatures;
-        accelStructFeatures.accelerationStructure = VK_TRUE;
-
-        VkPhysicalDeviceVulkan14Features vulkanFeatures14{};
-        vulkanFeatures14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
-        vulkanFeatures14.pNext = &accelStructFeatures;
-        vulkanFeatures14.pushDescriptor = VK_TRUE;
-
-        VkPhysicalDeviceVulkan13Features vulkanFeatures13{};
-        vulkanFeatures13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-        vulkanFeatures13.pNext = &vulkanFeatures14;
-        vulkanFeatures13.dynamicRendering = VK_TRUE;
-        vulkanFeatures13.synchronization2 = VK_TRUE;
-        vulkanFeatures13.shaderDemoteToHelperInvocation = VK_TRUE;
-
-        VkPhysicalDeviceVulkan12Features vulkanFeatures12{};
-        vulkanFeatures12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-        vulkanFeatures12.pNext = &vulkanFeatures13;
-        vulkanFeatures12.scalarBlockLayout = VK_TRUE;
-        vulkanFeatures12.shaderInt8 = VK_TRUE;
-        vulkanFeatures12.storageBuffer8BitAccess = VK_TRUE;
-        vulkanFeatures12.uniformAndStorageBuffer8BitAccess = VK_TRUE;
-        vulkanFeatures12.bufferDeviceAddress = VK_TRUE;
-        vulkanFeatures12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-        vulkanFeatures12.descriptorBindingPartiallyBound = VK_TRUE;
-        vulkanFeatures12.descriptorBindingVariableDescriptorCount = VK_TRUE;
-        vulkanFeatures12.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
-        vulkanFeatures12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-        vulkanFeatures12.runtimeDescriptorArray = VK_TRUE;
-        vulkanFeatures12.drawIndirectCount = VK_TRUE;
-        vulkanFeatures12.shaderFloat16 = VK_TRUE;
-        vulkanFeatures12.samplerFilterMinmax = VK_TRUE;
-
-        VkPhysicalDeviceVulkan11Features vulkanFeatures11{};
-        vulkanFeatures11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-        vulkanFeatures11.pNext = &vulkanFeatures12;
-        vulkanFeatures11.shaderDrawParameters = VK_TRUE;
-        vulkanFeatures11.storagePushConstant16 = VK_TRUE;
-        vulkanFeatures11.storageBuffer16BitAccess = VK_TRUE;
-        vulkanFeatures11.uniformAndStorageBuffer16BitAccess = VK_TRUE;
-
-        VkPhysicalDeviceFeatures2 physicalDeviceFeatures{};
-        physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        physicalDeviceFeatures.pNext = &vulkanFeatures11;
-        physicalDeviceFeatures.features.multiDrawIndirect = VK_TRUE;
-        physicalDeviceFeatures.features.shaderInt64 = VK_TRUE;
-        physicalDeviceFeatures.features.vertexPipelineStoresAndAtomics = VK_TRUE;
-        physicalDeviceFeatures.features.fragmentStoresAndAtomics = VK_TRUE;
-        physicalDeviceFeatures.features.samplerAnisotropy = VK_TRUE;
-        physicalDeviceFeatures.features.sampleRateShading = VK_TRUE;
-        physicalDeviceFeatures.features.shaderInt16 = VK_TRUE;
-
-        // TODO: remove, use mesh shaders instead.
-        physicalDeviceFeatures.features.geometryShader = VK_TRUE;
+                .sampleRateShading = VK_TRUE,
+                .multiDrawIndirect = VK_TRUE,
+                .samplerAnisotropy = VK_TRUE,
+                .vertexPipelineStoresAndAtomics = VK_TRUE,
+                .fragmentStoresAndAtomics = VK_TRUE,
+                .shaderInt64 = VK_TRUE,
+                .shaderInt16 = VK_TRUE,
+            },
+        };
 
         const f32 queuePriority = 1.0f;
 
-        VkDeviceQueueCreateInfo deviceQueueInfo{};
-        deviceQueueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        deviceQueueInfo.queueFamilyIndex = queueInfo.queueIdx;
-        deviceQueueInfo.queueCount = 1;
-        deviceQueueInfo.pQueuePriorities = &queuePriority;
+        const VkDeviceQueueCreateInfo deviceQueueInfo = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueFamilyIndex = queueInfo.queueIdx,
+            .queueCount = 1,
+            .pQueuePriorities = &queuePriority,
+        };
 
-        VkDeviceCreateInfo deviceInfo{};
-        deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        deviceInfo.pNext = &physicalDeviceFeatures;
-        deviceInfo.queueCreateInfoCount = 1;
-        deviceInfo.pQueueCreateInfos = &deviceQueueInfo;
-        deviceInfo.enabledExtensionCount = u32(ARRAY_SIZE(requiredDeviceExtensions));
-        deviceInfo.ppEnabledExtensionNames = requiredDeviceExtensions;
+        const VkDeviceCreateInfo deviceInfo = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = &physicalDeviceFeatures,
+            .queueCreateInfoCount = 1,
+            .pQueueCreateInfos = &deviceQueueInfo,
+            .enabledExtensionCount = u32(ARRAY_SIZE(requiredDeviceExtensions)),
+            .ppEnabledExtensionNames = requiredDeviceExtensions,
+        };
 
         VK_CHECK(vkCreateDevice(mPhysicalDevice, &deviceInfo, nullptr, &mDevice));
 
@@ -445,12 +452,13 @@ bool Renderer::Init()
 
     // VMA.
     {
-        VmaAllocatorCreateInfo vmaAllocatorInfo{};
-        vmaAllocatorInfo.device = mDevice;
-        vmaAllocatorInfo.physicalDevice = mPhysicalDevice;
-        vmaAllocatorInfo.instance = mInstance;
-        vmaAllocatorInfo.vulkanApiVersion = VK_API_VERSION_1_4;
-        vmaAllocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+        VmaAllocatorCreateInfo vmaAllocatorInfo = {
+            .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+            .physicalDevice = mPhysicalDevice,
+            .device = mDevice,
+            .instance = mInstance,
+            .vulkanApiVersion = VK_API_VERSION_1_4,
+        };
 
         VmaVulkanFunctions vmaVulkanFunctions{};
         VK_CHECK(vmaImportVulkanFunctionsFromVolk(&vmaAllocatorInfo, &vmaVulkanFunctions));
@@ -472,17 +480,16 @@ bool Renderer::Init()
             // Should be always legal even on discrete GPUs if total allocated
             // size is less than 200 MB or so. But I don't care about the size,
             // since resizable BAR is somewhat widely supported.
-            const bool result = Vulkan::CreateBuffer(
-                mFrame[i].uniformBuffer,
-                mDevice,
-                mVmaAllocator,
-                sizeof(UniformData),
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-                    | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                "UniformBuffer"
-            );
-            if (!result)
+            if (!Vulkan::CreateBuffer(
+                    mFrame[i].uniformBuffer,
+                    mDevice,
+                    mVmaAllocator,
+                    sizeof(UniformData),
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                        | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                    "UniformBuffer"
+                ))
             {
                 return false;
             }
@@ -557,26 +564,29 @@ bool Renderer::Init()
 
     // Texture descriptor set layout.
     {
-        VkDescriptorSetLayoutBinding layoutBinding{};
-        layoutBinding.binding = 0;
-        layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        layoutBinding.descriptorCount = MAX_DESCRIPTOR_COUNT;
-        layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+        const VkDescriptorSetLayoutBinding layoutBinding = {
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .descriptorCount = MAX_DESCRIPTOR_COUNT,
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT,
+        };
 
         const VkDescriptorBindingFlags bindingFlags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT
             | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
-        VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
-        bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-        bindingFlagsInfo.bindingCount = 1;
-        bindingFlagsInfo.pBindingFlags = &bindingFlags;
+        const VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+            .bindingCount = 1,
+            .pBindingFlags = &bindingFlags,
+        };
 
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.pNext = &bindingFlagsInfo;
-        layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &layoutBinding;
+        const VkDescriptorSetLayoutCreateInfo layoutInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .pNext = &bindingFlagsInfo,
+            .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+            .bindingCount = 1,
+            .pBindings = &layoutBinding,
+        };
 
         VK_CHECK(
             vkCreateDescriptorSetLayout(mDevice, &layoutInfo, nullptr, &mTextureDescriptorSetLayout)
@@ -586,74 +596,87 @@ bool Renderer::Init()
 
     // Visibility buffer pipeline.
     {
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        };
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
-        inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        };
 
-        VkPipelineViewportStateCreateInfo viewportInfo{};
-        viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportInfo.viewportCount = 1;
-        viewportInfo.scissorCount = 1;
+        const VkPipelineViewportStateCreateInfo viewportInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1,
+            .scissorCount = 1,
+        };
 
-        VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
-        rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizationInfo.lineWidth = 1.0f;
+        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .cullMode = VK_CULL_MODE_BACK_BIT,
+            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .lineWidth = 1.0f,
+        };
 
-        VkPipelineMultisampleStateCreateInfo multisampleInfo{};
-        multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        };
 
-        VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
-        depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencilInfo.depthTestEnable = VK_TRUE;
-        depthStencilInfo.depthWriteEnable = VK_TRUE;
-        depthStencilInfo.depthCompareOp = VK_COMPARE_OP_GREATER;
+        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthTestEnable = VK_TRUE,
+            .depthWriteEnable = VK_TRUE,
+            .depthCompareOp = VK_COMPARE_OP_GREATER,
+        };
 
-        VkPipelineColorBlendAttachmentState colorBlendAttachments[1]{};
-        colorBlendAttachments[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT
-            | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        const VkPipelineColorBlendAttachmentState colorBlendAttachments[] = {
+            {
+                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                    | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+            },
+        };
 
-        VkPipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.logicOp = VK_LOGIC_OP_COPY;
-        colorBlending.attachmentCount = ARRAY_SIZE(colorBlendAttachments);
-        colorBlending.pAttachments = colorBlendAttachments;
+        const VkPipelineColorBlendStateCreateInfo colorBlending = {
+            .logicOp = VK_LOGIC_OP_COPY,
+            .attachmentCount = ARRAY_SIZE(colorBlendAttachments),
+            .pAttachments = colorBlendAttachments,
+        };
 
         const VkDynamicState dynamicStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
         };
 
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = u32(ARRAY_SIZE(dynamicStates));
-        dynamicState.pDynamicStates = dynamicStates;
+        const VkPipelineDynamicStateCreateInfo dynamicState = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount = u32(ARRAY_SIZE(dynamicStates)),
+            .pDynamicStates = dynamicStates,
+        };
 
         const VkFormat colorAttachmentFormats[] = {mVisibilityImageFormat};
 
-        VkPipelineRenderingCreateInfo pipelineRenderingInfo{};
-        pipelineRenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-        pipelineRenderingInfo.colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats);
-        pipelineRenderingInfo.pColorAttachmentFormats = colorAttachmentFormats;
-        pipelineRenderingInfo.depthAttachmentFormat = mDepthFormat;
+        const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
+            .pColorAttachmentFormats = colorAttachmentFormats,
+            .depthAttachmentFormat = mDepthFormat,
+        };
 
         static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
 
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.pNext = &pipelineRenderingInfo;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
-        pipelineInfo.pViewportState = &viewportInfo;
-        pipelineInfo.pRasterizationState = &rasterizationInfo;
-        pipelineInfo.pMultisampleState = &multisampleInfo;
-        pipelineInfo.pDepthStencilState = &depthStencilInfo;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = &dynamicState;
+        VkGraphicsPipelineCreateInfo pipelineInfo = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &pipelineRenderingInfo,
+            .pVertexInputState = &vertexInputInfo,
+            .pInputAssemblyState = &inputAssemblyInfo,
+            .pViewportState = &viewportInfo,
+            .pRasterizationState = &rasterizationInfo,
+            .pMultisampleState = &multisampleInfo,
+            .pDepthStencilState = &depthStencilInfo,
+            .pColorBlendState = &colorBlending,
+            .pDynamicState = &dynamicState,
+        };
 
         if (!Vulkan::CreateGraphicsPipeline(
                 mVisibilityPipeline,
@@ -671,69 +694,82 @@ bool Renderer::Init()
 
     // Debug draw rect pipeline.
     {
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        };
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
-        inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        };
 
-        VkPipelineViewportStateCreateInfo viewportInfo{};
-        viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportInfo.viewportCount = 1;
-        viewportInfo.scissorCount = 1;
+        const VkPipelineViewportStateCreateInfo viewportInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1,
+            .scissorCount = 1,
+        };
 
-        VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
-        rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizationInfo.lineWidth = 1.0f;
+        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .lineWidth = 1.0f,
+        };
 
-        VkPipelineMultisampleStateCreateInfo multisampleInfo{};
-        multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        };
 
-        VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
-        depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        };
 
-        VkPipelineColorBlendAttachmentState colorBlendAttachments[1]{};
-        colorBlendAttachments[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT
-            | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        const VkPipelineColorBlendAttachmentState colorBlendAttachments[] = {
+            {
+                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                    | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+            },
+        };
 
-        VkPipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.logicOp = VK_LOGIC_OP_COPY;
-        colorBlending.attachmentCount = ARRAY_SIZE(colorBlendAttachments);
-        colorBlending.pAttachments = colorBlendAttachments;
+        const VkPipelineColorBlendStateCreateInfo colorBlending = {
+            .logicOp = VK_LOGIC_OP_COPY,
+            .attachmentCount = ARRAY_SIZE(colorBlendAttachments),
+            .pAttachments = colorBlendAttachments,
+        };
 
         const VkDynamicState dynamicStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
         };
 
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = u32(ARRAY_SIZE(dynamicStates));
-        dynamicState.pDynamicStates = dynamicStates;
+        const VkPipelineDynamicStateCreateInfo dynamicState = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount = u32(ARRAY_SIZE(dynamicStates)),
+            .pDynamicStates = dynamicStates,
+        };
 
         const VkFormat colorAttachmentFormats[] = {mRenderImageFormat};
 
-        VkPipelineRenderingCreateInfo pipelineRenderingInfo{};
-        pipelineRenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-        pipelineRenderingInfo.colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats);
-        pipelineRenderingInfo.pColorAttachmentFormats = colorAttachmentFormats;
-        pipelineRenderingInfo.depthAttachmentFormat = mDepthFormat;
+        const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
+            .pColorAttachmentFormats = colorAttachmentFormats,
+            .depthAttachmentFormat = mDepthFormat,
+        };
 
         static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
 
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.pNext = &pipelineRenderingInfo;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
-        pipelineInfo.pViewportState = &viewportInfo;
-        pipelineInfo.pRasterizationState = &rasterizationInfo;
-        pipelineInfo.pMultisampleState = &multisampleInfo;
-        pipelineInfo.pDepthStencilState = &depthStencilInfo;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = &dynamicState;
+        VkGraphicsPipelineCreateInfo pipelineInfo = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &pipelineRenderingInfo,
+            .pVertexInputState = &vertexInputInfo,
+            .pInputAssemblyState = &inputAssemblyInfo,
+            .pViewportState = &viewportInfo,
+            .pRasterizationState = &rasterizationInfo,
+            .pMultisampleState = &multisampleInfo,
+            .pDepthStencilState = &depthStencilInfo,
+            .pColorBlendState = &colorBlending,
+            .pDynamicState = &dynamicState,
+        };
 
         if (!Vulkan::CreateGraphicsPipeline(
                 mDebugDrawRectPipeline,
@@ -751,69 +787,82 @@ bool Renderer::Init()
 
     // Fullscreen triangle pipeline.
     {
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        };
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
-        inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        };
 
-        VkPipelineViewportStateCreateInfo viewportInfo{};
-        viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportInfo.viewportCount = 1;
-        viewportInfo.scissorCount = 1;
+        const VkPipelineViewportStateCreateInfo viewportInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1,
+            .scissorCount = 1,
+        };
 
-        VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
-        rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
-        rasterizationInfo.lineWidth = 1.0f;
+        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .cullMode = VK_CULL_MODE_NONE,
+            .lineWidth = 1.0f,
+        };
 
-        VkPipelineMultisampleStateCreateInfo multisampleInfo{};
-        multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        };
 
-        VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
-        depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        };
 
-        VkPipelineColorBlendAttachmentState colorBlendAttachments[1]{};
-        colorBlendAttachments[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT
-            | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        const VkPipelineColorBlendAttachmentState colorBlendAttachments[] = {
+            {
+                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                    | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+            },
+        };
 
-        VkPipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.logicOp = VK_LOGIC_OP_COPY;
-        colorBlending.attachmentCount = ARRAY_SIZE(colorBlendAttachments);
-        colorBlending.pAttachments = colorBlendAttachments;
+        const VkPipelineColorBlendStateCreateInfo colorBlending = {
+            .logicOp = VK_LOGIC_OP_COPY,
+            .attachmentCount = ARRAY_SIZE(colorBlendAttachments),
+            .pAttachments = colorBlendAttachments,
+        };
 
         const VkDynamicState dynamicStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
         };
 
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = u32(ARRAY_SIZE(dynamicStates));
-        dynamicState.pDynamicStates = dynamicStates;
+        const VkPipelineDynamicStateCreateInfo dynamicState = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount = u32(ARRAY_SIZE(dynamicStates)),
+            .pDynamicStates = dynamicStates,
+        };
 
         const VkFormat colorAttachmentFormats[] = {mSwapchain.surfaceFormat.format};
 
-        VkPipelineRenderingCreateInfo pipelineRenderingInfo{};
-        pipelineRenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-        pipelineRenderingInfo.colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats);
-        pipelineRenderingInfo.pColorAttachmentFormats = colorAttachmentFormats;
+        const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
+            .pColorAttachmentFormats = colorAttachmentFormats,
+        };
 
         static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
 
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.pNext = &pipelineRenderingInfo;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
-        pipelineInfo.pViewportState = &viewportInfo;
-        pipelineInfo.pRasterizationState = &rasterizationInfo;
-        pipelineInfo.pMultisampleState = &multisampleInfo;
-        pipelineInfo.pDepthStencilState = &depthStencilInfo;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = &dynamicState;
+        VkGraphicsPipelineCreateInfo pipelineInfo = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &pipelineRenderingInfo,
+            .pVertexInputState = &vertexInputInfo,
+            .pInputAssemblyState = &inputAssemblyInfo,
+            .pViewportState = &viewportInfo,
+            .pRasterizationState = &rasterizationInfo,
+            .pMultisampleState = &multisampleInfo,
+            .pDepthStencilState = &depthStencilInfo,
+            .pColorBlendState = &colorBlending,
+            .pDynamicState = &dynamicState,
+        };
 
         if (!Vulkan::CreateGraphicsPipeline(
                 mFullscreenPipeline,
@@ -831,74 +880,87 @@ bool Renderer::Init()
 
     // Debug grad error pipeline.
     {
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        };
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
-        inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        };
 
-        VkPipelineViewportStateCreateInfo viewportInfo{};
-        viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewportInfo.viewportCount = 1;
-        viewportInfo.scissorCount = 1;
+        const VkPipelineViewportStateCreateInfo viewportInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .viewportCount = 1,
+            .scissorCount = 1,
+        };
 
-        VkPipelineRasterizationStateCreateInfo rasterizationInfo{};
-        rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizationInfo.lineWidth = 1.0f;
+        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            .cullMode = VK_CULL_MODE_BACK_BIT,
+            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .lineWidth = 1.0f,
+        };
 
-        VkPipelineMultisampleStateCreateInfo multisampleInfo{};
-        multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        };
 
-        VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
-        depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencilInfo.depthTestEnable = VK_TRUE;
-        depthStencilInfo.depthWriteEnable = VK_TRUE;
-        depthStencilInfo.depthCompareOp = VK_COMPARE_OP_GREATER;
+        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthTestEnable = VK_TRUE,
+            .depthWriteEnable = VK_TRUE,
+            .depthCompareOp = VK_COMPARE_OP_GREATER,
+        };
 
-        VkPipelineColorBlendAttachmentState colorBlendAttachments[1]{};
-        colorBlendAttachments[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT
-            | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        const VkPipelineColorBlendAttachmentState colorBlendAttachments[] = {
+            {
+                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                    | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+            },
+        };
 
-        VkPipelineColorBlendStateCreateInfo colorBlending{};
-        colorBlending.logicOp = VK_LOGIC_OP_COPY;
-        colorBlending.attachmentCount = ARRAY_SIZE(colorBlendAttachments);
-        colorBlending.pAttachments = colorBlendAttachments;
+        const VkPipelineColorBlendStateCreateInfo colorBlending = {
+            .logicOp = VK_LOGIC_OP_COPY,
+            .attachmentCount = ARRAY_SIZE(colorBlendAttachments),
+            .pAttachments = colorBlendAttachments,
+        };
 
         const VkDynamicState dynamicStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
         };
 
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = u32(ARRAY_SIZE(dynamicStates));
-        dynamicState.pDynamicStates = dynamicStates;
+        const VkPipelineDynamicStateCreateInfo dynamicState = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount = u32(ARRAY_SIZE(dynamicStates)),
+            .pDynamicStates = dynamicStates,
+        };
 
         const VkFormat colorAttachmentFormats[] = {mSwapchain.surfaceFormat.format};
 
-        VkPipelineRenderingCreateInfo pipelineRenderingInfo{};
-        pipelineRenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-        pipelineRenderingInfo.colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats);
-        pipelineRenderingInfo.pColorAttachmentFormats = colorAttachmentFormats;
-        pipelineRenderingInfo.depthAttachmentFormat = mDepthFormat;
+        const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
+            .pColorAttachmentFormats = colorAttachmentFormats,
+            .depthAttachmentFormat = mDepthFormat,
+        };
 
         static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
 
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.pNext = &pipelineRenderingInfo;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
-        pipelineInfo.pViewportState = &viewportInfo;
-        pipelineInfo.pRasterizationState = &rasterizationInfo;
-        pipelineInfo.pMultisampleState = &multisampleInfo;
-        pipelineInfo.pDepthStencilState = &depthStencilInfo;
-        pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = &dynamicState;
+        VkGraphicsPipelineCreateInfo pipelineInfo = {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = &pipelineRenderingInfo,
+            .pVertexInputState = &vertexInputInfo,
+            .pInputAssemblyState = &inputAssemblyInfo,
+            .pViewportState = &viewportInfo,
+            .pRasterizationState = &rasterizationInfo,
+            .pMultisampleState = &multisampleInfo,
+            .pDepthStencilState = &depthStencilInfo,
+            .pColorBlendState = &colorBlending,
+            .pDynamicState = &dynamicState,
+        };
 
         if (!Vulkan::CreateGraphicsPipeline(
                 mDebugGradErrorPipeline,
@@ -991,20 +1053,23 @@ bool Renderer::Init()
 
     // Command pool.
     {
-        VkCommandPoolCreateInfo cmdPoolInfo{};
-        cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        cmdPoolInfo.queueFamilyIndex = mQueueInfo.familyIdx;
+        const VkCommandPoolCreateInfo cmdPoolInfo = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            .queueFamilyIndex = mQueueInfo.familyIdx,
+        };
+
         VK_CHECK(vkCreateCommandPool(mDevice, &cmdPoolInfo, nullptr, &mCommandPool));
     }
 
     // Command buffers.
     {
-        VkCommandBufferAllocateInfo cmdBufferAllocateInfo{};
-        cmdBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        cmdBufferAllocateInfo.commandPool = mCommandPool;
-        cmdBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        cmdBufferAllocateInfo.commandBufferCount = 1;
+        const VkCommandBufferAllocateInfo cmdBufferAllocateInfo = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = mCommandPool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+        };
 
         for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
         {
@@ -1016,8 +1081,9 @@ bool Renderer::Init()
 
     // Synchronization primitives.
     {
-        VkSemaphoreCreateInfo semaphoreInfo{};
-        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        const VkSemaphoreCreateInfo semaphoreInfo = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        };
 
         mRenderFinishedSemaphores.resize(mSwapchain.images.size());
         for (VkSemaphore& sem : mRenderFinishedSemaphores)
@@ -1027,9 +1093,10 @@ bool Renderer::Init()
             sem = semaphore;
         }
 
-        VkFenceCreateInfo fenceInfo{};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        const VkFenceCreateInfo fenceInfo = {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        };
 
         for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
         {
@@ -1045,36 +1112,40 @@ bool Renderer::Init()
 
     // Samplers.
     {
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.anisotropyEnable = VK_TRUE;
-        samplerInfo.maxAnisotropy = 4.0f;
-        samplerInfo.maxLod = 16.0f;
+        VkSamplerCreateInfo samplerInfo = {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .anisotropyEnable = VK_TRUE,
+            .maxAnisotropy = 4.0f,
+            .maxLod = 16.0f,
+        };
         VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mTextureSampler));
 
-        samplerInfo = {};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samplerInfo = {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        };
         VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mLinearSampler));
 
-        VkSamplerReductionModeCreateInfo reductionModeInfo{};
-        reductionModeInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO;
-        reductionModeInfo.reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN;
+        const VkSamplerReductionModeCreateInfo reductionModeInfo = {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO,
+            .reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN,
+        };
 
-        samplerInfo = {};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.pNext = &reductionModeInfo;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.maxLod = 16.0f;
+        samplerInfo = {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .pNext = &reductionModeInfo,
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .maxLod = 16.0f,
+        };
         VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mMinSampler));
     }
 
@@ -1281,36 +1352,40 @@ bool Renderer::Init()
             },
         };
 
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = ARRAY_SIZE(poolSizes);
-        poolInfo.pPoolSizes = poolSizes;
+        const VkDescriptorPoolCreateInfo poolInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+            .maxSets = 1,
+            .poolSizeCount = ARRAY_SIZE(poolSizes),
+            .pPoolSizes = poolSizes,
+        };
         VK_CHECK(vkCreateDescriptorPool(mDevice, &poolInfo, nullptr, &mDescriptorPool));
 
-        VkDescriptorSetAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocateInfo.descriptorPool = mDescriptorPool;
-        allocateInfo.descriptorSetCount = 1;
-        allocateInfo.pSetLayouts = &mTextureDescriptorSetLayout;
+        const VkDescriptorSetAllocateInfo allocateInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = mDescriptorPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &mTextureDescriptorSetLayout,
+        };
 
         VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocateInfo, &mTextureDescriptorSet));
 
         for (size_t i = 0; i < mTextures.size(); ++i)
         {
-            VkDescriptorImageInfo imageInfo{};
-            imageInfo.imageView = mTextures[i].view;
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            const VkDescriptorImageInfo imageInfo = {
+                .imageView = mTextures[i].view,
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            };
 
-            VkWriteDescriptorSet writeSet{};
-            writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeSet.dstSet = mTextureDescriptorSet;
-            writeSet.dstBinding = 0;
-            writeSet.dstArrayElement = u32(i);
-            writeSet.descriptorCount = 1;
-            writeSet.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-            writeSet.pImageInfo = &imageInfo;
+            const VkWriteDescriptorSet writeSet = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = mTextureDescriptorSet,
+                .dstBinding = 0,
+                .dstArrayElement = u32(i),
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &imageInfo,
+            };
 
             vkUpdateDescriptorSets(mDevice, 1, &writeSet, 0, nullptr);
         }
@@ -1336,9 +1411,10 @@ bool Renderer::Init()
 
         VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        const VkCommandBufferBeginInfo beginInfo = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        };
         VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
 
         vkCmdFillBuffer(
@@ -1351,10 +1427,11 @@ bool Renderer::Init()
 
         VK_CHECK(vkEndCommandBuffer(cmd));
 
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
+        const VkSubmitInfo submitInfo = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmd,
+        };
 
         VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
         VK_CHECK(vkQueueWaitIdle(mQueueInfo.queue));
@@ -1574,26 +1651,27 @@ bool Renderer::Render(f32 deltaTime)
         break;
     }
 
-    constexpr VkPipelineStageFlags waitDstStageMask
-        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &frame.imageAcquireSemaphore;
-    submitInfo.pWaitDstStageMask = &waitDstStageMask;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &frame.commandBuffer;
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &mRenderFinishedSemaphores[imageIdx];
+    const VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    const VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &frame.imageAcquireSemaphore,
+        .pWaitDstStageMask = &waitDstStageMask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &frame.commandBuffer,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &mRenderFinishedSemaphores[imageIdx],
+    };
     VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, frame.queueSubmitFence));
 
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &mRenderFinishedSemaphores[imageIdx];
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &mSwapchain.swapchain;
-    presentInfo.pImageIndices = &imageIdx;
+    const VkPresentInfoKHR presentInfo = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &mRenderFinishedSemaphores[imageIdx],
+        .swapchainCount = 1,
+        .pSwapchains = &mSwapchain.swapchain,
+        .pImageIndices = &imageIdx,
+    };
     vulkanResult = vkQueuePresentKHR(mQueueInfo.queue, &presentInfo);
     if (vulkanResult == VK_ERROR_OUT_OF_DATE_KHR || vulkanResult == VK_SUBOPTIMAL_KHR)
     {
@@ -1720,14 +1798,19 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
                 return false;
             }
 
-            VkBufferImageCopy& region = copyRegions[mipLevel];
-            region.bufferOffset = offset;
-            region.imageSubresource.layerCount = 1;
-            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            region.imageSubresource.mipLevel = mipLevel;
-            region.imageExtent.width = extent.width >> mipLevel;
-            region.imageExtent.height = extent.height >> mipLevel;
-            region.imageExtent.depth = 1;
+            copyRegions[mipLevel] = {
+                .bufferOffset = offset,
+                .imageSubresource = {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = mipLevel,
+                    .layerCount = 1,
+                },
+                .imageExtent = {
+                    .width = extent.width >> mipLevel,
+                    .height = extent.height >> mipLevel,
+                    .depth = 1,
+                }
+            };
         }
         memcpy(stagingBuffer.mapped, ktxData, size);
         Vulkan::UnmapBuffer(stagingBuffer, mVmaAllocator);
@@ -1736,9 +1819,10 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
 
         VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        const VkCommandBufferBeginInfo beginInfo = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        };
         VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
 
         Vulkan::CmdImageMemoryBarrier(
@@ -1786,10 +1870,11 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
 
         VK_CHECK(vkEndCommandBuffer(cmd));
 
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
+        const VkSubmitInfo submitInfo = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmd,
+        };
 
         VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
         VK_CHECK(vkQueueWaitIdle(mQueueInfo.queue));
@@ -1917,12 +2002,13 @@ bool Renderer::CreateAndUploadBlas(
 
     for (size_t i = 0; i < meshPrimitives.size(); ++i)
     {
-        VkAccelerationStructureCreateInfoKHR accelerationInfo{};
-        accelerationInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-        accelerationInfo.buffer = mBlasBuffer.buffer;
-        accelerationInfo.offset = accelerationOffsets[i];
-        accelerationInfo.size = accelerationSizes[i];
-        accelerationInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+        const VkAccelerationStructureCreateInfoKHR accelerationInfo = {
+            .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+            .buffer = mBlasBuffer.buffer,
+            .offset = accelerationOffsets[i],
+            .size = accelerationSizes[i],
+            .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+        };
         VK_CHECK(vkCreateAccelerationStructureKHR(mDevice, &accelerationInfo, nullptr, &mBlas[i]));
     }
 
@@ -1944,9 +2030,10 @@ bool Renderer::CreateAndUploadBlas(
 
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    const VkCommandBufferBeginInfo beginInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
 
     VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
 
@@ -1959,10 +2046,11 @@ bool Renderer::CreateAndUploadBlas(
 
     VK_CHECK(vkEndCommandBuffer(cmd));
 
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &cmd;
+    const VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+    };
 
     VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
     VK_CHECK(vkDeviceWaitIdle(mDevice));
@@ -2001,9 +2089,10 @@ bool Renderer::CreateAndUploadTlas(
 
     for (size_t i = 0; i < mBlas.size(); ++i)
     {
-        VkAccelerationStructureDeviceAddressInfoKHR info{};
-        info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-        info.accelerationStructure = mBlas[i];
+        const VkAccelerationStructureDeviceAddressInfoKHR info = {
+            .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
+            .accelerationStructure = mBlas[i],
+        };
         blasAddresses[i] = vkGetAccelerationStructureDeviceAddressKHR(mDevice, &info);
         if (!blasAddresses[i])
         {
@@ -2064,8 +2153,9 @@ bool Renderer::CreateAndUploadTlas(
 
     const u32 primitiveCount = u32(meshPrimitives.size());
 
-    VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
-    sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+    VkAccelerationStructureBuildSizesInfoKHR sizeInfo = {
+        .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+    };
     vkGetAccelerationStructureBuildSizesKHR(
         mDevice,
         VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
@@ -2110,35 +2200,39 @@ bool Renderer::CreateAndUploadTlas(
     }
     DEFER(Vulkan::DestroyBuffer(scratchBuffer, mVmaAllocator));
 
-    VkAccelerationStructureCreateInfoKHR accelerationInfo{};
-    accelerationInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    accelerationInfo.buffer = mTlasBuffer.buffer;
-    accelerationInfo.size = sizeInfo.accelerationStructureSize;
-    accelerationInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    const VkAccelerationStructureCreateInfoKHR accelerationInfo = {
+        .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+        .buffer = mTlasBuffer.buffer,
+        .size = sizeInfo.accelerationStructureSize,
+        .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+    };
 
     VK_CHECK(vkCreateAccelerationStructureKHR(mDevice, &accelerationInfo, nullptr, &mTlas));
 
     buildInfo.dstAccelerationStructure = mTlas;
     buildInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
 
-    VkAccelerationStructureBuildRangeInfoKHR buildRange{};
-    buildRange.primitiveCount = primitiveCount;
+    const VkAccelerationStructureBuildRangeInfoKHR buildRange = {
+        .primitiveCount = primitiveCount,
+    };
     const VkAccelerationStructureBuildRangeInfoKHR* const buildRangePtr = &buildRange;
 
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-    VkCommandBufferBeginInfo cmdBeginInfo{};
-    cmdBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    const VkCommandBufferBeginInfo cmdBeginInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
     vkCmdBuildAccelerationStructuresKHR(cmd, 1, &buildInfo, &buildRangePtr);
 
     VK_CHECK(vkEndCommandBuffer(cmd));
 
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &cmd;
+    const VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+    };
 
     VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
 
@@ -2164,8 +2258,9 @@ void Renderer::VisibilityBufferPass(VkCommandBuffer cmd, bool cullLate)
         }
     );
 
-    PushConstantsVisibilityBuffer pushConstants{};
-    pushConstants.cullLate = cullLate;
+    const PushConstantsVisibilityBuffer pushConstants = {
+        .cullLate = cullLate,
+    };
     vkCmdPushConstants(
         cmd,
         mVisibilityPipeline.layout,
@@ -2175,40 +2270,45 @@ void Renderer::VisibilityBufferPass(VkCommandBuffer cmd, bool cullLate)
         &pushConstants
     );
 
-    VkViewport viewport{};
-    viewport.width = f32(mRenderImageExtent.width);
-    viewport.height = -f32(mRenderImageExtent.height);
-    viewport.y = f32(mRenderImageExtent.height);
-    viewport.maxDepth = 1.0f;
+    const VkViewport viewport = {
+        .y = f32(mRenderImageExtent.height),
+        .width = f32(mRenderImageExtent.width),
+        .height = -f32(mRenderImageExtent.height),
+        .maxDepth = 1.0f,
+    };
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-    VkRect2D scissor{};
-    scissor.extent = mRenderImageExtent;
+    const VkRect2D scissor = {
+        .extent = mRenderImageExtent,
+    };
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    VkRenderingAttachmentInfo renderingAttachmentInfos[1]{};
-    renderingAttachmentInfos[0].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    renderingAttachmentInfos[0].imageView = mVisibilityImage.view;
-    renderingAttachmentInfos[0].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    renderingAttachmentInfos[0].loadOp
-        = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-    renderingAttachmentInfos[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    const VkRenderingAttachmentInfo renderingAttachmentInfos[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = mVisibilityImage.view,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        },
+    };
 
-    VkRenderingAttachmentInfo depthAttachmentInfo{};
-    depthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    depthAttachmentInfo.imageView = mDepthImage.view;
-    depthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    depthAttachmentInfo.loadOp
-        = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    const VkRenderingAttachmentInfo depthAttachmentInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = mDepthImage.view,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    };
 
-    VkRenderingInfo renderingInfo{};
-    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    renderingInfo.renderArea.extent = mRenderImageExtent;
-    renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = ARRAY_SIZE(renderingAttachmentInfos);
-    renderingInfo.pColorAttachments = renderingAttachmentInfos;
-    renderingInfo.pDepthAttachment = &depthAttachmentInfo;
+    const VkRenderingInfo renderingInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = {.extent = mRenderImageExtent},
+        .layerCount = 1,
+        .colorAttachmentCount = ARRAY_SIZE(renderingAttachmentInfos),
+        .pColorAttachments = renderingAttachmentInfos,
+        .pDepthAttachment = &depthAttachmentInfo,
+    };
 
     vkCmdBeginRendering(cmd, &renderingInfo);
 
@@ -2451,29 +2551,33 @@ void Renderer::DebugDrawPass(VkCommandBuffer cmd)
         }
     );
 
-    VkViewport viewport{};
-    viewport.width = f32(mSwapchain.extent.width);
-    viewport.height = f32(mSwapchain.extent.height);
-    viewport.maxDepth = 1.0f;
+    const VkViewport viewport = {
+        .width = f32(mSwapchain.extent.width),
+        .height = f32(mSwapchain.extent.height),
+        .maxDepth = 1.0f,
+    };
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-    VkRect2D scissor{};
-    scissor.extent = mSwapchain.extent;
+    const VkRect2D scissor = {
+        .extent = mSwapchain.extent,
+    };
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    VkRenderingAttachmentInfo renderingAttachmentInfo{};
-    renderingAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    renderingAttachmentInfo.imageView = mFrame[mFrameIdx].resolvedRenderImage.view;
-    renderingAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    renderingAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    renderingAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    const VkRenderingAttachmentInfo renderingAttachmentInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = mFrame[mFrameIdx].resolvedRenderImage.view,
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    };
 
-    VkRenderingInfo renderingInfo{};
-    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    renderingInfo.renderArea.extent = mSwapchain.extent;
-    renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &renderingAttachmentInfo;
+    const VkRenderingInfo renderingInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = {.extent = mSwapchain.extent},
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &renderingAttachmentInfo,
+    };
 
     vkCmdBeginRendering(cmd, &renderingInfo);
 
@@ -2497,30 +2601,34 @@ void Renderer::FullscreenPass(VkCommandBuffer cmd, u32 imageIdx)
         }
     );
 
-    VkViewport viewport{};
-    viewport.width = f32(mSwapchain.extent.width);
-    viewport.height = -f32(mSwapchain.extent.height);
-    viewport.y = f32(mSwapchain.extent.height);
-    viewport.maxDepth = 1.0f;
+    const VkViewport viewport = {
+        .y = f32(mSwapchain.extent.height),
+        .width = f32(mSwapchain.extent.width),
+        .height = -f32(mSwapchain.extent.height),
+        .maxDepth = 1.0f,
+    };
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-    VkRect2D scissor{};
-    scissor.extent = mSwapchain.extent;
+    const VkRect2D scissor = {
+        .extent = mSwapchain.extent,
+    };
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    VkRenderingAttachmentInfo renderingAttachmentInfo{};
-    renderingAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    renderingAttachmentInfo.imageView = mSwapchain.images[imageIdx].view;
-    renderingAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    renderingAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    renderingAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    const VkRenderingAttachmentInfo renderingAttachmentInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = mSwapchain.images[imageIdx].view,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    };
 
-    VkRenderingInfo renderingInfo{};
-    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    renderingInfo.renderArea.extent = mSwapchain.extent;
-    renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachments = &renderingAttachmentInfo;
+    const VkRenderingInfo renderingInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = {.extent = mSwapchain.extent},
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &renderingAttachmentInfo,
+    };
 
     vkCmdBeginRendering(cmd, &renderingInfo);
 
@@ -2548,41 +2656,45 @@ void Renderer::DebugDrawGradErrorPass(VkCommandBuffer cmd, bool cullLate, u32 im
         }
     );
 
-    VkViewport viewport{};
-    viewport.width = f32(mSwapchain.extent.width);
-    viewport.height = -f32(mSwapchain.extent.height);
-    viewport.y = f32(mSwapchain.extent.height);
-    viewport.maxDepth = 1.0f;
+    const VkViewport viewport = {
+        .y = f32(mSwapchain.extent.height),
+        .width = f32(mSwapchain.extent.width),
+        .height = -f32(mSwapchain.extent.height),
+        .maxDepth = 1.0f,
+    };
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-    VkRect2D scissor{};
-    scissor.extent = mSwapchain.extent;
+    const VkRect2D scissor = {
+        .extent = mSwapchain.extent,
+    };
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    VkRenderingAttachmentInfo renderingAttachmentInfos[1]{};
+    const VkRenderingAttachmentInfo renderingAttachmentInfos[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = mSwapchain.images[imageIdx].view,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        },
+    };
 
-    renderingAttachmentInfos[0].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    renderingAttachmentInfos[0].imageView = mSwapchain.images[imageIdx].view;
-    renderingAttachmentInfos[0].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    renderingAttachmentInfos[0].loadOp
-        = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-    renderingAttachmentInfos[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    const VkRenderingAttachmentInfo depthAttachmentInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = mDepthImage.view,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    };
 
-    VkRenderingAttachmentInfo depthAttachmentInfo{};
-    depthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    depthAttachmentInfo.imageView = mDepthImage.view;
-    depthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    depthAttachmentInfo.loadOp
-        = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-    VkRenderingInfo renderingInfo{};
-    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    renderingInfo.renderArea.extent = mSwapchain.extent;
-    renderingInfo.layerCount = 1;
-    renderingInfo.colorAttachmentCount = ARRAY_SIZE(renderingAttachmentInfos);
-    renderingInfo.pColorAttachments = renderingAttachmentInfos;
-    renderingInfo.pDepthAttachment = &depthAttachmentInfo;
+    const VkRenderingInfo renderingInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = {.extent = mSwapchain.extent},
+        .layerCount = 1,
+        .colorAttachmentCount = ARRAY_SIZE(renderingAttachmentInfos),
+        .pColorAttachments = renderingAttachmentInfos,
+        .pDepthAttachment = &depthAttachmentInfo,
+    };
 
     vkCmdBeginRendering(cmd, &renderingInfo);
 
@@ -2609,8 +2721,9 @@ bool Renderer::RecordDebugGradErrorCommandBuffer(u32 imageIdx)
 
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-    VkCommandBufferBeginInfo cmdBeginInfo{};
-    cmdBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    const VkCommandBufferBeginInfo cmdBeginInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
     Vulkan::CmdMemoryBarrier(
@@ -2787,21 +2900,24 @@ bool Renderer::RecordDebugGradErrorCommandBuffer(u32 imageIdx)
         return false;
     }
 
+    // TODO: separate pass.
     if (mEnableUI)
     {
-        VkRenderingAttachmentInfo renderingAttachmentInfo{};
-        renderingAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        renderingAttachmentInfo.imageView = mSwapchain.images[imageIdx].view;
-        renderingAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        renderingAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        renderingAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        const VkRenderingAttachmentInfo renderingAttachmentInfo = {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = mSwapchain.images[imageIdx].view,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        };
 
-        VkRenderingInfo renderingInfo{};
-        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-        renderingInfo.renderArea.extent = mSwapchain.extent;
-        renderingInfo.layerCount = 1;
-        renderingInfo.colorAttachmentCount = 1;
-        renderingInfo.pColorAttachments = &renderingAttachmentInfo;
+        const VkRenderingInfo renderingInfo = {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea = {.extent = mSwapchain.extent},
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &renderingAttachmentInfo,
+        };
 
         vkCmdBeginRendering(cmd, &renderingInfo);
 
@@ -2841,8 +2957,9 @@ bool Renderer::RecordCommandBuffer(u32 imageIdx)
 
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
 
-    VkCommandBufferBeginInfo cmdBeginInfo{};
-    cmdBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    const VkCommandBufferBeginInfo cmdBeginInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
     VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
     Vulkan::CmdMemoryBarrier(
@@ -3145,19 +3262,21 @@ bool Renderer::RecordCommandBuffer(u32 imageIdx)
 
     if (mEnableUI)
     {
-        VkRenderingAttachmentInfo renderingAttachmentInfo{};
-        renderingAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        renderingAttachmentInfo.imageView = mSwapchain.images[imageIdx].view;
-        renderingAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        renderingAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        renderingAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        const VkRenderingAttachmentInfo renderingAttachmentInfo = {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = mSwapchain.images[imageIdx].view,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        };
 
-        VkRenderingInfo renderingInfo{};
-        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-        renderingInfo.renderArea.extent = mSwapchain.extent;
-        renderingInfo.layerCount = 1;
-        renderingInfo.colorAttachmentCount = 1;
-        renderingInfo.pColorAttachments = &renderingAttachmentInfo;
+        const VkRenderingInfo renderingInfo = {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea = {.extent = mSwapchain.extent},
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &renderingAttachmentInfo,
+        };
 
         vkCmdBeginRendering(cmd, &renderingInfo);
 
@@ -3297,20 +3416,21 @@ bool Renderer::CreateSwapchain()
         surfaceCompositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
     }
 
-    VkSwapchainCreateInfoKHR swapchainInfo{};
-    swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchainInfo.surface = mSurface;
-    swapchainInfo.minImageCount = mSwapchain.minImageCount;
-    swapchainInfo.imageFormat = mSwapchain.surfaceFormat.format;
-    swapchainInfo.imageColorSpace = mSwapchain.surfaceFormat.colorSpace;
-    swapchainInfo.imageExtent = mSwapchain.extent;
-    swapchainInfo.imageArrayLayers = 1;
-    swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchainInfo.preTransform = surfaceCapabilities.currentTransform;
-    swapchainInfo.compositeAlpha = surfaceCompositeAlpha;
-    swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    swapchainInfo.clipped = VK_TRUE;
+    const VkSwapchainCreateInfoKHR swapchainInfo = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .surface = mSurface,
+        .minImageCount = mSwapchain.minImageCount,
+        .imageFormat = mSwapchain.surfaceFormat.format,
+        .imageColorSpace = mSwapchain.surfaceFormat.colorSpace,
+        .imageExtent = mSwapchain.extent,
+        .imageArrayLayers = 1,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .preTransform = surfaceCapabilities.currentTransform,
+        .compositeAlpha = surfaceCompositeAlpha,
+        .presentMode = VK_PRESENT_MODE_FIFO_KHR,
+        .clipped = VK_TRUE,
+    };
 
     VK_CHECK(vkCreateSwapchainKHR(mDevice, &swapchainInfo, nullptr, &mSwapchain.swapchain));
 
@@ -3328,14 +3448,16 @@ bool Renderer::CreateSwapchain()
     }
 
     // Creating image views for every swapchain image.
-    VkImageViewCreateInfo imageViewInfo{};
-    imageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewInfo.format = mSwapchain.surfaceFormat.format;
-    imageViewInfo.subresourceRange = {};
-    imageViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageViewInfo.subresourceRange.layerCount = 1;
-    imageViewInfo.subresourceRange.levelCount = 1;
+    VkImageViewCreateInfo imageViewInfo = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = mSwapchain.surfaceFormat.format,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    };
 
     for (u32 i = 0; i < swapchainImageCount; ++i)
     {
@@ -3564,15 +3686,18 @@ bool Renderer::CreateDepthResources()
 
     for (size_t i = 0; i < mDepthPyramidMipImageViews.size(); ++i)
     {
-        VkImageViewCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        info.image = mDepthPyramidImage.image;
-        info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        info.format = depthPyramidFormat;
-        info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        info.subresourceRange.baseMipLevel = u32(i);
-        info.subresourceRange.levelCount = 1;
-        info.subresourceRange.layerCount = 1;
+        const VkImageViewCreateInfo info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = mDepthPyramidImage.image,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = depthPyramidFormat,
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = u32(i),
+                .levelCount = 1,
+                .layerCount = 1,
+            },
+        };
         vkCreateImageView(mDevice, &info, nullptr, &mDepthPyramidMipImageViews[i]);
     }
 
