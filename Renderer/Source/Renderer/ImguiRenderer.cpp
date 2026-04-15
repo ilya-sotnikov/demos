@@ -12,26 +12,16 @@
 
 bool ImguiRenderer::Init(
     SDL_Window* window,
-    VkPhysicalDevice physicalDevice,
-    VkDevice device,
-    VmaAllocator vmaAllocator,
+    Vulkan::Device device,
     VkCommandPool commandPool,
-    Vulkan::QueueInfo queueInfo,
     VkFormat colorFormat
 )
 {
     DEBUG_ASSERT(window);
-    DEBUG_ASSERT(physicalDevice);
-    DEBUG_ASSERT(device);
-    DEBUG_ASSERT(vmaAllocator);
     DEBUG_ASSERT(commandPool);
-    DEBUG_ASSERT(queueInfo.queue);
 
-    mPhysicalDevice = physicalDevice;
     mDevice = device;
-    mVmaAllocator = vmaAllocator;
     mCommandPool = commandPool;
-    mQueueInfo = queueInfo;
 
     if (!IMGUI_CHECKVERSION())
     {
@@ -78,77 +68,35 @@ bool ImguiRenderer::Init(
     style.FontScaleDpi = windowScale;
 
     // Font image.
-    {
-        VkFormat fontImageFormat{};
-        if (!Vulkan::FindSupportedImageFormat(
-                fontImageFormat,
-                physicalDevice,
-                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                {VK_FORMAT_R8G8B8A8_UNORM}
-            ))
-        {
-            fprintf(stderr, "vulkan: failed to find a suitable imgui font image format\n");
-            return false;
-        }
-
-        const VkImageCreateInfo imageInfo = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = fontImageFormat,
-            .extent = {u32(texWidth), u32(texHeight), 1},
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
+    if (!mDevice.CreateImage({
+            .image = mFontImage,
+            .formats = {VK_FORMAT_R8G8B8A8_UNORM},
             .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        };
-
-        const VmaAllocationCreateInfo allocationInfo = {
-            .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        };
-
-        // TODO: why did I not use my own wrapper? Forgot to change it?
-        VK_CHECK(vmaCreateImage(
-            mVmaAllocator,
-            &imageInfo,
-            &allocationInfo,
-            &mFontImage.image,
-            &mFontImage.allocation,
-            nullptr
-        ));
-
-        const VkImageViewCreateInfo viewInfo = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .image = mFontImage.image,
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = fontImageFormat,
-            .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .levelCount = 1,
-                .layerCount = 1,
-            },
-        };
-
-        VK_CHECK(vkCreateImageView(mDevice, &viewInfo, nullptr, &mFontImage.view));
+            .width = u32(texWidth),
+            .height = u32(texHeight),
+            .debugName = "FontImage",
+        }))
+    {
+        return false;
     }
 
     // Uploading buffer data to font image.
     {
         Vulkan::Buffer stagingBuffer{};
-        const bool result = Vulkan::CreateBuffer(
-            stagingBuffer,
-            mDevice,
-            mVmaAllocator,
-            uploadSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            "stagingBuffer"
-        );
+        const bool result = mDevice.CreateBuffer({
+            .buffer = stagingBuffer,
+            .size = uploadSize,
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            .requiredFlags
+            = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            .debugName = "StagingBuffer",
+        });
         if (!result)
         {
             fprintf(stderr, "Vulkan failed to create a staging buffer\n");
             return false;
         }
-        DEFER(Vulkan::DestroyBuffer(stagingBuffer, mVmaAllocator));
+        DEFER(mDevice.DestroyBuffer(stagingBuffer));
 
         memcpy(stagingBuffer.mapped, fontData, uploadSize);
 
@@ -160,8 +108,8 @@ bool ImguiRenderer::Init(
         };
 
         VkCommandBuffer copyCmdBuffer{};
-        VK_CHECK(vkAllocateCommandBuffers(mDevice, &allocateInfo, &copyCmdBuffer));
-        DEFER(vkFreeCommandBuffers(mDevice, mCommandPool, 1, &copyCmdBuffer));
+        VK_CHECK(vkAllocateCommandBuffers(mDevice.mDevice, &allocateInfo, &copyCmdBuffer));
+        DEFER(vkFreeCommandBuffers(mDevice.mDevice, mCommandPool, 1, &copyCmdBuffer));
 
         const VkCommandBufferBeginInfo beginInfo = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -228,12 +176,12 @@ bool ImguiRenderer::Init(
 
         const VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
         VkFence fence{};
-        VK_CHECK(vkCreateFence(mDevice, &fenceInfo, nullptr, &fence));
-        DEFER(vkDestroyFence(mDevice, fence, nullptr));
+        VK_CHECK(vkCreateFence(mDevice.mDevice, &fenceInfo, nullptr, &fence));
+        DEFER(vkDestroyFence(mDevice.mDevice, fence, nullptr));
 
-        VK_CHECK(vkQueueSubmit(queueInfo.queue, 1, &submitInfo, fence));
+        VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, fence));
 
-        VK_CHECK(vkWaitForFences(mDevice, 1, &fence, VK_TRUE, 1'000'000'000));
+        VK_CHECK(vkWaitForFences(mDevice.mDevice, 1, &fence, VK_TRUE, 1'000'000'000));
     }
 
     // Font texture sampler.
@@ -248,16 +196,11 @@ bool ImguiRenderer::Init(
             .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
         };
-        VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mFontSampler));
+        VK_CHECK(vkCreateSampler(mDevice.mDevice, &samplerInfo, nullptr, &mFontSampler));
     }
 
     // Pipeline.
     {
-        const VkPushConstantRange pushConstantRange = {
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .size = sizeof(PushConstantBlock),
-        };
-
         const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -333,7 +276,7 @@ bool ImguiRenderer::Init(
         VkFormat stencilFormat{};
         if (!Vulkan::FindSupportedImageFormat(
                 stencilFormat,
-                physicalDevice,
+                mDevice.mPhysicalDevice,
                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                 {VK_FORMAT_S8_UINT}
             ))
@@ -361,15 +304,12 @@ bool ImguiRenderer::Init(
             .pColorBlendState = &colorBlendInfo,
             .pDynamicState = &dynamicInfo,
         };
-        if (!Vulkan::CreateGraphicsPipeline(
-                mPipeline,
-                mDevice,
-                {"Imgui.vert.hlsl.spv", "Imgui.frag.hlsl.spv"},
-                VK_NULL_HANDLE,
-                pipelineInfo,
-                {},
-                "ImguiPass"
-            ))
+        if (!mDevice.CreateGraphicsPipeline({
+                .pipeline = mPipeline,
+                .shaderPaths = {"Imgui.vert.hlsl.spv", "Imgui.frag.hlsl.spv"},
+                .pipelineInfo = pipelineInfo,
+                .debugName = "ImguiPass",
+            }))
         {
             return false;
         }
@@ -380,12 +320,12 @@ bool ImguiRenderer::Init(
 
 void ImguiRenderer::Cleanup()
 {
-    if (!mDevice)
+    if (!mDevice.mDevice)
     {
         return;
     }
 
-    (void)vkDeviceWaitIdle(mDevice);
+    (void)vkDeviceWaitIdle(mDevice.mDevice);
 
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
@@ -393,13 +333,13 @@ void ImguiRenderer::Cleanup()
     for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
     {
         Frame& frame = mFrame[i];
-        Vulkan::DestroyBuffer(frame.vertexBuffer, mVmaAllocator);
-        Vulkan::DestroyBuffer(frame.indexBuffer, mVmaAllocator);
+        mDevice.DestroyBuffer(frame.vertexBuffer);
+        mDevice.DestroyBuffer(frame.indexBuffer);
     }
-    Vulkan::DestroyPipeline(mPipeline, mDevice);
-    vkDestroySampler(mDevice, mFontSampler, nullptr);
-    vkDestroyImageView(mDevice, mFontImage.view, nullptr);
-    vmaDestroyImage(mVmaAllocator, mFontImage.image, mFontImage.allocation);
+    mDevice.DestroyPipeline(mPipeline);
+    vkDestroySampler(mDevice.mDevice, mFontSampler, nullptr);
+    vkDestroyImageView(mDevice.mDevice, mFontImage.view, nullptr);
+    vmaDestroyImage(mDevice.mVmaAllocator, mFontImage.image, mFontImage.allocation);
 }
 
 bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
@@ -431,18 +371,15 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
         || (frame.vertexBufferSize < vertexBufferSize);
     if (shouldRecreateVertexBuffer)
     {
-        Vulkan::DestroyBuffer(frame.vertexBuffer, mVmaAllocator);
+        mDevice.DestroyBuffer(frame.vertexBuffer);
 
-        const bool result = Vulkan::CreateBuffer(
-            frame.vertexBuffer,
-            mDevice,
-            mVmaAllocator,
-            vertexBufferSize,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-            "ImGuiVertexBuffer"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = frame.vertexBuffer,
+                .size = vertexBufferSize,
+                .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                .debugName = "ImGuiVertexBuffer",
+            }))
         {
             return false;
         }
@@ -454,18 +391,15 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
         = (frame.indexBuffer.buffer == VK_NULL_HANDLE) || (frame.indexBufferSize < indexBufferSize);
     if (shouldRecreateIndexBuffer)
     {
-        Vulkan::DestroyBuffer(frame.indexBuffer, mVmaAllocator);
+        mDevice.DestroyBuffer(frame.indexBuffer);
 
-        const bool result = Vulkan::CreateBuffer(
-            frame.indexBuffer,
-            mDevice,
-            mVmaAllocator,
-            indexBufferSize,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-            "ImGuiIndexBuffer"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = frame.indexBuffer,
+                .size = indexBufferSize,
+                .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                .debugName = "ImGuiIndexBuffer",
+            }))
         {
             return false;
         }
@@ -495,9 +429,13 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
 
     const VmaAllocation allocations[]
         = {frame.vertexBuffer.allocation, frame.indexBuffer.allocation};
-    VK_CHECK(
-        vmaFlushAllocations(mVmaAllocator, ARRAY_SIZE(allocations), allocations, nullptr, nullptr)
-    );
+    VK_CHECK(vmaFlushAllocations(
+        mDevice.mVmaAllocator,
+        ARRAY_SIZE(allocations),
+        allocations,
+        nullptr,
+        nullptr
+    ));
 
     return true;
 }

@@ -5,8 +5,7 @@
 #include <initializer_list>
 #include <vector>
 
-// TODO: try Sebastian Aaltonen's approach with designated initializers.
-// https://youtu.be/m3bW8d4Brec?si=7V8xsxykqCHbskvu&t=2233
+struct SDL_Window;
 
 namespace Vulkan
 {
@@ -31,6 +30,7 @@ struct Image
     VkImage image;
     VkImageView view;
     VmaAllocation allocation;
+    VkFormat format;
     // TODO: VkExtent2D?
 };
 
@@ -136,52 +136,6 @@ bool FindMemoryType(
     u32 typeFilter,
     VkMemoryPropertyFlags properties
 );
-bool CreateBuffer(
-    Vulkan::Buffer& buffer,
-    VkDevice device,
-    VmaAllocator vmaAllocator,
-    VkDeviceSize size,
-    VkBufferUsageFlags usage,
-    VkMemoryPropertyFlags requiredFlags,
-    const char* debugName = "",
-    VkDeviceSize minAlignment = 0
-);
-void UnmapBuffer(Vulkan::Buffer& buffer, VmaAllocator vmaAllocator);
-void DestroyBuffer(Vulkan::Buffer& buffer, VmaAllocator vmaAllocator);
-
-bool CreateImage(
-    Vulkan::Image& image,
-    VkDevice device,
-    VmaAllocator vmaAllocator,
-    VkFormat format,
-    VkImageUsageFlags usage,
-    u32 width,
-    u32 height,
-    u32 depth = 1,
-    const char* name = "",
-    u32 mipLevels = 1,
-    u32 arrayLayers = 1
-);
-void DestroyImage(Vulkan::Image& image, VkDevice device, VmaAllocator vmaAllocator);
-
-bool CreateComputePipeline(
-    Vulkan::Pipeline& pipeline,
-    VkDevice device,
-    const char* shaderPath,
-    VkDescriptorSetLayout extraDescriptorSetLayout,
-    std::initializer_list<i32> specializationConstants = {},
-    const char* debugName = ""
-);
-bool CreateGraphicsPipeline(
-    Vulkan::Pipeline& pipeline,
-    VkDevice device,
-    std::initializer_list<const char*> shaderPaths,
-    VkDescriptorSetLayout extraDescriptorSetLayout,
-    VkGraphicsPipelineCreateInfo& pipelineInfo,
-    std::initializer_list<i32> specializationConstants = {},
-    const char* debugName = ""
-);
-void DestroyPipeline(Vulkan::Pipeline& pipeline, VkDevice device);
 
 void CmdPushDescriptors(
     VkCommandBuffer cmd,
@@ -195,5 +149,80 @@ bool DebugNameObject(
     u64 objectHandle,
     const char* objectName
 );
+
+// Based on Sebastian Aaltonen's approach with designated initializers:
+// https://youtu.be/m3bW8d4Brec?si=7V8xsxykqCHbskvu&t=2233
+// NOTE: resource descriptions are passed as rvalue references because they may
+// contain std::initializer_list, that has very short lifetime, rvalue refs force
+// temporaries and that prevents creating a local resource description variable
+// and passing it as an argument with a dangling pointer.
+
+struct BufferDesc
+{
+    Vulkan::Buffer& buffer;
+    VkDeviceSize size;
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    VkMemoryPropertyFlags requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    VkDeviceSize minAlignment = 0;
+    const char* debugName = nullptr;
+};
+
+struct ImageDesc
+{
+    Vulkan::Image& image;
+    std::initializer_list<VkFormat> formats;
+    VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT;
+    u32 width;
+    u32 height;
+    u32 depth = 1;
+    u32 mipLevels = 1;
+    u32 arrayLayers = 1;
+    const char* debugName = nullptr;
+};
+
+struct ComputePipelineDesc
+{
+    Vulkan::Pipeline& pipeline;
+    const char* shaderPath;
+    VkDescriptorSetLayout extraDescriptorSetLayout = VK_NULL_HANDLE;
+    std::initializer_list<i32> specializationConstants;
+    const char* debugName = nullptr;
+};
+
+struct GraphicsPipelineDesc
+{
+    Vulkan::Pipeline& pipeline;
+    std::initializer_list<const char*> shaderPaths;
+    VkDescriptorSetLayout extraDescriptorSetLayout = VK_NULL_HANDLE;
+    VkGraphicsPipelineCreateInfo& pipelineInfo;
+    std::initializer_list<i32> specializationConstants;
+    const char* debugName = nullptr;
+};
+
+struct Device
+{
+public:
+    bool Create(VkSurfaceKHR& surface, SDL_Window* window);
+    void Destroy();
+
+    // TODO: managed handles.
+    bool CreateBuffer(const BufferDesc&& desc) const;
+    void UnmapBuffer(Vulkan::Buffer& buffer) const;
+    void DestroyBuffer(Vulkan::Buffer& buffer) const;
+
+    bool CreateImage(const ImageDesc&& desc) const;
+    void DestroyImage(Vulkan::Image& image) const;
+
+    bool CreateComputePipeline(const ComputePipelineDesc&& desc) const;
+    bool CreateGraphicsPipeline(const GraphicsPipelineDesc&& desc) const;
+    void DestroyPipeline(Vulkan::Pipeline& pipeline) const;
+
+    VkInstance mInstance;
+    VkDevice mDevice;
+    VkPhysicalDevice mPhysicalDevice;
+    VmaAllocator mVmaAllocator;
+    Vulkan::QueueInfo mQueueInfo;
+    char mGpuName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
+};
 
 }

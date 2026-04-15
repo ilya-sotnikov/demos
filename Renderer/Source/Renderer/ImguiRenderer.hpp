@@ -19,11 +19,8 @@ struct ImguiRenderer
     };
 
     // From main renderer.
-    VkDevice mDevice;
-    VkPhysicalDevice mPhysicalDevice;
+    Vulkan::Device mDevice;
     VkCommandPool mCommandPool;
-    Vulkan::QueueInfo mQueueInfo;
-    VmaAllocator mVmaAllocator;
 
     // It's own resources.
     Vulkan::Image mFontImage;
@@ -42,11 +39,8 @@ struct ImguiRenderer
 
     bool Init(
         SDL_Window* window,
-        VkPhysicalDevice physicalDevice,
-        VkDevice device,
-        VmaAllocator vmaAllocator,
+        Vulkan::Device device,
         VkCommandPool commandPool,
-        Vulkan::QueueInfo queueInfo,
         VkFormat colorFormat
     );
     void Cleanup();

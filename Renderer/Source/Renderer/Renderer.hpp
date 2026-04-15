@@ -43,12 +43,8 @@ struct Renderer
     };
 
     SDL_Window* mWindow;
-    VmaAllocator mVmaAllocator;
-    VkInstance mInstance;
+    Vulkan::Device mDevice;
     VkSurfaceKHR mSurface;
-    VkPhysicalDevice mPhysicalDevice;
-    VkDevice mDevice;
-    Vulkan::QueueInfo mQueueInfo;
     Vulkan::Swapchain mSwapchain;
     Vulkan::Image mVisibilityImage;
     Vulkan::Image mRenderImage;
@@ -93,9 +89,6 @@ struct Renderer
     VkSampler mTextureSampler;
     VkSampler mLinearSampler;
     VkSampler mMinSampler;
-    VkFormat mVisibilityImageFormat;
-    VkFormat mRenderImageFormat;
-    VkFormat mDepthFormat;
     VkCommandPool mCommandPool;
     VkSampleCountFlagBits mSampleCount;
     std::vector<VkSemaphore> mRenderFinishedSemaphores;
@@ -106,7 +99,6 @@ struct Renderer
     u32 mTaaJitterIdx;
     u32 mTaaJitterMaxIdx;
     UniformData mUniformData;
-    char mGpuName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
     bool mNewFrameStarted;
     bool mRenderingPaused;
     bool mSwapchainNeedsRecreating;

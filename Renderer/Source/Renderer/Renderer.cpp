@@ -68,403 +68,9 @@ bool Renderer::Init()
         (void)SDL_SetWindowRelativeMouseMode(mWindow, true);
     }
 
-    // Instance.
+    if (!mDevice.Create(mSurface, mWindow))
     {
-        u32 vulkanApiVersion = 0;
-        VK_CHECK(vkEnumerateInstanceVersion(&vulkanApiVersion));
-        if (vulkanApiVersion < VK_API_VERSION_1_4)
-        {
-            fprintf(stderr, "vulkan: API version 1.4 is required\n");
-            return false;
-        }
-
-        const VkApplicationInfo appInfo = {
-            .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-            .pApplicationName = "None",
-            .applicationVersion = 1,
-            .pEngineName = "None",
-            .engineVersion = 1,
-            .apiVersion = VK_API_VERSION_1_4,
-        };
-
-        u32 sdlExtCount = 0;
-
-        // Find the required KHR surface extensions.
-        const char* const* const sdlExts = SDL_Vulkan_GetInstanceExtensions(&sdlExtCount);
-        if (!sdlExts)
-        {
-            SDL_PRINT_ERROR("SDL_Vulkan_GetInstanceExtensions");
-            return false;
-        }
-
-        std::vector<const char*> requiredExtensions{sdlExts, sdlExts + sdlExtCount};
-#ifdef VULKAN_ENABLE_DEBUG_UTILS
-        requiredExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#endif
-
-        u32 extCount = 0;
-        VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr));
-        std::vector<VkExtensionProperties> availableExts(extCount);
-        VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &extCount, availableExts.data()));
-
-        for (const char* ext : requiredExtensions)
-        {
-            const bool result = Vulkan::ExtensionIsAvailable(
-                ext,
-                {availableExts.data(), int(availableExts.size())}
-            );
-            if (!result)
-            {
-                fprintf(stderr, "required vulkan extension %s is unavailable\n", ext);
-                return false;
-            }
-        }
-
-        const VkInstanceCreateInfo instanceInfo = {
-            .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-            .pApplicationInfo = &appInfo,
-            .enabledExtensionCount = u32(requiredExtensions.size()),
-            .ppEnabledExtensionNames = requiredExtensions.data(),
-        };
-
-        VK_CHECK(vkCreateInstance(&instanceInfo, nullptr, &mInstance));
-
-        volkLoadInstanceOnly(mInstance);
-    }
-
-    // Surface.
-    if (!SDL_Vulkan_CreateSurface(mWindow, mInstance, nullptr, &mSurface))
-    {
-        SDL_PRINT_ERROR("SDL_Vulkan_CreateSurface ");
         return false;
-    }
-
-    const char* const requiredDeviceExtensions[] = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_KHR_RAY_QUERY_EXTENSION_NAME,
-        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-    };
-
-    // Physical device.
-    {
-        u32 physicalDeviceCount = 0;
-        VK_CHECK(vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, nullptr));
-        std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-        VK_CHECK(
-            vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, physicalDevices.data())
-        );
-
-        int physicalDeviceIndex = -1;
-        for (u32 i = 0; i < physicalDeviceCount; ++i)
-        {
-            const VkPhysicalDevice physicalDevice = physicalDevices[i];
-
-            VkPhysicalDeviceSubgroupProperties subgroupProperties = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES,
-            };
-
-            VkPhysicalDeviceProperties2 physicalDeviceProperties = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-                .pNext = &subgroupProperties,
-            };
-            vkGetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceProperties);
-            const bool supportsVulkan13
-                = physicalDeviceProperties.properties.apiVersion >= VK_API_VERSION_1_3;
-            bool supportsSubgroup = true;
-            {
-                const VkSubgroupFeatureFlags flag = subgroupProperties.supportedOperations;
-                supportsSubgroup &= !!(flag & VK_SUBGROUP_FEATURE_VOTE_BIT);
-                supportsSubgroup &= !!(flag & VK_SUBGROUP_FEATURE_BALLOT_BIT);
-            }
-
-            // Graphics support.
-            u32 queueFamilyPropertyCount = 0;
-            vkGetPhysicalDeviceQueueFamilyProperties2(
-                physicalDevice,
-                &queueFamilyPropertyCount,
-                nullptr
-            );
-            std::vector<VkQueueFamilyProperties2> queueFamilyProperties(queueFamilyPropertyCount);
-            for (u32 j = 0; j < queueFamilyPropertyCount; ++j)
-            {
-                queueFamilyProperties[j].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
-            }
-            vkGetPhysicalDeviceQueueFamilyProperties2(
-                physicalDevice,
-                &queueFamilyPropertyCount,
-                queueFamilyProperties.data()
-            );
-            bool supportsGraphicsAndPresentation = false;
-            for (u32 j = 0; j < queueFamilyPropertyCount; ++j)
-            {
-                if (queueFamilyProperties[j].queueFamilyProperties.queueFlags
-                    & VK_QUEUE_GRAPHICS_BIT)
-                {
-                    VkBool32 surfaceSupported = VK_FALSE;
-                    VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(
-                        physicalDevice,
-                        j,
-                        mSurface,
-                        &surfaceSupported
-                    ));
-                    if (surfaceSupported == VK_TRUE)
-                    {
-                        supportsGraphicsAndPresentation = true;
-                        break;
-                    }
-                }
-            }
-
-            // Required extensions.
-            u32 deviceExtensionPropertyCount = 0;
-            VK_CHECK(vkEnumerateDeviceExtensionProperties(
-                physicalDevice,
-                nullptr,
-                &deviceExtensionPropertyCount,
-                nullptr
-            ));
-            std::vector<VkExtensionProperties> extensionProperties(deviceExtensionPropertyCount);
-            VK_CHECK(vkEnumerateDeviceExtensionProperties(
-                physicalDevice,
-                nullptr,
-                &deviceExtensionPropertyCount,
-                extensionProperties.data()
-            ));
-            bool supportsRequiredExtensions = true;
-            for (size_t j = 0; j < ARRAY_SIZE(requiredDeviceExtensions); ++j)
-            {
-                const bool result = Vulkan::ExtensionIsAvailable(
-                    requiredDeviceExtensions[j],
-                    {extensionProperties.data(), int(extensionProperties.size())}
-                );
-                if (!result)
-                {
-                    supportsRequiredExtensions = false;
-                    break;
-                }
-            }
-
-            // Required features.
-            VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
-            };
-            VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
-                .pNext = &rayTracingPipelineFeatures,
-            };
-            VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-                .pNext = &rayQueryFeatures,
-            };
-            VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
-                .pNext = &accelStructFeatures,
-            };
-            VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-                .pNext = &vulkanFeatures14,
-            };
-            VkPhysicalDeviceVulkan12Features vulkanFeatures12 = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-                .pNext = &vulkanFeatures13,
-            };
-            VkPhysicalDeviceVulkan11Features vulkanFeatures11 = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-                .pNext = &vulkanFeatures12,
-            };
-            VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                .pNext = &vulkanFeatures11,
-            };
-
-            vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures);
-
-            // TODO: maybe check out profiles, this is getting ridiculous.
-            VkBool32 supportsRequiredFeatures = true;
-            supportsRequiredFeatures
-                &= physicalDeviceFeatures.features.vertexPipelineStoresAndAtomics;
-            supportsRequiredFeatures &= vulkanFeatures14.pushDescriptor;
-            supportsRequiredFeatures &= vulkanFeatures13.dynamicRendering;
-            supportsRequiredFeatures &= vulkanFeatures13.synchronization2;
-            supportsRequiredFeatures &= vulkanFeatures13.shaderDemoteToHelperInvocation;
-            supportsRequiredFeatures &= vulkanFeatures12.scalarBlockLayout;
-            supportsRequiredFeatures &= vulkanFeatures12.shaderInt8;
-            supportsRequiredFeatures &= vulkanFeatures12.storageBuffer8BitAccess;
-            supportsRequiredFeatures &= vulkanFeatures12.uniformAndStorageBuffer8BitAccess;
-            supportsRequiredFeatures
-                &= vulkanFeatures12.descriptorBindingSampledImageUpdateAfterBind;
-            supportsRequiredFeatures &= vulkanFeatures12.descriptorBindingPartiallyBound;
-            supportsRequiredFeatures &= vulkanFeatures12.descriptorBindingVariableDescriptorCount;
-            supportsRequiredFeatures
-                &= vulkanFeatures12.descriptorBindingStorageImageUpdateAfterBind;
-            supportsRequiredFeatures &= vulkanFeatures12.shaderSampledImageArrayNonUniformIndexing;
-            supportsRequiredFeatures &= vulkanFeatures12.runtimeDescriptorArray;
-            supportsRequiredFeatures &= vulkanFeatures12.drawIndirectCount;
-            supportsRequiredFeatures &= vulkanFeatures12.shaderFloat16;
-            supportsRequiredFeatures &= vulkanFeatures12.samplerFilterMinmax;
-            supportsRequiredFeatures &= vulkanFeatures11.shaderDrawParameters;
-            supportsRequiredFeatures &= vulkanFeatures11.storagePushConstant16;
-            supportsRequiredFeatures &= vulkanFeatures11.storageBuffer16BitAccess;
-            supportsRequiredFeatures &= vulkanFeatures11.uniformAndStorageBuffer16BitAccess;
-            supportsRequiredFeatures &= physicalDeviceFeatures.features.multiDrawIndirect;
-            supportsRequiredFeatures &= physicalDeviceFeatures.features.fragmentStoresAndAtomics;
-            supportsRequiredFeatures &= physicalDeviceFeatures.features.samplerAnisotropy;
-            supportsRequiredFeatures &= physicalDeviceFeatures.features.sampleRateShading;
-            supportsRequiredFeatures &= physicalDeviceFeatures.features.textureCompressionBC;
-            supportsRequiredFeatures &= physicalDeviceFeatures.features.shaderInt16;
-            supportsRequiredFeatures &= accelStructFeatures.accelerationStructure;
-            supportsRequiredFeatures &= rayQueryFeatures.rayQuery;
-            supportsRequiredFeatures &= rayTracingPipelineFeatures.rayTracingPipeline;
-
-            // TODO: remove, use mesh shaders instead.
-            supportsRequiredFeatures &= physicalDeviceFeatures.features.geometryShader;
-
-            bool deviceOk = true;
-            deviceOk &= supportsVulkan13;
-            deviceOk &= supportsGraphicsAndPresentation;
-            deviceOk &= supportsRequiredExtensions;
-            deviceOk &= bool(supportsRequiredFeatures);
-            deviceOk &= supportsSubgroup;
-            if (deviceOk)
-            {
-                physicalDeviceIndex = int(i);
-                break;
-            }
-        }
-
-        if (physicalDeviceIndex < 0)
-        {
-            fprintf(stderr, "No suitable physical device found\n");
-            return false;
-        }
-
-        mPhysicalDevice = physicalDevices[size_t(physicalDeviceIndex)];
-
-        VkPhysicalDeviceProperties2 properties = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-        };
-        vkGetPhysicalDeviceProperties2(mPhysicalDevice, &properties);
-
-        Utils::strlcpy(mGpuName, properties.properties.deviceName, sizeof(mGpuName));
-        printf("GPU: %s\n", mGpuName);
-    }
-
-    // Logical device, queue.
-    {
-        // Already checked when picking a physical device.
-        Vulkan::QueueInfo queueInfo = Vulkan::GetQueue(mPhysicalDevice, VK_QUEUE_GRAPHICS_BIT);
-
-        VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
-            .rayTracingPipeline = VK_TRUE,
-        };
-        VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
-            .pNext = &rayTracingPipelineFeatures,
-            .rayQuery = VK_TRUE,
-        };
-        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-            .pNext = &rayQueryFeatures,
-            .accelerationStructure = VK_TRUE,
-        };
-        VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
-            .pNext = &accelStructFeatures,
-            .pushDescriptor = VK_TRUE,
-        };
-        VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-            .pNext = &vulkanFeatures14,
-            .shaderDemoteToHelperInvocation = VK_TRUE,
-            .synchronization2 = VK_TRUE,
-            .dynamicRendering = VK_TRUE,
-        };
-        VkPhysicalDeviceVulkan12Features vulkanFeatures12 = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-            .pNext = &vulkanFeatures13,
-            .drawIndirectCount = VK_TRUE,
-            .storageBuffer8BitAccess = VK_TRUE,
-            .uniformAndStorageBuffer8BitAccess = VK_TRUE,
-            .shaderFloat16 = VK_TRUE,
-            .shaderInt8 = VK_TRUE,
-            .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-            .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
-            .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
-            .descriptorBindingPartiallyBound = VK_TRUE,
-            .descriptorBindingVariableDescriptorCount = VK_TRUE,
-            .runtimeDescriptorArray = VK_TRUE,
-            .samplerFilterMinmax = VK_TRUE,
-            .scalarBlockLayout = VK_TRUE,
-            .bufferDeviceAddress = VK_TRUE,
-        };
-        VkPhysicalDeviceVulkan11Features vulkanFeatures11 = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-            .pNext = &vulkanFeatures12,
-            .storageBuffer16BitAccess = VK_TRUE,
-            .uniformAndStorageBuffer16BitAccess = VK_TRUE,
-            .storagePushConstant16 = VK_TRUE,
-            .shaderDrawParameters = VK_TRUE,
-        };
-        const VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-            .pNext = &vulkanFeatures11,
-            .features = {
-                // TODO: remove, use mesh shaders instead.
-                .geometryShader = VK_TRUE,
-
-                .sampleRateShading = VK_TRUE,
-                .multiDrawIndirect = VK_TRUE,
-                .samplerAnisotropy = VK_TRUE,
-                .vertexPipelineStoresAndAtomics = VK_TRUE,
-                .fragmentStoresAndAtomics = VK_TRUE,
-                .shaderInt64 = VK_TRUE,
-                .shaderInt16 = VK_TRUE,
-            },
-        };
-
-        const f32 queuePriority = 1.0f;
-
-        const VkDeviceQueueCreateInfo deviceQueueInfo = {
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .queueFamilyIndex = queueInfo.queueIdx,
-            .queueCount = 1,
-            .pQueuePriorities = &queuePriority,
-        };
-
-        const VkDeviceCreateInfo deviceInfo = {
-            .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .pNext = &physicalDeviceFeatures,
-            .queueCreateInfoCount = 1,
-            .pQueueCreateInfos = &deviceQueueInfo,
-            .enabledExtensionCount = u32(ARRAY_SIZE(requiredDeviceExtensions)),
-            .ppEnabledExtensionNames = requiredDeviceExtensions,
-        };
-
-        VK_CHECK(vkCreateDevice(mPhysicalDevice, &deviceInfo, nullptr, &mDevice));
-
-        volkLoadDevice(mDevice);
-
-        vkGetDeviceQueue(mDevice, queueInfo.familyIdx, queueInfo.queueIdx, &queueInfo.queue);
-        mQueueInfo = queueInfo;
-    }
-
-    // VMA.
-    {
-        VmaAllocatorCreateInfo vmaAllocatorInfo = {
-            .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
-            .physicalDevice = mPhysicalDevice,
-            .device = mDevice,
-            .instance = mInstance,
-            .vulkanApiVersion = VK_API_VERSION_1_4,
-        };
-
-        VmaVulkanFunctions vmaVulkanFunctions{};
-        VK_CHECK(vmaImportVulkanFunctionsFromVolk(&vmaAllocatorInfo, &vmaVulkanFunctions));
-        vmaAllocatorInfo.pVulkanFunctions = &vmaVulkanFunctions;
-
-        VK_CHECK(vmaCreateAllocator(&vmaAllocatorInfo, &mVmaAllocator));
     }
 
     if (!CreateSwapchain())
@@ -480,83 +86,66 @@ bool Renderer::Init()
             // Should be always legal even on discrete GPUs if total allocated
             // size is less than 200 MB or so. But I don't care about the size,
             // since resizable BAR is somewhat widely supported.
-            if (!Vulkan::CreateBuffer(
-                    mFrame[i].uniformBuffer,
-                    mDevice,
-                    mVmaAllocator,
-                    sizeof(UniformData),
-                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            if (!mDevice.CreateBuffer({
+                    .buffer = mFrame[i].uniformBuffer,
+                    .size = sizeof(UniformData),
+                    .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                        | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
                         | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                    "UniformBuffer"
-                ))
+                    .debugName = "UniformBuffer",
+                }))
             {
                 return false;
             }
         }
 
-        if (!Vulkan::CreateBuffer(
-                mDrawCountBuffer,
-                mDevice,
-                mVmaAllocator,
-                sizeof(u32),
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
+        if (!mDevice.CreateBuffer({
+                .buffer = mDrawCountBuffer,
+                .size = sizeof(u32),
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
                     | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                "DrawCountBuffer"
-            ))
+                .debugName = "DrawCountBuffer",
+            }))
         {
             return false;
         }
 
-        if (!Vulkan::CreateBuffer(
-                mMeshPrimitiveVisibleBuffer,
-                mDevice,
-                mVmaAllocator,
-                sizeof(u32) * MAX_DRAW_CALLS,
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                "MeshPrimitiveVisibleBuffer"
-            ))
+        if (!mDevice.CreateBuffer({
+                .buffer = mMeshPrimitiveVisibleBuffer,
+                .size = sizeof(u32) * MAX_DRAW_CALLS,
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .debugName = "MeshPrimitiveVisibleBuffer",
+            }))
         {
             return false;
         }
 
-        if (!Vulkan::CreateBuffer(
-                mDebugDrawCountBuffer,
-                mDevice,
-                mVmaAllocator,
-                sizeof(u32) * 1, // TODO: maybe enum max count for offsets?
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                "DebugDrawCountBuffer"
-            ))
+        if (!mDevice.CreateBuffer({
+                .buffer = mDebugDrawCountBuffer,
+                .size = sizeof(u32) * 1, // TODO: maybe enum max count for offsets?
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .debugName = "DebugDrawCountBuffer",
+            }))
         {
             return false;
         }
 
-        if (!Vulkan::CreateBuffer(
-                mDebugDrawRectBuffer,
-                mDevice,
-                mVmaAllocator,
-                sizeof(DebugDrawRectData) * RENDERER_DEBUG_DRAW_RECT_MAX_COUNT,
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                "DebugDrawRectBuffer"
-            ))
+        if (!mDevice.CreateBuffer({
+                .buffer = mDebugDrawRectBuffer,
+                .size = sizeof(DebugDrawRectData) * RENDERER_DEBUG_DRAW_RECT_MAX_COUNT,
+                .debugName = "DebugDrawRectBuffer",
+            }))
         {
             return false;
         }
 
-        if (!Vulkan::CreateBuffer(
-                mDebugDrawCmdBuffer,
-                mDevice,
-                mVmaAllocator,
-                sizeof(VkDrawIndirectCommand),
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                "DebugDrawCmdBuffer"
-            ))
+        if (!mDevice.CreateBuffer({
+                .buffer = mDebugDrawCmdBuffer,
+                .size = sizeof(VkDrawIndirectCommand),
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .debugName = "DebugDrawCmdBuffer",
+            }))
         {
             return false;
         }
@@ -589,7 +178,12 @@ bool Renderer::Init()
         };
 
         VK_CHECK(
-            vkCreateDescriptorSetLayout(mDevice, &layoutInfo, nullptr, &mTextureDescriptorSetLayout)
+            vkCreateDescriptorSetLayout(
+                mDevice.mDevice,
+                &layoutInfo,
+                nullptr,
+                &mTextureDescriptorSetLayout
+            )
 
         );
     }
@@ -654,13 +248,13 @@ bool Renderer::Init()
             .pDynamicStates = dynamicStates,
         };
 
-        const VkFormat colorAttachmentFormats[] = {mVisibilityImageFormat};
+        const VkFormat colorAttachmentFormats[] = {mVisibilityImage.format};
 
         const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
             .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
             .pColorAttachmentFormats = colorAttachmentFormats,
-            .depthAttachmentFormat = mDepthFormat,
+            .depthAttachmentFormat = mDepthImage.format,
         };
 
         static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
@@ -678,15 +272,12 @@ bool Renderer::Init()
             .pDynamicState = &dynamicState,
         };
 
-        if (!Vulkan::CreateGraphicsPipeline(
-                mVisibilityPipeline,
-                mDevice,
-                {"VisibilityBuffer.vert.hlsl.spv", "VisibilityBuffer.frag.hlsl.spv"},
-                VK_NULL_HANDLE,
-                pipelineInfo,
-                {},
-                "VisibilityBufferPass"
-            ))
+        if (!mDevice.CreateGraphicsPipeline({
+                .pipeline = mVisibilityPipeline,
+                .shaderPaths = {"VisibilityBuffer.vert.hlsl.spv", "VisibilityBuffer.frag.hlsl.spv"},
+                .pipelineInfo = pipelineInfo,
+                .debugName = "VisibilityBufferPass",
+            }))
         {
             return false;
         }
@@ -747,13 +338,13 @@ bool Renderer::Init()
             .pDynamicStates = dynamicStates,
         };
 
-        const VkFormat colorAttachmentFormats[] = {mRenderImageFormat};
+        const VkFormat colorAttachmentFormats[] = {mRenderImage.format};
 
         const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
             .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
             .pColorAttachmentFormats = colorAttachmentFormats,
-            .depthAttachmentFormat = mDepthFormat,
+            .depthAttachmentFormat = mDepthImage.format,
         };
 
         static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
@@ -771,15 +362,12 @@ bool Renderer::Init()
             .pDynamicState = &dynamicState,
         };
 
-        if (!Vulkan::CreateGraphicsPipeline(
-                mDebugDrawRectPipeline,
-                mDevice,
-                {"DebugDrawRect.vert.hlsl.spv", "DebugDrawRect.frag.hlsl.spv"},
-                VK_NULL_HANDLE,
-                pipelineInfo,
-                {},
-                "DebugDrawRectPass"
-            ))
+        if (!mDevice.CreateGraphicsPipeline({
+                .pipeline = mDebugDrawRectPipeline,
+                .shaderPaths = {"DebugDrawRect.vert.hlsl.spv", "DebugDrawRect.frag.hlsl.spv"},
+                .pipelineInfo = pipelineInfo,
+                .debugName = "DebugDrawRectPass",
+            }))
         {
             return false;
         }
@@ -864,15 +452,12 @@ bool Renderer::Init()
             .pDynamicState = &dynamicState,
         };
 
-        if (!Vulkan::CreateGraphicsPipeline(
-                mFullscreenPipeline,
-                mDevice,
-                {"Fullscreen.vert.hlsl.spv", "Fullscreen.frag.hlsl.spv"},
-                VK_NULL_HANDLE,
-                pipelineInfo,
-                {},
-                "FullscreenPass"
-            ))
+        if (!mDevice.CreateGraphicsPipeline({
+                .pipeline = mFullscreenPipeline,
+                .shaderPaths = {"Fullscreen.vert.hlsl.spv", "Fullscreen.frag.hlsl.spv"},
+                .pipelineInfo = pipelineInfo,
+                .debugName = "FullscreenPass",
+            }))
         {
             return false;
         }
@@ -944,7 +529,7 @@ bool Renderer::Init()
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
             .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
             .pColorAttachmentFormats = colorAttachmentFormats,
-            .depthAttachmentFormat = mDepthFormat,
+            .depthAttachmentFormat = mDepthImage.format,
         };
 
         static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
@@ -962,15 +547,12 @@ bool Renderer::Init()
             .pDynamicState = &dynamicState,
         };
 
-        if (!Vulkan::CreateGraphicsPipeline(
-                mDebugGradErrorPipeline,
-                mDevice,
-                {"DebugGradError.vert.hlsl.spv", "DebugGradError.frag.hlsl.spv"},
-                VK_NULL_HANDLE,
-                pipelineInfo,
-                {},
-                "DebugGradErrorPass"
-            ))
+        if (!mDevice.CreateGraphicsPipeline({
+                .pipeline = mDebugGradErrorPipeline,
+                .shaderPaths = {"DebugGradError.vert.hlsl.spv", "DebugGradError.frag.hlsl.spv"},
+                .pipelineInfo = pipelineInfo,
+                .debugName = "DebugGradErrorPass",
+            }))
         {
             return false;
         }
@@ -978,74 +560,59 @@ bool Renderer::Init()
 
     // Compute pipelines.
     {
-        if (!Vulkan::CreateComputePipeline(
-                mCullEarlyPipeline,
-                mDevice,
-                "Cull.comp.hlsl.spv",
-                VK_NULL_HANDLE,
-                {0},
-                "CullEarlyPass"
-            ))
+        if (!mDevice.CreateComputePipeline({
+                .pipeline = mCullEarlyPipeline,
+                .shaderPath = "Cull.comp.hlsl.spv",
+                .specializationConstants = {0},
+                .debugName = "CullEarlyPass",
+            }))
         {
             return false;
         }
 
-        if (!Vulkan::CreateComputePipeline(
-                mCullLatePipeline,
-                mDevice,
-                "Cull.comp.hlsl.spv",
-                VK_NULL_HANDLE,
-                {1},
-                "CullLatePass"
-            ))
+        if (!mDevice.CreateComputePipeline({
+                .pipeline = mCullLatePipeline,
+                .shaderPath = "Cull.comp.hlsl.spv",
+                .specializationConstants = {1},
+                .debugName = "CullLatePass",
+            }))
         {
             return false;
         }
 
-        if (!Vulkan::CreateComputePipeline(
-                mRenderPipeline,
-                mDevice,
-                "Renderer.comp.hlsl.spv",
-                mTextureDescriptorSetLayout,
-                {},
-                "RenderPass"
-            ))
+        if (!mDevice.CreateComputePipeline({
+                .pipeline = mRenderPipeline,
+                .shaderPath = "Renderer.comp.hlsl.spv",
+                .extraDescriptorSetLayout = mTextureDescriptorSetLayout,
+                .debugName = "RenderPass",
+            }))
         {
             return false;
         }
 
-        if (!Vulkan::CreateComputePipeline(
-                mTaaResolvePipeline,
-                mDevice,
-                "TaaResolve.comp.hlsl.spv",
-                VK_NULL_HANDLE,
-                {},
-                "TaaResolvePass"
-            ))
+        if (!mDevice.CreateComputePipeline({
+                .pipeline = mTaaResolvePipeline,
+                .shaderPath = "TaaResolve.comp.hlsl.spv",
+                .debugName = "TaaResolvePass",
+            }))
         {
             return false;
         }
 
-        if (!Vulkan::CreateComputePipeline(
-                mDepthReducePipeline,
-                mDevice,
-                "DepthReduce.comp.hlsl.spv",
-                VK_NULL_HANDLE,
-                {},
-                "DepthReducePass"
-            ))
+        if (!mDevice.CreateComputePipeline({
+                .pipeline = mDepthReducePipeline,
+                .shaderPath = "DepthReduce.comp.hlsl.spv",
+                .debugName = "DepthReducePass",
+            }))
         {
             return false;
         }
 
-        if (!Vulkan::CreateComputePipeline(
-                mDebugDrawFillCmdPipeline,
-                mDevice,
-                "DebugDrawFillCmd.comp.hlsl.spv",
-                VK_NULL_HANDLE,
-                {},
-                "DebugDrawFillCmdPass"
-            ))
+        if (!mDevice.CreateComputePipeline({
+                .pipeline = mDebugDrawFillCmdPipeline,
+                .shaderPath = "DebugDrawFillCmd.comp.hlsl.spv",
+                .debugName = "DebugDrawFillCmdPass",
+            }))
         {
             return false;
         }
@@ -1056,10 +623,10 @@ bool Renderer::Init()
         const VkCommandPoolCreateInfo cmdPoolInfo = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            .queueFamilyIndex = mQueueInfo.familyIdx,
+            .queueFamilyIndex = mDevice.mQueueInfo.familyIdx,
         };
 
-        VK_CHECK(vkCreateCommandPool(mDevice, &cmdPoolInfo, nullptr, &mCommandPool));
+        VK_CHECK(vkCreateCommandPool(mDevice.mDevice, &cmdPoolInfo, nullptr, &mCommandPool));
     }
 
     // Command buffers.
@@ -1073,9 +640,11 @@ bool Renderer::Init()
 
         for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
         {
-            VK_CHECK(
-                vkAllocateCommandBuffers(mDevice, &cmdBufferAllocateInfo, &mFrame[i].commandBuffer)
-            );
+            VK_CHECK(vkAllocateCommandBuffers(
+                mDevice.mDevice,
+                &cmdBufferAllocateInfo,
+                &mFrame[i].commandBuffer
+            ));
         }
     }
 
@@ -1089,7 +658,7 @@ bool Renderer::Init()
         for (VkSemaphore& sem : mRenderFinishedSemaphores)
         {
             VkSemaphore semaphore{};
-            VK_CHECK(vkCreateSemaphore(mDevice, &semaphoreInfo, nullptr, &semaphore));
+            VK_CHECK(vkCreateSemaphore(mDevice.mDevice, &semaphoreInfo, nullptr, &semaphore));
             sem = semaphore;
         }
 
@@ -1100,9 +669,11 @@ bool Renderer::Init()
 
         for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
         {
-            VK_CHECK(vkCreateFence(mDevice, &fenceInfo, nullptr, &mFrame[i].queueSubmitFence));
+            VK_CHECK(
+                vkCreateFence(mDevice.mDevice, &fenceInfo, nullptr, &mFrame[i].queueSubmitFence)
+            );
             VK_CHECK(vkCreateSemaphore(
-                mDevice,
+                mDevice.mDevice,
                 &semaphoreInfo,
                 nullptr,
                 &mFrame[i].imageAcquireSemaphore
@@ -1121,7 +692,7 @@ bool Renderer::Init()
             .maxAnisotropy = 4.0f,
             .maxLod = 16.0f,
         };
-        VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mTextureSampler));
+        VK_CHECK(vkCreateSampler(mDevice.mDevice, &samplerInfo, nullptr, &mTextureSampler));
 
         samplerInfo = {
             .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -1130,7 +701,7 @@ bool Renderer::Init()
             .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         };
-        VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mLinearSampler));
+        VK_CHECK(vkCreateSampler(mDevice.mDevice, &samplerInfo, nullptr, &mLinearSampler));
 
         const VkSamplerReductionModeCreateInfo reductionModeInfo = {
             .sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO,
@@ -1146,7 +717,7 @@ bool Renderer::Init()
             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .maxLod = 16.0f,
         };
-        VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mMinSampler));
+        VK_CHECK(vkCreateSampler(mDevice.mDevice, &samplerInfo, nullptr, &mMinSampler));
     }
 
     // Scene.
@@ -1185,139 +756,105 @@ bool Renderer::Init()
             return false;
         }
 
-        bool result = Vulkan::CreateBuffer(
-            mVertexBuffer,
-            mDevice,
-            mVmaAllocator,
-            VEC_SIZE_BYTES(vertices),
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-                | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-                | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            "VertexBuffer"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = mVertexBuffer,
+                .size = VEC_SIZE_BYTES(vertices),
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+                    | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                    | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                .debugName = "VertexBuffer",
+            }))
         {
             return false;
         }
         memcpy(mVertexBuffer.mapped, vertices.data(), VEC_SIZE_BYTES(vertices));
-        Vulkan::UnmapBuffer(mVertexBuffer, mVmaAllocator);
+        mDevice.UnmapBuffer(mVertexBuffer);
 
-        result = Vulkan::CreateBuffer(
-            mIndexBuffer,
-            mDevice,
-            mVmaAllocator,
-            VEC_SIZE_BYTES(indices),
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-                | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-                | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            "IndexBuffer"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = mIndexBuffer,
+                .size = VEC_SIZE_BYTES(indices),
+                .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+                    | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                    | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                .debugName = "IndexBuffer",
+            }))
         {
             return false;
         }
         memcpy(mIndexBuffer.mapped, indices.data(), VEC_SIZE_BYTES(indices));
-        Vulkan::UnmapBuffer(mIndexBuffer, mVmaAllocator);
+        mDevice.UnmapBuffer(mIndexBuffer);
 
-        result = Vulkan::CreateBuffer(
-            mDrawCmdBuffer1,
-            mDevice,
-            mVmaAllocator,
-            sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-                | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            "DrawCmdBuffer1"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = mDrawCmdBuffer1,
+                .size = sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                    | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                .debugName = "DrawCmdBuffer1",
+            }))
         {
             return false;
         }
 
-        result = Vulkan::CreateBuffer(
-            mDrawCmdEarlyBuffer2,
-            mDevice,
-            mVmaAllocator,
-            sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            "DrawCmdEarlyBuffer2"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = mDrawCmdEarlyBuffer2,
+                .size = sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .debugName = "DrawCmdEarlyBuffer2",
+            }))
         {
             return false;
         }
 
-        result = Vulkan::CreateBuffer(
-            mDrawCmdLateBuffer2,
-            mDevice,
-            mVmaAllocator,
-            sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            "DrawCmdLateBuffer2"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = mDrawCmdLateBuffer2,
+                .size = sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .debugName = "DrawCmdLateBuffer2",
+            }))
         {
             return false;
         }
 
-        result = Vulkan::CreateBuffer(
-            mDrawIndicesEarlyBuffer,
-            mDevice,
-            mVmaAllocator,
-            sizeof(u32) * MAX_DRAW_CALLS,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            "DrawIndicesEarlyBuffer"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = mDrawIndicesEarlyBuffer,
+                .size = sizeof(u32) * MAX_DRAW_CALLS,
+                .debugName = "DrawIndicesEarlyBuffer",
+            }))
         {
             return false;
         }
 
-        result = Vulkan::CreateBuffer(
-            mDrawIndicesLateBuffer,
-            mDevice,
-            mVmaAllocator,
-            sizeof(u32) * MAX_DRAW_CALLS,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            "DrawIndicesLateBuffer"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = mDrawIndicesLateBuffer,
+                .size = sizeof(u32) * MAX_DRAW_CALLS,
+                .debugName = "DrawIndicesLateBuffer",
+            }))
         {
             return false;
         }
 
-        result = Vulkan::CreateBuffer(
-            mMaterialBuffer,
-            mDevice,
-            mVmaAllocator,
-            sizeof(Material) * MAX_DRAW_CALLS,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-                | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            "MaterialBuffer"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = mMaterialBuffer,
+                .size = sizeof(Material) * MAX_DRAW_CALLS,
+                .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                    | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                .debugName = "MaterialBuffer",
+            }))
         {
             return false;
         }
 
-        result = Vulkan::CreateBuffer(
-            mDrawDataBuffer,
-            mDevice,
-            mVmaAllocator,
-            sizeof(DrawData) * MAX_DRAW_CALLS,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-                | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            "DrawDataBuffer"
-        );
-        if (!result)
+        if (!mDevice.CreateBuffer({
+                .buffer = mDrawDataBuffer,
+                .size = sizeof(DrawData) * MAX_DRAW_CALLS,
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                    | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                .debugName = "DrawDataBuffer",
+            }))
         {
             return false;
         }
@@ -1359,7 +896,7 @@ bool Renderer::Init()
             .poolSizeCount = ARRAY_SIZE(poolSizes),
             .pPoolSizes = poolSizes,
         };
-        VK_CHECK(vkCreateDescriptorPool(mDevice, &poolInfo, nullptr, &mDescriptorPool));
+        VK_CHECK(vkCreateDescriptorPool(mDevice.mDevice, &poolInfo, nullptr, &mDescriptorPool));
 
         const VkDescriptorSetAllocateInfo allocateInfo = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -1368,7 +905,7 @@ bool Renderer::Init()
             .pSetLayouts = &mTextureDescriptorSetLayout,
         };
 
-        VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocateInfo, &mTextureDescriptorSet));
+        VK_CHECK(vkAllocateDescriptorSets(mDevice.mDevice, &allocateInfo, &mTextureDescriptorSet));
 
         for (size_t i = 0; i < mTextures.size(); ++i)
         {
@@ -1387,19 +924,11 @@ bool Renderer::Init()
                 .pImageInfo = &imageInfo,
             };
 
-            vkUpdateDescriptorSets(mDevice, 1, &writeSet, 0, nullptr);
+            vkUpdateDescriptorSets(mDevice.mDevice, 1, &writeSet, 0, nullptr);
         }
     }
 
-    if (!mImguiRenderer.Init(
-            mWindow,
-            mPhysicalDevice,
-            mDevice,
-            mVmaAllocator,
-            mCommandPool,
-            mQueueInfo,
-            mSwapchain.surfaceFormat.format
-        ))
+    if (!mImguiRenderer.Init(mWindow, mDevice, mCommandPool, mSwapchain.surfaceFormat.format))
     {
         fprintf(stderr, "Failed to initialize ImGui renderer\n");
         return false;
@@ -1433,8 +962,8 @@ bool Renderer::Init()
             .pCommandBuffers = &cmd,
         };
 
-        VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
-        VK_CHECK(vkQueueWaitIdle(mQueueInfo.queue));
+        VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
+        VK_CHECK(vkQueueWaitIdle(mDevice.mQueueInfo.queue));
     }
 
     mSwapchainNeedsRecreating = true;
@@ -1449,12 +978,12 @@ bool Renderer::Init()
 
 void Renderer::Cleanup()
 {
-    if (!mDevice)
+    if (mDevice.mDevice)
     {
         return;
     }
 
-    (void)vkDeviceWaitIdle(mDevice);
+    (void)vkDeviceWaitIdle(mDevice.mDevice);
 
     mImguiRenderer.Cleanup();
 
@@ -1463,64 +992,62 @@ void Renderer::Cleanup()
 
     for (Vulkan::Image& tex : mTextures)
     {
-        Vulkan::DestroyImage(tex, mDevice, mVmaAllocator);
+        mDevice.DestroyImage(tex);
     }
 
     for (VkAccelerationStructureKHR as : mBlas)
     {
-        vkDestroyAccelerationStructureKHR(mDevice, as, nullptr);
+        vkDestroyAccelerationStructureKHR(mDevice.mDevice, as, nullptr);
     }
-    vkDestroyAccelerationStructureKHR(mDevice, mTlas, nullptr);
-    Vulkan::DestroyBuffer(mDebugDrawCmdBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mDebugDrawRectBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mDebugDrawCountBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mMeshPrimitiveVisibleBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mTlasBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mBlasBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mDrawCountBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mMaterialBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mDrawDataBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mVertexBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mIndexBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mDrawIndicesEarlyBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mDrawIndicesLateBuffer, mVmaAllocator);
-    Vulkan::DestroyBuffer(mDrawCmdEarlyBuffer2, mVmaAllocator);
-    Vulkan::DestroyBuffer(mDrawCmdLateBuffer2, mVmaAllocator);
-    Vulkan::DestroyBuffer(mDrawCmdBuffer1, mVmaAllocator);
+    vkDestroyAccelerationStructureKHR(mDevice.mDevice, mTlas, nullptr);
+    mDevice.DestroyBuffer(mDebugDrawCmdBuffer);
+    mDevice.DestroyBuffer(mDebugDrawRectBuffer);
+    mDevice.DestroyBuffer(mDebugDrawCountBuffer);
+    mDevice.DestroyBuffer(mMeshPrimitiveVisibleBuffer);
+    mDevice.DestroyBuffer(mTlasBuffer);
+    mDevice.DestroyBuffer(mBlasBuffer);
+    mDevice.DestroyBuffer(mDrawCountBuffer);
+    mDevice.DestroyBuffer(mMaterialBuffer);
+    mDevice.DestroyBuffer(mDrawDataBuffer);
+    mDevice.DestroyBuffer(mVertexBuffer);
+    mDevice.DestroyBuffer(mIndexBuffer);
+    mDevice.DestroyBuffer(mDrawIndicesEarlyBuffer);
+    mDevice.DestroyBuffer(mDrawIndicesLateBuffer);
+    mDevice.DestroyBuffer(mDrawCmdEarlyBuffer2);
+    mDevice.DestroyBuffer(mDrawCmdLateBuffer2);
+    mDevice.DestroyBuffer(mDrawCmdBuffer1);
     for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        Vulkan::DestroyBuffer(mFrame[i].uniformBuffer, mVmaAllocator);
+        mDevice.DestroyBuffer(mFrame[i].uniformBuffer);
     }
     for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        vkDestroyFence(mDevice, mFrame[i].queueSubmitFence, nullptr);
-        vkDestroySemaphore(mDevice, mFrame[i].imageAcquireSemaphore, nullptr);
+        vkDestroyFence(mDevice.mDevice, mFrame[i].queueSubmitFence, nullptr);
+        vkDestroySemaphore(mDevice.mDevice, mFrame[i].imageAcquireSemaphore, nullptr);
     }
     for (VkSemaphore sem : mRenderFinishedSemaphores)
     {
-        vkDestroySemaphore(mDevice, sem, nullptr);
+        vkDestroySemaphore(mDevice.mDevice, sem, nullptr);
     }
-    vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
-    vkDestroySampler(mDevice, mMinSampler, nullptr);
-    vkDestroySampler(mDevice, mLinearSampler, nullptr);
-    vkDestroySampler(mDevice, mTextureSampler, nullptr);
-    vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
-    vkDestroyDescriptorSetLayout(mDevice, mTextureDescriptorSetLayout, nullptr);
-    Vulkan::DestroyPipeline(mDebugDrawFillCmdPipeline, mDevice);
-    Vulkan::DestroyPipeline(mDebugDrawRectPipeline, mDevice);
-    Vulkan::DestroyPipeline(mDepthReducePipeline, mDevice);
-    Vulkan::DestroyPipeline(mDebugGradErrorPipeline, mDevice);
-    Vulkan::DestroyPipeline(mTaaResolvePipeline, mDevice);
-    Vulkan::DestroyPipeline(mCullLatePipeline, mDevice);
-    Vulkan::DestroyPipeline(mCullEarlyPipeline, mDevice);
-    Vulkan::DestroyPipeline(mFullscreenPipeline, mDevice);
-    Vulkan::DestroyPipeline(mRenderPipeline, mDevice);
-    Vulkan::DestroyPipeline(mVisibilityPipeline, mDevice);
+    vkDestroyDescriptorPool(mDevice.mDevice, mDescriptorPool, nullptr);
+    vkDestroySampler(mDevice.mDevice, mMinSampler, nullptr);
+    vkDestroySampler(mDevice.mDevice, mLinearSampler, nullptr);
+    vkDestroySampler(mDevice.mDevice, mTextureSampler, nullptr);
+    vkDestroyCommandPool(mDevice.mDevice, mCommandPool, nullptr);
+    vkDestroyDescriptorSetLayout(mDevice.mDevice, mTextureDescriptorSetLayout, nullptr);
+    mDevice.DestroyPipeline(mDebugDrawFillCmdPipeline);
+    mDevice.DestroyPipeline(mDebugDrawRectPipeline);
+    mDevice.DestroyPipeline(mDepthReducePipeline);
+    mDevice.DestroyPipeline(mDebugGradErrorPipeline);
+    mDevice.DestroyPipeline(mTaaResolvePipeline);
+    mDevice.DestroyPipeline(mCullLatePipeline);
+    mDevice.DestroyPipeline(mCullEarlyPipeline);
+    mDevice.DestroyPipeline(mFullscreenPipeline);
+    mDevice.DestroyPipeline(mRenderPipeline);
+    mDevice.DestroyPipeline(mVisibilityPipeline);
     CleanupSwapchain();
-    vmaDestroyAllocator(mVmaAllocator);
-    vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
-    vkDestroyDevice(mDevice, nullptr);
-    vkDestroyInstance(mInstance, nullptr);
+    vkDestroySurfaceKHR(mDevice.mInstance, mSurface, nullptr);
+    mDevice.Destroy();
     volkFinalize();
 }
 
@@ -1530,8 +1057,8 @@ bool Renderer::StartNewFrame()
 
     Frame& frame = mFrame[mFrameIdx];
 
-    VK_CHECK(vkWaitForFences(mDevice, 1, &frame.queueSubmitFence, VK_TRUE, 1'000'000'000));
-    VK_CHECK(vkResetFences(mDevice, 1, &frame.queueSubmitFence));
+    VK_CHECK(vkWaitForFences(mDevice.mDevice, 1, &frame.queueSubmitFence, VK_TRUE, 1'000'000'000));
+    VK_CHECK(vkResetFences(mDevice.mDevice, 1, &frame.queueSubmitFence));
 
     mImguiRenderer.StartNewFrame();
 
@@ -1564,7 +1091,7 @@ bool Renderer::Render(f32 deltaTime)
 
     u32 imageIdx = 0;
     VkResult vulkanResult = vkAcquireNextImageKHR(
-        mDevice,
+        mDevice.mDevice,
         mSwapchain.swapchain,
         1'000'000'000,
         frame.imageAcquireSemaphore,
@@ -1662,7 +1189,7 @@ bool Renderer::Render(f32 deltaTime)
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &mRenderFinishedSemaphores[imageIdx],
     };
-    VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, frame.queueSubmitFence));
+    VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, frame.queueSubmitFence));
 
     const VkPresentInfoKHR presentInfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -1672,7 +1199,7 @@ bool Renderer::Render(f32 deltaTime)
         .pSwapchains = &mSwapchain.swapchain,
         .pImageIndices = &imageIdx,
     };
-    vulkanResult = vkQueuePresentKHR(mQueueInfo.queue, &presentInfo);
+    vulkanResult = vkQueuePresentKHR(mDevice.mQueueInfo.queue, &presentInfo);
     if (vulkanResult == VK_ERROR_OUT_OF_DATE_KHR || vulkanResult == VK_SUBOPTIMAL_KHR)
     {
         mSwapchainNeedsRecreating = true;
@@ -1751,36 +1278,32 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
         const ktx_size_t size = ktxTexture_GetDataSize(ktxTexture(ktxTex));
         const ktx_uint8_t* ktxData = ktxTexture_GetData(ktxTexture(ktxTex));
 
-        if (!Vulkan::CreateImage(
-                mTextures[i],
-                mDevice,
-                mVmaAllocator,
-                format,
-                VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                ktxTex->baseWidth,
-                ktxTex->baseHeight,
-                1,
-                texturePaths[i].c_str(),
-                mipLevels
-            ))
+        if (!mDevice.CreateImage({
+                .image = mTextures[i],
+                .formats = {format},
+                .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                .width = ktxTex->baseWidth,
+                .height = ktxTex->baseHeight,
+                .mipLevels = mipLevels,
+                .debugName = texturePaths[i].c_str(),
+            }))
         {
             return false;
         }
 
         Vulkan::Buffer stagingBuffer{};
-        if (!Vulkan::CreateBuffer(
-                stagingBuffer,
-                mDevice,
-                mVmaAllocator,
-                size,
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                "stagingBuffer"
-            ))
+        if (!mDevice.CreateBuffer({
+                .buffer = stagingBuffer,
+                .size = size,
+                .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                .requiredFlags
+                = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                .debugName = "StagingBuffer",
+            }))
         {
             return false;
         }
-        DEFER(Vulkan::DestroyBuffer(stagingBuffer, mVmaAllocator));
+        DEFER(mDevice.DestroyBuffer(stagingBuffer));
 
         std::vector<VkBufferImageCopy> copyRegions(mipLevels);
 
@@ -1813,7 +1336,7 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
             };
         }
         memcpy(stagingBuffer.mapped, ktxData, size);
-        Vulkan::UnmapBuffer(stagingBuffer, mVmaAllocator);
+        mDevice.UnmapBuffer(stagingBuffer);
 
         const VkCommandBuffer cmd = mFrame[0].commandBuffer;
 
@@ -1876,8 +1399,8 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
             .pCommandBuffers = &cmd,
         };
 
-        VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
-        VK_CHECK(vkQueueWaitIdle(mQueueInfo.queue));
+        VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
+        VK_CHECK(vkQueueWaitIdle(mDevice.mQueueInfo.queue));
     }
 
     return true;
@@ -1940,7 +1463,7 @@ bool Renderer::CreateAndUploadBlas(
         VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
         sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
         vkGetAccelerationStructureBuildSizesKHR(
-            mDevice,
+            mDevice.mDevice,
             VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
             &buildInfo,
             &primitiveCounts[i],
@@ -1960,35 +1483,28 @@ bool Renderer::CreateAndUploadBlas(
         totalPrimitiveCount += primitiveCounts[i];
     }
 
-    if (!Vulkan::CreateBuffer(
-            mBlasBuffer,
-            mDevice,
-            mVmaAllocator,
-            totalAccelerationSize,
-            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
+    if (!mDevice.CreateBuffer({
+            .buffer = mBlasBuffer,
+            .size = totalAccelerationSize,
+            .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
                 | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            "BlasBuffer"
-        ))
+            .debugName = "BlasBuffer",
+        }))
     {
         return false;
     }
 
     Vulkan::Buffer scratchBuffer{};
-    if (!Vulkan::CreateBuffer(
-            scratchBuffer,
-            mDevice,
-            mVmaAllocator,
-            totalScratchSize,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            "ScratchBuffer",
-            ALIGNMENT
-        ))
+    if (!mDevice.CreateBuffer({
+            .buffer = scratchBuffer,
+            .size = totalScratchSize,
+            .minAlignment = ALIGNMENT,
+            .debugName = "ScratchBuffer",
+        }))
     {
         return false;
     }
-    DEFER(Vulkan::DestroyBuffer(scratchBuffer, mVmaAllocator));
+    DEFER(mDevice.DestroyBuffer(scratchBuffer));
 
     printf(
         "BLAS accelerationStructureSize: %.2f MB, scratchSize: %.2f MB, %.3fM "
@@ -2009,7 +1525,9 @@ bool Renderer::CreateAndUploadBlas(
             .size = accelerationSizes[i],
             .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
         };
-        VK_CHECK(vkCreateAccelerationStructureKHR(mDevice, &accelerationInfo, nullptr, &mBlas[i]));
+        VK_CHECK(
+            vkCreateAccelerationStructureKHR(mDevice.mDevice, &accelerationInfo, nullptr, &mBlas[i])
+        );
     }
 
     std::vector<VkAccelerationStructureBuildRangeInfoKHR> buildRanges(meshPrimitives.size());
@@ -2052,8 +1570,8 @@ bool Renderer::CreateAndUploadBlas(
         .pCommandBuffers = &cmd,
     };
 
-    VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
-    VK_CHECK(vkDeviceWaitIdle(mDevice));
+    VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
+    VK_CHECK(vkDeviceWaitIdle(mDevice.mDevice));
 
     return true;
 }
@@ -2070,20 +1588,19 @@ bool Renderer::CreateAndUploadTlas(
     const VkCommandBuffer cmd = mFrame[0].commandBuffer;
 
     Vulkan::Buffer instances{};
-    if (!Vulkan::CreateBuffer(
-            instances,
-            mDevice,
-            mVmaAllocator,
-            sizeof(VkAccelerationStructureInstanceKHR) * meshPrimitives.size(),
-            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+    if (!mDevice.CreateBuffer({
+            .buffer = instances,
+            .size = sizeof(VkAccelerationStructureInstanceKHR) * meshPrimitives.size(),
+            .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
                 | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            "InstanceBuffer"
-        ))
+            .requiredFlags
+            = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            .debugName = "InstanceBuffer",
+        }))
     {
         return false;
     }
-    DEFER(Vulkan::DestroyBuffer(instances, mVmaAllocator));
+    DEFER(mDevice.DestroyBuffer(instances));
 
     std::vector<VkDeviceAddress> blasAddresses(mBlas.size());
 
@@ -2093,7 +1610,7 @@ bool Renderer::CreateAndUploadTlas(
             .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
             .accelerationStructure = mBlas[i],
         };
-        blasAddresses[i] = vkGetAccelerationStructureDeviceAddressKHR(mDevice, &info);
+        blasAddresses[i] = vkGetAccelerationStructureDeviceAddressKHR(mDevice.mDevice, &info);
         if (!blasAddresses[i])
         {
             fprintf(stderr, "vkGetAccelerationStructureDeviceAddressKHR failed, idx = %zu\n", i);
@@ -2157,7 +1674,7 @@ bool Renderer::CreateAndUploadTlas(
         .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
     };
     vkGetAccelerationStructureBuildSizesKHR(
-        mDevice,
+        mDevice.mDevice,
         VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
         &buildInfo,
         &primitiveCount,
@@ -2170,35 +1687,28 @@ bool Renderer::CreateAndUploadTlas(
         f64(sizeInfo.buildScratchSize) / 1.0e6
     );
 
-    if (!Vulkan::CreateBuffer(
-            mTlasBuffer,
-            mDevice,
-            mVmaAllocator,
-            sizeInfo.accelerationStructureSize,
-            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
+    if (!mDevice.CreateBuffer({
+            .buffer = mTlasBuffer,
+            .size = sizeInfo.accelerationStructureSize,
+            .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
                 | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            "TlasBuffer"
-        ))
+            .debugName = "TlasBuffer",
+        }))
     {
         return false;
     }
 
     Vulkan::Buffer scratchBuffer{};
-    if (!Vulkan::CreateBuffer(
-            scratchBuffer,
-            mDevice,
-            mVmaAllocator,
-            sizeInfo.buildScratchSize,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            "ScratchBuffer",
-            ALIGNMENT
-        ))
+    if (!mDevice.CreateBuffer({
+            .buffer = scratchBuffer,
+            .size = sizeInfo.buildScratchSize,
+            .minAlignment = ALIGNMENT,
+            .debugName = "ScratchBuffer",
+        }))
     {
         return false;
     }
-    DEFER(Vulkan::DestroyBuffer(scratchBuffer, mVmaAllocator));
+    DEFER(mDevice.DestroyBuffer(scratchBuffer));
 
     const VkAccelerationStructureCreateInfoKHR accelerationInfo = {
         .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
@@ -2207,7 +1717,7 @@ bool Renderer::CreateAndUploadTlas(
         .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
     };
 
-    VK_CHECK(vkCreateAccelerationStructureKHR(mDevice, &accelerationInfo, nullptr, &mTlas));
+    VK_CHECK(vkCreateAccelerationStructureKHR(mDevice.mDevice, &accelerationInfo, nullptr, &mTlas));
 
     buildInfo.dstAccelerationStructure = mTlas;
     buildInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
@@ -2234,9 +1744,9 @@ bool Renderer::CreateAndUploadTlas(
         .pCommandBuffers = &cmd,
     };
 
-    VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
+    VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
 
-    VK_CHECK(vkDeviceWaitIdle(mDevice));
+    VK_CHECK(vkDeviceWaitIdle(mDevice.mDevice));
 
     return true;
 }
@@ -3310,16 +2820,18 @@ bool Renderer::RecordCommandBuffer(u32 imageIdx)
 
 bool Renderer::CreateSwapchain()
 {
-    VK_CHECK(vkDeviceWaitIdle(mDevice));
+    VK_CHECK(vkDeviceWaitIdle(mDevice.mDevice));
 
     CleanupSwapchain();
     CleanupColorResources();
     CleanupDepthResources();
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities{};
-    VK_CHECK(
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mPhysicalDevice, mSurface, &surfaceCapabilities)
-    );
+    VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        mDevice.mPhysicalDevice,
+        mSurface,
+        &surfaceCapabilities
+    ));
     if (surfaceCapabilities.currentExtent.width != UINT32_MAX)
     {
         mSwapchain.extent = surfaceCapabilities.currentExtent;
@@ -3359,11 +2871,16 @@ bool Renderer::CreateSwapchain()
     mUniformData.clipToWorld = Inverse(mUniformData.worldToClip);
 
     u32 surfaceFormatCount = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(mPhysicalDevice, mSurface, &surfaceFormatCount, nullptr);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(
+        mDevice.mPhysicalDevice,
+        mSurface,
+        &surfaceFormatCount,
+        nullptr
+    );
     DEBUG_ASSERT(surfaceFormatCount > 0);
     std::vector<VkSurfaceFormatKHR> surfaceFormats(surfaceFormatCount);
     vkGetPhysicalDeviceSurfaceFormatsKHR(
-        mPhysicalDevice,
+        mDevice.mPhysicalDevice,
         mSurface,
         &surfaceFormatCount,
         surfaceFormats.data()
@@ -3432,14 +2949,22 @@ bool Renderer::CreateSwapchain()
         .clipped = VK_TRUE,
     };
 
-    VK_CHECK(vkCreateSwapchainKHR(mDevice, &swapchainInfo, nullptr, &mSwapchain.swapchain));
+    VK_CHECK(vkCreateSwapchainKHR(mDevice.mDevice, &swapchainInfo, nullptr, &mSwapchain.swapchain));
 
     u32 swapchainImageCount = 0;
-    VK_CHECK(vkGetSwapchainImagesKHR(mDevice, mSwapchain.swapchain, &swapchainImageCount, nullptr));
+    VK_CHECK(vkGetSwapchainImagesKHR(
+        mDevice.mDevice,
+        mSwapchain.swapchain,
+        &swapchainImageCount,
+        nullptr
+    ));
     std::vector<VkImage> images(swapchainImageCount);
-    VK_CHECK(
-        vkGetSwapchainImagesKHR(mDevice, mSwapchain.swapchain, &swapchainImageCount, images.data())
-    );
+    VK_CHECK(vkGetSwapchainImagesKHR(
+        mDevice.mDevice,
+        mSwapchain.swapchain,
+        &swapchainImageCount,
+        images.data()
+    ));
 
     mSwapchain.images.resize(swapchainImageCount);
     for (u32 i = 0; i < swapchainImageCount; ++i)
@@ -3463,7 +2988,7 @@ bool Renderer::CreateSwapchain()
     {
         imageViewInfo.image = mSwapchain.images[i].image;
         VkImageView imageView{};
-        VK_CHECK(vkCreateImageView(mDevice, &imageViewInfo, nullptr, &imageView));
+        VK_CHECK(vkCreateImageView(mDevice.mDevice, &imageViewInfo, nullptr, &imageView));
         mSwapchain.images[i].view = imageView;
     }
 
@@ -3486,118 +3011,72 @@ void Renderer::CleanupSwapchain()
 {
     for (size_t i = 0; i < mSwapchain.images.size(); ++i)
     {
-        vkDestroyImageView(mDevice, mSwapchain.images[i].view, nullptr);
+        vkDestroyImageView(mDevice.mDevice, mSwapchain.images[i].view, nullptr);
         mSwapchain.images[i].view = VK_NULL_HANDLE;
     }
-    vkDestroySwapchainKHR(mDevice, mSwapchain.swapchain, nullptr);
+    vkDestroySwapchainKHR(mDevice.mDevice, mSwapchain.swapchain, nullptr);
     mSwapchain.swapchain = VK_NULL_HANDLE;
 }
 
 bool Renderer::CreateColorResources()
 {
-    if (!Vulkan::FindSupportedImageFormat(
-            mRenderImageFormat,
-            mPhysicalDevice,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            {
-                VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
-                VK_FORMAT_B10G11R11_UFLOAT_PACK32,
-            }
-        ))
-    {
-        fprintf(stderr, "vulkan: failed to find a suitable render image format\n");
-        return false;
-    }
-
     mRenderImageExtent.width = mSwapchain.extent.width * RENDER_SCALE;
     mRenderImageExtent.height = mSwapchain.extent.height * RENDER_SCALE;
 
     mUniformData.renderWidth = mRenderImageExtent.width;
     mUniformData.renderHeight = mRenderImageExtent.height;
 
-    if (!Vulkan::CreateImage(
-            mRenderImage,
-            mDevice,
-            mVmaAllocator,
-            mRenderImageFormat,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            mRenderImageExtent.width,
-            mRenderImageExtent.height,
-            1,
-            "RenderImage"
-        ))
+    if (!mDevice.CreateImage({
+            .image = mRenderImage,
+            .formats = {
+                VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+                VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+            },
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mRenderImageExtent.width,
+            .height = mRenderImageExtent.height,
+            .debugName = "RenderImage",
+        }))
     {
         return false;
     }
 
-    if (!Vulkan::FindSupportedImageFormat(
-            mVisibilityImageFormat,
-            mPhysicalDevice,
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            {VK_FORMAT_R32G32_UINT}
-        ))
-    {
-        fprintf(stderr, "vulkan: failed to find a suitable visibility buffer image format\n");
-        return false;
-    }
-
-    if (!Vulkan::CreateImage(
-            mVisibilityImage,
-            mDevice,
-            mVmaAllocator,
-            mVisibilityImageFormat,
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            mRenderImageExtent.width,
-            mRenderImageExtent.height,
-            1,
-            "VisibilityImage"
-        ))
+    if (!mDevice.CreateImage({
+            .image = mVisibilityImage,
+            .formats = {VK_FORMAT_R32G32_UINT},
+            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mRenderImageExtent.width,
+            .height = mRenderImageExtent.height,
+            .debugName = "VisibilityImage",
+        }))
     {
         return false;
     }
 
     for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        if (!Vulkan::CreateImage(
-                mFrame[i].resolvedRenderImage,
-                mDevice,
-                mVmaAllocator,
-                mRenderImageFormat,
-                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+        if (!mDevice.CreateImage({
+                .image = mFrame[i].resolvedRenderImage,
+                .formats = {mRenderImage.format},
+                .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
                     | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                mRenderImageExtent.width,
-                mRenderImageExtent.height,
-                1,
-                "ResolvedRenderImage"
-            ))
+                .width = mRenderImageExtent.width,
+                .height = mRenderImageExtent.height,
+                .debugName = "ResolvedRenderImage",
+            }))
         {
             return false;
         }
     }
 
-    VkFormat velocityImageFormat{};
-    if (!Vulkan::FindSupportedImageFormat(
-            velocityImageFormat,
-            mPhysicalDevice,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            {VK_FORMAT_R16G16_SFLOAT}
-        ))
-    {
-        fprintf(stderr, "vulkan: failed to find a suitable velocity image format\n");
-        return false;
-    }
-
-    if (!Vulkan::CreateImage(
-            mVelocityImage,
-            mDevice,
-            mVmaAllocator,
-            velocityImageFormat,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            mRenderImageExtent.width,
-            mRenderImageExtent.height,
-            1,
-            "VelocityImage"
-        ))
+    if (!mDevice.CreateImage({
+            .image = mVelocityImage,
+            .formats = {VK_FORMAT_R16G16_SFLOAT},
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mRenderImageExtent.width,
+            .height = mRenderImageExtent.height,
+            .debugName = "VelocityImage",
+        }))
     {
         return false;
     }
@@ -3609,50 +3088,24 @@ void Renderer::CleanupColorResources()
 {
     for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        Vulkan::DestroyImage(mFrame[i].resolvedRenderImage, mDevice, mVmaAllocator);
+        mDevice.DestroyImage(mFrame[i].resolvedRenderImage);
     }
-    Vulkan::DestroyImage(mVisibilityImage, mDevice, mVmaAllocator);
-    Vulkan::DestroyImage(mRenderImage, mDevice, mVmaAllocator);
-    Vulkan::DestroyImage(mVelocityImage, mDevice, mVmaAllocator);
+    mDevice.DestroyImage(mVisibilityImage);
+    mDevice.DestroyImage(mRenderImage);
+    mDevice.DestroyImage(mVelocityImage);
 }
 
 bool Renderer::CreateDepthResources()
 {
-    if (!Vulkan::FindSupportedImageFormat(
-            mDepthFormat,
-            mPhysicalDevice,
-            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            {VK_FORMAT_D32_SFLOAT}
-        ))
+    if (!mDevice.CreateImage({
+            .image = mDepthImage,
+            .formats = {VK_FORMAT_D32_SFLOAT},
+            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mRenderImageExtent.width,
+            .height = mRenderImageExtent.height,
+            .debugName = "DepthImage",
+        }))
     {
-        fprintf(stderr, "vulkan: failed to find a suitable depth format\n");
-        return false;
-    }
-
-    if (!Vulkan::CreateImage(
-            mDepthImage,
-            mDevice,
-            mVmaAllocator,
-            mDepthFormat,
-            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            mRenderImageExtent.width,
-            mRenderImageExtent.height,
-            1,
-            "DepthImage"
-        ))
-    {
-        return false;
-    }
-
-    VkFormat depthPyramidFormat{};
-    if (!Vulkan::FindSupportedImageFormat(
-            depthPyramidFormat,
-            mPhysicalDevice,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            {VK_FORMAT_R32_SFLOAT}
-        ))
-    {
-        fprintf(stderr, "vulkan: failed to find a suitable depth pyramid format\n");
         return false;
     }
 
@@ -3666,18 +3119,15 @@ bool Renderer::CreateDepthResources()
     const u32 depthPyramidMipLevels
         = Utils::GetMipLevels(mDepthPyramidImageExtent.width, mDepthPyramidImageExtent.height);
 
-    if (!Vulkan::CreateImage(
-            mDepthPyramidImage,
-            mDevice,
-            mVmaAllocator,
-            depthPyramidFormat,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            mDepthPyramidImageExtent.width,
-            mDepthPyramidImageExtent.height,
-            1,
-            "DepthPyramidImage",
-            depthPyramidMipLevels
-        ))
+    if (!mDevice.CreateImage({
+            .image = mDepthPyramidImage,
+            .formats = {VK_FORMAT_R32_SFLOAT},
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mDepthPyramidImageExtent.width,
+            .height = mDepthPyramidImageExtent.height,
+            .mipLevels = depthPyramidMipLevels,
+            .debugName = "DepthPyramidImage",
+        }))
     {
         return false;
     }
@@ -3690,7 +3140,7 @@ bool Renderer::CreateDepthResources()
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image = mDepthPyramidImage.image,
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = depthPyramidFormat,
+            .format = mDepthPyramidImage.format,
             .subresourceRange = {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                 .baseMipLevel = u32(i),
@@ -3698,7 +3148,7 @@ bool Renderer::CreateDepthResources()
                 .layerCount = 1,
             },
         };
-        vkCreateImageView(mDevice, &info, nullptr, &mDepthPyramidMipImageViews[i]);
+        vkCreateImageView(mDevice.mDevice, &info, nullptr, &mDepthPyramidMipImageViews[i]);
     }
 
     return true;
@@ -3706,11 +3156,11 @@ bool Renderer::CreateDepthResources()
 
 void Renderer::CleanupDepthResources()
 {
-    Vulkan::DestroyImage(mDepthImage, mDevice, mVmaAllocator);
-    Vulkan::DestroyImage(mDepthPyramidImage, mDevice, mVmaAllocator);
+    mDevice.DestroyImage(mDepthImage);
+    mDevice.DestroyImage(mDepthPyramidImage);
     for (VkImageView& view : mDepthPyramidMipImageViews)
     {
-        vkDestroyImageView(mDevice, view, nullptr);
+        vkDestroyImageView(mDevice.mDevice, view, nullptr);
         view = VK_NULL_HANDLE;
     }
 }

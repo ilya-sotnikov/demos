@@ -16,8 +16,13 @@
 #pragma clang diagnostic pop
 #endif
 
+#include <SDL3/SDL_vulkan.h>
+
 #include <string.h>
 #include <algorithm>
+
+#define SDL_PRINT_ERROR(functionName) \
+    fprintf(stderr, "%s:%d: " functionName " failed: %s\n", __FILE__, __LINE__, SDL_GetError())
 
 struct FileData
 {
@@ -546,76 +551,528 @@ bool Vulkan::FindMemoryType(
     return false;
 }
 
-bool Vulkan::CreateBuffer(
-    Vulkan::Buffer& buffer,
+void Vulkan::CmdPushDescriptors(
+    VkCommandBuffer cmd,
+    const Vulkan::Pipeline& pipeline,
+    std::initializer_list<Vulkan::DescriptorInfo> descriptorInfos
+)
+{
+    DEBUG_ASSERT(cmd);
+    DEBUG_ASSERT(pipeline.pipeline);
+    DEBUG_ASSERT(pipeline.descriptorSetLayout);
+    DEBUG_ASSERT(pipeline.descriptorUpdateTemplate);
+    DEBUG_ASSERT(pipeline.layout);
+    DEBUG_ASSERT(descriptorInfos.size() > 0);
+
+    vkCmdPushDescriptorSetWithTemplate(
+        cmd,
+        pipeline.descriptorUpdateTemplate,
+        pipeline.layout,
+        0,
+        descriptorInfos.begin()
+    );
+}
+
+bool Vulkan::DebugNameObject(
     VkDevice device,
-    VmaAllocator vmaAllocator,
-    VkDeviceSize size,
-    VkBufferUsageFlags usage,
-    VkMemoryPropertyFlags requiredFlags,
-    const char* debugName,
-    VkDeviceSize minAlignment
+    VkObjectType objectType,
+    u64 objectHandle,
+    const char* objectName
 )
 {
     DEBUG_ASSERT(device);
-    DEBUG_ASSERT(vmaAllocator);
-    DEBUG_ASSERT(size > 0);
+    DEBUG_ASSERT(objectHandle);
+    DEBUG_ASSERT(objectName);
 
-    usage |= VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
+    const VkDebugUtilsObjectNameInfoEXT nameInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = objectType,
+        .objectHandle = objectHandle,
+        .pObjectName = objectName,
+    };
+
+    (void)device;
+    (void)nameInfo;
+
+#ifdef VULKAN_ENABLE_DEBUG_UTILS
+    VK_CHECK(vkSetDebugUtilsObjectNameEXT(device, &nameInfo));
+#endif
+
+    return true;
+}
+
+bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
+{
+    DEBUG_ASSERT(window);
+
+    // Instance.
+    {
+        u32 vulkanApiVersion = 0;
+        VK_CHECK(vkEnumerateInstanceVersion(&vulkanApiVersion));
+        if (vulkanApiVersion < VK_API_VERSION_1_4)
+        {
+            fprintf(stderr, "vulkan: API version 1.4 is required\n");
+            return false;
+        }
+
+        const VkApplicationInfo appInfo = {
+            .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .pApplicationName = "None",
+            .applicationVersion = 1,
+            .pEngineName = "None",
+            .engineVersion = 1,
+            .apiVersion = VK_API_VERSION_1_4,
+        };
+
+        u32 sdlExtCount = 0;
+
+        // Find the required KHR surface extensions.
+        const char* const* const sdlExts = SDL_Vulkan_GetInstanceExtensions(&sdlExtCount);
+        if (!sdlExts)
+        {
+            SDL_PRINT_ERROR("SDL_Vulkan_GetInstanceExtensions");
+            return false;
+        }
+
+        std::vector<const char*> requiredExtensions{sdlExts, sdlExts + sdlExtCount};
+#ifdef VULKAN_ENABLE_DEBUG_UTILS
+        requiredExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
+
+        u32 extCount = 0;
+        VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr));
+        std::vector<VkExtensionProperties> availableExts(extCount);
+        VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &extCount, availableExts.data()));
+
+        for (const char* ext : requiredExtensions)
+        {
+            const bool result = Vulkan::ExtensionIsAvailable(
+                ext,
+                {availableExts.data(), int(availableExts.size())}
+            );
+            if (!result)
+            {
+                fprintf(stderr, "required vulkan extension %s is unavailable\n", ext);
+                return false;
+            }
+        }
+
+        const VkInstanceCreateInfo instanceInfo = {
+            .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pApplicationInfo = &appInfo,
+            .enabledExtensionCount = u32(requiredExtensions.size()),
+            .ppEnabledExtensionNames = requiredExtensions.data(),
+        };
+
+        VK_CHECK(vkCreateInstance(&instanceInfo, nullptr, &mInstance));
+
+        volkLoadInstanceOnly(mInstance);
+    }
+
+    // Surface.
+    if (!SDL_Vulkan_CreateSurface(window, mInstance, nullptr, &surface))
+    {
+        SDL_PRINT_ERROR("SDL_Vulkan_CreateSurface ");
+        return false;
+    }
+
+    const char* const requiredDeviceExtensions[] = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_RAY_QUERY_EXTENSION_NAME,
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+    };
+
+    // Physical device.
+    {
+        u32 physicalDeviceCount = 0;
+        VK_CHECK(vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, nullptr));
+        std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
+        VK_CHECK(
+            vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, physicalDevices.data())
+        );
+
+        int physicalDeviceIndex = -1;
+        for (u32 i = 0; i < physicalDeviceCount; ++i)
+        {
+            const VkPhysicalDevice physicalDevice = physicalDevices[i];
+
+            VkPhysicalDeviceSubgroupProperties subgroupProperties = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES,
+            };
+
+            VkPhysicalDeviceProperties2 physicalDeviceProperties = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                .pNext = &subgroupProperties,
+            };
+            vkGetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceProperties);
+            const bool supportsVulkan13
+                = physicalDeviceProperties.properties.apiVersion >= VK_API_VERSION_1_3;
+            bool supportsSubgroup = true;
+            {
+                const VkSubgroupFeatureFlags flag = subgroupProperties.supportedOperations;
+                supportsSubgroup &= !!(flag & VK_SUBGROUP_FEATURE_VOTE_BIT);
+                supportsSubgroup &= !!(flag & VK_SUBGROUP_FEATURE_BALLOT_BIT);
+            }
+
+            // Graphics support.
+            u32 queueFamilyPropertyCount = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties2(
+                physicalDevice,
+                &queueFamilyPropertyCount,
+                nullptr
+            );
+            std::vector<VkQueueFamilyProperties2> queueFamilyProperties(queueFamilyPropertyCount);
+            for (u32 j = 0; j < queueFamilyPropertyCount; ++j)
+            {
+                queueFamilyProperties[j].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+            }
+            vkGetPhysicalDeviceQueueFamilyProperties2(
+                physicalDevice,
+                &queueFamilyPropertyCount,
+                queueFamilyProperties.data()
+            );
+            bool supportsGraphicsAndPresentation = false;
+            for (u32 j = 0; j < queueFamilyPropertyCount; ++j)
+            {
+                if (queueFamilyProperties[j].queueFamilyProperties.queueFlags
+                    & VK_QUEUE_GRAPHICS_BIT)
+                {
+                    VkBool32 surfaceSupported = VK_FALSE;
+                    VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(
+                        physicalDevice,
+                        j,
+                        surface,
+                        &surfaceSupported
+                    ));
+                    if (surfaceSupported == VK_TRUE)
+                    {
+                        supportsGraphicsAndPresentation = true;
+                        break;
+                    }
+                }
+            }
+
+            // Required extensions.
+            u32 deviceExtensionPropertyCount = 0;
+            VK_CHECK(vkEnumerateDeviceExtensionProperties(
+                physicalDevice,
+                nullptr,
+                &deviceExtensionPropertyCount,
+                nullptr
+            ));
+            std::vector<VkExtensionProperties> extensionProperties(deviceExtensionPropertyCount);
+            VK_CHECK(vkEnumerateDeviceExtensionProperties(
+                physicalDevice,
+                nullptr,
+                &deviceExtensionPropertyCount,
+                extensionProperties.data()
+            ));
+            bool supportsRequiredExtensions = true;
+            for (size_t j = 0; j < ARRAY_SIZE(requiredDeviceExtensions); ++j)
+            {
+                const bool result = Vulkan::ExtensionIsAvailable(
+                    requiredDeviceExtensions[j],
+                    {extensionProperties.data(), int(extensionProperties.size())}
+                );
+                if (!result)
+                {
+                    supportsRequiredExtensions = false;
+                    break;
+                }
+            }
+
+            // Required features.
+            VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+            };
+            VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+                .pNext = &rayTracingPipelineFeatures,
+            };
+            VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+                .pNext = &rayQueryFeatures,
+            };
+            VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+                .pNext = &accelStructFeatures,
+            };
+            VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+                .pNext = &vulkanFeatures14,
+            };
+            VkPhysicalDeviceVulkan12Features vulkanFeatures12 = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                .pNext = &vulkanFeatures13,
+            };
+            VkPhysicalDeviceVulkan11Features vulkanFeatures11 = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+                .pNext = &vulkanFeatures12,
+            };
+            VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                .pNext = &vulkanFeatures11,
+            };
+
+            vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures);
+
+            // TODO: maybe check out profiles, this is getting ridiculous.
+            VkBool32 supportsRequiredFeatures = true;
+            supportsRequiredFeatures
+                &= physicalDeviceFeatures.features.vertexPipelineStoresAndAtomics;
+            supportsRequiredFeatures &= vulkanFeatures14.pushDescriptor;
+            supportsRequiredFeatures &= vulkanFeatures13.dynamicRendering;
+            supportsRequiredFeatures &= vulkanFeatures13.synchronization2;
+            supportsRequiredFeatures &= vulkanFeatures13.shaderDemoteToHelperInvocation;
+            supportsRequiredFeatures &= vulkanFeatures12.scalarBlockLayout;
+            supportsRequiredFeatures &= vulkanFeatures12.shaderInt8;
+            supportsRequiredFeatures &= vulkanFeatures12.storageBuffer8BitAccess;
+            supportsRequiredFeatures &= vulkanFeatures12.uniformAndStorageBuffer8BitAccess;
+            supportsRequiredFeatures
+                &= vulkanFeatures12.descriptorBindingSampledImageUpdateAfterBind;
+            supportsRequiredFeatures &= vulkanFeatures12.descriptorBindingPartiallyBound;
+            supportsRequiredFeatures &= vulkanFeatures12.descriptorBindingVariableDescriptorCount;
+            supportsRequiredFeatures
+                &= vulkanFeatures12.descriptorBindingStorageImageUpdateAfterBind;
+            supportsRequiredFeatures &= vulkanFeatures12.shaderSampledImageArrayNonUniformIndexing;
+            supportsRequiredFeatures &= vulkanFeatures12.runtimeDescriptorArray;
+            supportsRequiredFeatures &= vulkanFeatures12.drawIndirectCount;
+            supportsRequiredFeatures &= vulkanFeatures12.shaderFloat16;
+            supportsRequiredFeatures &= vulkanFeatures12.samplerFilterMinmax;
+            supportsRequiredFeatures &= vulkanFeatures11.shaderDrawParameters;
+            supportsRequiredFeatures &= vulkanFeatures11.storagePushConstant16;
+            supportsRequiredFeatures &= vulkanFeatures11.storageBuffer16BitAccess;
+            supportsRequiredFeatures &= vulkanFeatures11.uniformAndStorageBuffer16BitAccess;
+            supportsRequiredFeatures &= physicalDeviceFeatures.features.multiDrawIndirect;
+            supportsRequiredFeatures &= physicalDeviceFeatures.features.fragmentStoresAndAtomics;
+            supportsRequiredFeatures &= physicalDeviceFeatures.features.samplerAnisotropy;
+            supportsRequiredFeatures &= physicalDeviceFeatures.features.sampleRateShading;
+            supportsRequiredFeatures &= physicalDeviceFeatures.features.textureCompressionBC;
+            supportsRequiredFeatures &= physicalDeviceFeatures.features.shaderInt16;
+            supportsRequiredFeatures &= accelStructFeatures.accelerationStructure;
+            supportsRequiredFeatures &= rayQueryFeatures.rayQuery;
+            supportsRequiredFeatures &= rayTracingPipelineFeatures.rayTracingPipeline;
+
+            // TODO: remove, use mesh shaders instead.
+            supportsRequiredFeatures &= physicalDeviceFeatures.features.geometryShader;
+
+            bool deviceOk = true;
+            deviceOk &= supportsVulkan13;
+            deviceOk &= supportsGraphicsAndPresentation;
+            deviceOk &= supportsRequiredExtensions;
+            deviceOk &= bool(supportsRequiredFeatures);
+            deviceOk &= supportsSubgroup;
+            if (deviceOk)
+            {
+                physicalDeviceIndex = int(i);
+                break;
+            }
+        }
+
+        if (physicalDeviceIndex < 0)
+        {
+            fprintf(stderr, "No suitable physical device found\n");
+            return false;
+        }
+
+        mPhysicalDevice = physicalDevices[size_t(physicalDeviceIndex)];
+
+        VkPhysicalDeviceProperties2 properties = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        };
+        vkGetPhysicalDeviceProperties2(mPhysicalDevice, &properties);
+
+        Utils::strlcpy(mGpuName, properties.properties.deviceName, sizeof(mGpuName));
+        printf("GPU: %s\n", mGpuName);
+    }
+
+    // Logical device, queue.
+    {
+        // Already checked when picking a physical device.
+        Vulkan::QueueInfo queueInfo = Vulkan::GetQueue(mPhysicalDevice, VK_QUEUE_GRAPHICS_BIT);
+
+        VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+            .rayTracingPipeline = VK_TRUE,
+        };
+        VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+            .pNext = &rayTracingPipelineFeatures,
+            .rayQuery = VK_TRUE,
+        };
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+            .pNext = &rayQueryFeatures,
+            .accelerationStructure = VK_TRUE,
+        };
+        VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+            .pNext = &accelStructFeatures,
+            .pushDescriptor = VK_TRUE,
+        };
+        VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+            .pNext = &vulkanFeatures14,
+            .shaderDemoteToHelperInvocation = VK_TRUE,
+            .synchronization2 = VK_TRUE,
+            .dynamicRendering = VK_TRUE,
+        };
+        VkPhysicalDeviceVulkan12Features vulkanFeatures12 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+            .pNext = &vulkanFeatures13,
+            .drawIndirectCount = VK_TRUE,
+            .storageBuffer8BitAccess = VK_TRUE,
+            .uniformAndStorageBuffer8BitAccess = VK_TRUE,
+            .shaderFloat16 = VK_TRUE,
+            .shaderInt8 = VK_TRUE,
+            .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+            .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+            .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
+            .descriptorBindingPartiallyBound = VK_TRUE,
+            .descriptorBindingVariableDescriptorCount = VK_TRUE,
+            .runtimeDescriptorArray = VK_TRUE,
+            .samplerFilterMinmax = VK_TRUE,
+            .scalarBlockLayout = VK_TRUE,
+            .bufferDeviceAddress = VK_TRUE,
+        };
+        VkPhysicalDeviceVulkan11Features vulkanFeatures11 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+            .pNext = &vulkanFeatures12,
+            .storageBuffer16BitAccess = VK_TRUE,
+            .uniformAndStorageBuffer16BitAccess = VK_TRUE,
+            .storagePushConstant16 = VK_TRUE,
+            .shaderDrawParameters = VK_TRUE,
+        };
+        const VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &vulkanFeatures11,
+            .features = {
+                // TODO: remove, use mesh shaders instead.
+                .geometryShader = VK_TRUE,
+
+                .sampleRateShading = VK_TRUE,
+                .multiDrawIndirect = VK_TRUE,
+                .samplerAnisotropy = VK_TRUE,
+                .vertexPipelineStoresAndAtomics = VK_TRUE,
+                .fragmentStoresAndAtomics = VK_TRUE,
+                .shaderInt64 = VK_TRUE,
+                .shaderInt16 = VK_TRUE,
+            },
+        };
+
+        const f32 queuePriority = 1.0f;
+
+        const VkDeviceQueueCreateInfo deviceQueueInfo = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueFamilyIndex = queueInfo.queueIdx,
+            .queueCount = 1,
+            .pQueuePriorities = &queuePriority,
+        };
+
+        const VkDeviceCreateInfo deviceInfo = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = &physicalDeviceFeatures,
+            .queueCreateInfoCount = 1,
+            .pQueueCreateInfos = &deviceQueueInfo,
+            .enabledExtensionCount = u32(ARRAY_SIZE(requiredDeviceExtensions)),
+            .ppEnabledExtensionNames = requiredDeviceExtensions,
+        };
+
+        VK_CHECK(vkCreateDevice(mPhysicalDevice, &deviceInfo, nullptr, &mDevice));
+
+        volkLoadDevice(mDevice);
+
+        vkGetDeviceQueue(mDevice, queueInfo.familyIdx, queueInfo.queueIdx, &queueInfo.queue);
+        mQueueInfo = queueInfo;
+    }
+
+    // VMA.
+    {
+        VmaAllocatorCreateInfo vmaAllocatorInfo = {
+            .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+            .physicalDevice = mPhysicalDevice,
+            .device = mDevice,
+            .instance = mInstance,
+            .vulkanApiVersion = VK_API_VERSION_1_4,
+        };
+
+        VmaVulkanFunctions vmaVulkanFunctions{};
+        VK_CHECK(vmaImportVulkanFunctionsFromVolk(&vmaAllocatorInfo, &vmaVulkanFunctions));
+        vmaAllocatorInfo.pVulkanFunctions = &vmaVulkanFunctions;
+
+        VK_CHECK(vmaCreateAllocator(&vmaAllocatorInfo, &mVmaAllocator));
+    }
+
+    return true;
+}
+
+void Vulkan::Device::Destroy()
+{
+    vmaDestroyAllocator(mVmaAllocator);
+    vkDestroyDevice(mDevice, nullptr);
+    vkDestroyInstance(mInstance, nullptr);
+}
+
+bool Vulkan::Device::CreateBuffer(const BufferDesc&& desc) const
+{
+    DEBUG_ASSERT(desc.size > 0);
+
+    const VkBufferUsageFlags usage = desc.usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
     const VkBufferCreateInfo bufferInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = size,
+        .size = desc.size,
         .usage = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
 
     const VmaAllocationCreateInfo allocationInfo = {
-        .requiredFlags = requiredFlags,
+        .requiredFlags = desc.requiredFlags,
     };
 
-    if (minAlignment > 0)
+    if (desc.minAlignment > 0)
     {
         VK_CHECK(vmaCreateBufferWithAlignment(
-            vmaAllocator,
+            mVmaAllocator,
             &bufferInfo,
             &allocationInfo,
-            minAlignment,
-            &buffer.buffer,
-            &buffer.allocation,
+            desc.minAlignment,
+            &desc.buffer.buffer,
+            &desc.buffer.allocation,
             nullptr
         ));
     }
     else
     {
         VK_CHECK(vmaCreateBuffer(
-            vmaAllocator,
+            mVmaAllocator,
             &bufferInfo,
             &allocationInfo,
-            &buffer.buffer,
-            &buffer.allocation,
+            &desc.buffer.buffer,
+            &desc.buffer.allocation,
             nullptr
         ));
     }
 
-    if (requiredFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+    if (desc.requiredFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {
-        VK_CHECK(vmaMapMemory(vmaAllocator, buffer.allocation, &buffer.mapped));
+        VK_CHECK(vmaMapMemory(mVmaAllocator, desc.buffer.allocation, &desc.buffer.mapped));
     }
 
     const VkBufferDeviceAddressInfo addressInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = buffer.buffer,
+        .buffer = desc.buffer.buffer,
     };
-    buffer.deviceAddress = vkGetBufferDeviceAddress(device, &addressInfo);
+    desc.buffer.deviceAddress = vkGetBufferDeviceAddress(mDevice, &addressInfo);
 
-    if (debugName)
+    if (desc.debugName)
     {
         if (!Vulkan::DebugNameObject(
-                device,
+                mDevice,
                 VK_OBJECT_TYPE_BUFFER,
-                reinterpret_cast<u64>(buffer.buffer),
-                debugName
+                reinterpret_cast<u64>(desc.buffer.buffer),
+                desc.debugName
             ))
         {
             return false;
@@ -625,63 +1082,52 @@ bool Vulkan::CreateBuffer(
     return true;
 }
 
-void Vulkan::UnmapBuffer(Vulkan::Buffer& buffer, VmaAllocator vmaAllocator)
+void Vulkan::Device::UnmapBuffer(Vulkan::Buffer& buffer) const
 {
-    DEBUG_ASSERT(vmaAllocator);
-
     if (buffer.mapped)
     {
-        vmaUnmapMemory(vmaAllocator, buffer.allocation);
+        vmaUnmapMemory(mVmaAllocator, buffer.allocation);
         buffer.mapped = nullptr;
     }
 }
 
-void Vulkan::DestroyBuffer(Vulkan::Buffer& buffer, VmaAllocator vmaAllocator)
+void Vulkan::Device::DestroyBuffer(Vulkan::Buffer& buffer) const
 {
-    DEBUG_ASSERT(vmaAllocator);
-
     if (buffer.mapped)
     {
-        vmaUnmapMemory(vmaAllocator, buffer.allocation);
+        vmaUnmapMemory(mVmaAllocator, buffer.allocation);
         buffer.mapped = nullptr;
     }
-    vmaDestroyBuffer(vmaAllocator, buffer.buffer, buffer.allocation);
+    vmaDestroyBuffer(mVmaAllocator, buffer.buffer, buffer.allocation);
     buffer.buffer = VK_NULL_HANDLE;
     buffer.allocation = VK_NULL_HANDLE;
 }
 
-bool Vulkan::CreateImage(
-    Vulkan::Image& image,
-    VkDevice device,
-    VmaAllocator vmaAllocator,
-    VkFormat format,
-    VkImageUsageFlags usage,
-    u32 width,
-    u32 height,
-    u32 depth,
-    const char* name,
-    u32 mipLevels,
-    u32 arrayLayers
-)
+bool Vulkan::Device::CreateImage(const ImageDesc&& desc) const
 {
-    DEBUG_ASSERT(device);
-    DEBUG_ASSERT(vmaAllocator);
-    DEBUG_ASSERT(height > 0);
-    DEBUG_ASSERT(width > 0);
-    DEBUG_ASSERT(depth > 0);
-    DEBUG_ASSERT(mipLevels > 0);
-    DEBUG_ASSERT(arrayLayers > 0);
+    DEBUG_ASSERT(desc.formats.size() > 0);
+    DEBUG_ASSERT(desc.height > 0);
+    DEBUG_ASSERT(desc.width > 0);
+    DEBUG_ASSERT(desc.depth > 0);
+    DEBUG_ASSERT(desc.mipLevels > 0);
+    DEBUG_ASSERT(desc.arrayLayers > 0);
 
     VkImageType imageType = VK_IMAGE_TYPE_2D;
     VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_2D;
-    if (depth > 1)
+    if (desc.depth > 1)
     {
         imageType = VK_IMAGE_TYPE_3D;
         imageViewType = VK_IMAGE_VIEW_TYPE_3D;
     }
-    else if (arrayLayers > 1)
+    else if (desc.arrayLayers > 1)
     {
         imageViewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+    }
+
+    VkFormat format{};
+    if (!Vulkan::FindSupportedImageFormat(format, mPhysicalDevice, desc.usage, desc.formats))
+    {
+        return false;
     }
 
     const VkImageCreateInfo imageInfo = {
@@ -689,15 +1135,15 @@ bool Vulkan::CreateImage(
         .imageType = imageType,
         .format = format,
         .extent = {
-            .width = width,
-            .height = height,
-            .depth = depth,
+            .width = desc.width,
+            .height = desc.height,
+            .depth = desc.depth,
         },
-        .mipLevels = mipLevels,
-        .arrayLayers = arrayLayers,
+        .mipLevels = desc.mipLevels,
+        .arrayLayers = desc.arrayLayers,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = usage,
+        .usage = desc.usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
@@ -707,11 +1153,11 @@ bool Vulkan::CreateImage(
     };
 
     VK_CHECK(vmaCreateImage(
-        vmaAllocator,
+        mVmaAllocator,
         &imageInfo,
         &allocationInfo,
-        &image.image,
-        &image.allocation,
+        &desc.image.image,
+        &desc.image.allocation,
         nullptr
     ));
 
@@ -728,73 +1174,64 @@ bool Vulkan::CreateImage(
 
     const VkImageViewCreateInfo viewInfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = image.image,
+        .image = desc.image.image,
         .viewType = imageViewType,
         .format = format,
         .subresourceRange = {
             .aspectMask = aspectMask,
-            .levelCount = mipLevels,
-            .layerCount = arrayLayers,
+            .levelCount = desc.mipLevels,
+            .layerCount = desc.arrayLayers,
         },
     };
-    VK_CHECK(vkCreateImageView(device, &viewInfo, nullptr, &image.view));
+    VK_CHECK(vkCreateImageView(mDevice, &viewInfo, nullptr, &desc.image.view));
 
-    if (name)
+    if (desc.debugName)
     {
         if (!Vulkan::DebugNameObject(
-                device,
+                mDevice,
                 VK_OBJECT_TYPE_IMAGE,
-                reinterpret_cast<u64>(image.image),
-                name
+                reinterpret_cast<u64>(desc.image.image),
+                desc.debugName
             ))
         {
             return false;
         }
 
         if (!Vulkan::DebugNameObject(
-                device,
+                mDevice,
                 VK_OBJECT_TYPE_IMAGE_VIEW,
-                reinterpret_cast<u64>(image.view),
-                name
+                reinterpret_cast<u64>(desc.image.view),
+                desc.debugName
             ))
         {
             return false;
         }
     }
 
+    desc.image.format = format;
+
     return true;
 }
 
-void Vulkan::DestroyImage(Vulkan::Image& image, VkDevice device, VmaAllocator vmaAllocator)
+void Vulkan::Device::DestroyImage(Vulkan::Image& image) const
 {
-    DEBUG_ASSERT(device);
-    DEBUG_ASSERT(vmaAllocator);
-
-    vkDestroyImageView(device, image.view, nullptr);
+    vkDestroyImageView(mDevice, image.view, nullptr);
     image.view = VK_NULL_HANDLE;
-    vmaDestroyImage(vmaAllocator, image.image, image.allocation);
+    vmaDestroyImage(mVmaAllocator, image.image, image.allocation);
     image.allocation = VK_NULL_HANDLE;
     image.image = VK_NULL_HANDLE;
 }
 
-bool Vulkan::CreateComputePipeline(
-    Vulkan::Pipeline& pipeline,
-    VkDevice device,
-    const char* shaderPath,
-    VkDescriptorSetLayout extraDescriptorSetLayout,
-    std::initializer_list<i32> specializationConstants,
-    const char* debugName
-)
+bool Vulkan::Device::CreateComputePipeline(const ComputePipelineDesc&& desc) const
 {
-    DEBUG_ASSERT(device);
-    DEBUG_ASSERT(shaderPath);
+    DEBUG_ASSERT(desc.shaderPath);
 
     std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
     descriptorSetLayoutBindings.reserve(32);
     Shader shader{};
-    DEFER(vkDestroyShaderModule(device, shader.module, nullptr));
+    DEFER(vkDestroyShaderModule(mDevice, shader.module, nullptr));
 
-    if (!CreateShader(shader, descriptorSetLayoutBindings, device, shaderPath))
+    if (!CreateShader(shader, descriptorSetLayoutBindings, mDevice, desc.shaderPath))
     {
         return false;
     }
@@ -833,10 +1270,10 @@ bool Vulkan::CreateComputePipeline(
     };
 
     VK_CHECK(vkCreateDescriptorSetLayout(
-        device,
+        mDevice,
         &descriptorSetLayoutInfo,
         nullptr,
-        &pipeline.descriptorSetLayout
+        &desc.pipeline.descriptorSetLayout
     ));
 
     VkPushConstantRange pushConstantRange{};
@@ -845,30 +1282,30 @@ bool Vulkan::CreateComputePipeline(
     {
         pushConstantRange.stageFlags = VK_SHADER_STAGE_ALL;
         pushConstantRange.size = shader.pushConstantSize;
-        pipeline.pushConstantSize = shader.pushConstantSize;
+        desc.pipeline.pushConstantSize = shader.pushConstantSize;
     }
 
     const VkDescriptorSetLayout setLayouts[2] = {
-        pipeline.descriptorSetLayout,
-        extraDescriptorSetLayout,
+        desc.pipeline.descriptorSetLayout,
+        desc.extraDescriptorSetLayout,
     };
 
     const VkPipelineLayoutCreateInfo layoutInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = extraDescriptorSetLayout ? 2u : 1u,
+        .setLayoutCount = desc.extraDescriptorSetLayout ? 2u : 1u,
         .pSetLayouts = setLayouts,
         .pushConstantRangeCount = usesPushConstants ? 1u : 0u,
         .pPushConstantRanges = &pushConstantRange,
     };
-    VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline.layout));
+    VK_CHECK(vkCreatePipelineLayout(mDevice, &layoutInfo, nullptr, &desc.pipeline.layout));
 
     VkSpecializationInfo specializationInfo{};
     std::vector<VkSpecializationMapEntry> specializationMapEntries;
     FillSpecializationInfo(
         specializationInfo,
         specializationMapEntries,
-        specializationConstants.begin(),
-        specializationConstants.size()
+        desc.specializationConstants.begin(),
+        desc.specializationConstants.size()
     );
 
     const VkComputePipelineCreateInfo pipelineInfo = {
@@ -880,16 +1317,16 @@ bool Vulkan::CreateComputePipeline(
             .pName = "Main",
             .pSpecializationInfo = &specializationInfo,
         },
-        .layout = pipeline.layout,
+        .layout = desc.pipeline.layout,
     };
 
     VK_CHECK(vkCreateComputePipelines(
-        device,
+        mDevice,
         VK_NULL_HANDLE,
         1,
         &pipelineInfo,
         nullptr,
-        &pipeline.pipeline
+        &desc.pipeline.pipeline
     ));
 
     std::vector<VkDescriptorUpdateTemplateEntry> descriptorUpdateTemplateEntries(
@@ -915,26 +1352,26 @@ bool Vulkan::CreateComputePipeline(
         .pDescriptorUpdateEntries = descriptorUpdateTemplateEntries.data(),
         .templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS,
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_COMPUTE,
-        .pipelineLayout = pipeline.layout,
+        .pipelineLayout = desc.pipeline.layout,
     };
 
     if (!descriptorUpdateTemplateEntries.empty())
     {
         VK_CHECK(vkCreateDescriptorUpdateTemplate(
-            device,
+            mDevice,
             &descriptorUpdateTemplateInfo,
             nullptr,
-            &pipeline.descriptorUpdateTemplate
+            &desc.pipeline.descriptorUpdateTemplate
         ));
     }
 
-    if (debugName)
+    if (desc.debugName)
     {
         if (!Vulkan::DebugNameObject(
-                device,
+                mDevice,
                 VK_OBJECT_TYPE_PIPELINE,
-                reinterpret_cast<u64>(pipeline.pipeline),
-                debugName
+                reinterpret_cast<u64>(desc.pipeline.pipeline),
+                desc.debugName
             ))
         {
             return false;
@@ -944,39 +1381,30 @@ bool Vulkan::CreateComputePipeline(
     return true;
 }
 
-bool Vulkan::CreateGraphicsPipeline(
-    Vulkan::Pipeline& pipeline,
-    VkDevice device,
-    std::initializer_list<const char*> shaderPaths,
-    VkDescriptorSetLayout extraDescriptorSetLayout,
-    VkGraphicsPipelineCreateInfo& pipelineInfo,
-    std::initializer_list<i32> specializationConstants,
-    const char* debugName
-)
+bool Vulkan::Device::CreateGraphicsPipeline(const GraphicsPipelineDesc&& desc) const
 {
-    DEBUG_ASSERT(device);
-    DEBUG_ASSERT(shaderPaths.size() > 0);
+    DEBUG_ASSERT(desc.shaderPaths.size() > 0);
 
     std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
     descriptorSetLayoutBindings.reserve(32);
-    std::vector<Shader> shaders(shaderPaths.size());
+    std::vector<Shader> shaders(desc.shaderPaths.size());
 
     // clang-format off
     DEFER(
         for (Shader& shader : shaders)
         {
-            vkDestroyShaderModule(device, shader.module, nullptr);
+            vkDestroyShaderModule(mDevice, shader.module, nullptr);
         }
     );
     // clang-format on
 
-    for (size_t i = 0; i < shaderPaths.size(); ++i)
+    for (size_t i = 0; i < desc.shaderPaths.size(); ++i)
     {
         if (!CreateShader(
                 shaders[i],
                 descriptorSetLayoutBindings,
-                device,
-                *(shaderPaths.begin() + i)
+                mDevice,
+                *(desc.shaderPaths.begin() + i)
             ))
         {
             return false;
@@ -1027,10 +1455,10 @@ bool Vulkan::CreateGraphicsPipeline(
     };
 
     VK_CHECK(vkCreateDescriptorSetLayout(
-        device,
+        mDevice,
         &descriptorSetLayoutInfo,
         nullptr,
-        &pipeline.descriptorSetLayout
+        &desc.pipeline.descriptorSetLayout
     ));
 
     VkPushConstantRange pushConstantRange{};
@@ -1039,30 +1467,30 @@ bool Vulkan::CreateGraphicsPipeline(
     {
         pushConstantRange.stageFlags = VK_SHADER_STAGE_ALL;
         pushConstantRange.size = pushConstantSize;
-        pipeline.pushConstantSize = pushConstantSize;
+        desc.pipeline.pushConstantSize = pushConstantSize;
     }
 
     const VkDescriptorSetLayout setLayouts[2] = {
-        pipeline.descriptorSetLayout,
-        extraDescriptorSetLayout,
+        desc.pipeline.descriptorSetLayout,
+        desc.extraDescriptorSetLayout,
     };
 
     const VkPipelineLayoutCreateInfo layoutInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = extraDescriptorSetLayout ? 2u : 1u,
+        .setLayoutCount = desc.extraDescriptorSetLayout ? 2u : 1u,
         .pSetLayouts = setLayouts,
         .pushConstantRangeCount = usesPushConstants ? 1u : 0u,
         .pPushConstantRanges = &pushConstantRange,
     };
-    VK_CHECK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline.layout));
+    VK_CHECK(vkCreatePipelineLayout(mDevice, &layoutInfo, nullptr, &desc.pipeline.layout));
 
     VkSpecializationInfo specializationInfo{};
     std::vector<VkSpecializationMapEntry> specializationMapEntries;
     FillSpecializationInfo(
         specializationInfo,
         specializationMapEntries,
-        specializationConstants.begin(),
-        specializationConstants.size()
+        desc.specializationConstants.begin(),
+        desc.specializationConstants.size()
     );
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStageInfos(shaders.size());
@@ -1077,18 +1505,18 @@ bool Vulkan::CreateGraphicsPipeline(
         };
     }
 
-    pipelineInfo.layout = pipeline.layout;
-    pipelineInfo.stageCount = u32(shaderStageInfos.size());
-    pipelineInfo.pStages = shaderStageInfos.data();
-    pipelineInfo.layout = pipeline.layout;
+    desc.pipelineInfo.layout = desc.pipeline.layout;
+    desc.pipelineInfo.stageCount = u32(shaderStageInfos.size());
+    desc.pipelineInfo.pStages = shaderStageInfos.data();
+    desc.pipelineInfo.layout = desc.pipeline.layout;
 
     VK_CHECK(vkCreateGraphicsPipelines(
-        device,
+        mDevice,
         VK_NULL_HANDLE,
         1,
-        &pipelineInfo,
+        &desc.pipelineInfo,
         nullptr,
-        &pipeline.pipeline
+        &desc.pipeline.pipeline
     ));
 
     std::vector<VkDescriptorUpdateTemplateEntry> descriptorUpdateTemplateEntries(
@@ -1114,26 +1542,26 @@ bool Vulkan::CreateGraphicsPipeline(
         .pDescriptorUpdateEntries = descriptorUpdateTemplateEntries.data(),
         .templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS,
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .pipelineLayout = pipeline.layout,
+        .pipelineLayout = desc.pipeline.layout,
     };
 
     if (!descriptorUpdateTemplateEntries.empty())
     {
         VK_CHECK(vkCreateDescriptorUpdateTemplate(
-            device,
+            mDevice,
             &descriptorUpdateTemplateInfo,
             nullptr,
-            &pipeline.descriptorUpdateTemplate
+            &desc.pipeline.descriptorUpdateTemplate
         ));
     }
 
-    if (debugName)
+    if (desc.debugName)
     {
         if (!Vulkan::DebugNameObject(
-                device,
+                mDevice,
                 VK_OBJECT_TYPE_PIPELINE,
-                reinterpret_cast<u64>(pipeline.pipeline),
-                debugName
+                reinterpret_cast<u64>(desc.pipeline.pipeline),
+                desc.debugName
             ))
         {
             return false;
@@ -1143,66 +1571,14 @@ bool Vulkan::CreateGraphicsPipeline(
     return true;
 }
 
-void Vulkan::DestroyPipeline(Vulkan::Pipeline& pipeline, VkDevice device)
+void Vulkan::Device::DestroyPipeline(Vulkan::Pipeline& pipeline) const
 {
-    DEBUG_ASSERT(device);
-
-    vkDestroyPipelineLayout(device, pipeline.layout, nullptr);
+    vkDestroyPipelineLayout(mDevice, pipeline.layout, nullptr);
     pipeline.layout = VK_NULL_HANDLE;
-    vkDestroyDescriptorSetLayout(device, pipeline.descriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(mDevice, pipeline.descriptorSetLayout, nullptr);
     pipeline.descriptorSetLayout = VK_NULL_HANDLE;
-    vkDestroyPipeline(device, pipeline.pipeline, nullptr);
+    vkDestroyPipeline(mDevice, pipeline.pipeline, nullptr);
     pipeline.pipeline = VK_NULL_HANDLE;
-    vkDestroyDescriptorUpdateTemplate(device, pipeline.descriptorUpdateTemplate, nullptr);
+    vkDestroyDescriptorUpdateTemplate(mDevice, pipeline.descriptorUpdateTemplate, nullptr);
     pipeline.descriptorUpdateTemplate = VK_NULL_HANDLE;
-}
-
-void Vulkan::CmdPushDescriptors(
-    VkCommandBuffer cmd,
-    const Vulkan::Pipeline& pipeline,
-    std::initializer_list<Vulkan::DescriptorInfo> descriptorInfos
-)
-{
-    DEBUG_ASSERT(cmd);
-    DEBUG_ASSERT(pipeline.pipeline);
-    DEBUG_ASSERT(pipeline.descriptorSetLayout);
-    DEBUG_ASSERT(pipeline.descriptorUpdateTemplate);
-    DEBUG_ASSERT(pipeline.layout);
-    DEBUG_ASSERT(descriptorInfos.size() > 0);
-
-    vkCmdPushDescriptorSetWithTemplate(
-        cmd,
-        pipeline.descriptorUpdateTemplate,
-        pipeline.layout,
-        0,
-        descriptorInfos.begin()
-    );
-}
-
-bool Vulkan::DebugNameObject(
-    VkDevice device,
-    VkObjectType objectType,
-    u64 objectHandle,
-    const char* objectName
-)
-{
-    DEBUG_ASSERT(device);
-    DEBUG_ASSERT(objectHandle);
-    DEBUG_ASSERT(objectName);
-
-    const VkDebugUtilsObjectNameInfoEXT nameInfo = {
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-        .objectType = objectType,
-        .objectHandle = objectHandle,
-        .pObjectName = objectName,
-    };
-
-    (void)device;
-    (void)nameInfo;
-
-#ifdef VULKAN_ENABLE_DEBUG_UTILS
-    VK_CHECK(vkSetDebugUtilsObjectNameEXT(device, &nameInfo));
-#endif
-
-    return true;
 }
