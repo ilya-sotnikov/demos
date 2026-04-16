@@ -90,6 +90,38 @@ static FileData FileRead(const char* path)
     return result;
 }
 
+static Vulkan::QueueInfo GetQueue(VkPhysicalDevice device, VkQueueFlagBits flags)
+{
+    DEBUG_ASSERT(device);
+
+    u32 queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties2(device, &queueFamilyCount, nullptr);
+    std::vector<VkQueueFamilyProperties2> queueFamilies(queueFamilyCount);
+    for (u32 i = 0; i < queueFamilyCount; ++i)
+    {
+        queueFamilies[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+    }
+    vkGetPhysicalDeviceQueueFamilyProperties2(device, &queueFamilyCount, queueFamilies.data());
+
+    Vulkan::QueueInfo queueInfo = {
+        .familyIdx = UINT32_MAX,
+        .queueIdx = UINT32_MAX,
+    };
+    for (u32 i = 0; i < queueFamilyCount; ++i)
+    {
+        if (queueFamilies[i].queueFamilyProperties.queueFlags & flags)
+        {
+            DEBUG_ASSERT(queueFamilies[i].queueFamilyProperties.queueCount > 0);
+            queueInfo.familyIdx = i;
+            queueInfo.queueIdx = 0;
+            // queueInfo.queue is set after creating a logical device and calling vkGetDeviceQueue.
+            break;
+        }
+    }
+
+    return queueInfo;
+}
+
 struct Shader
 {
     VkShaderModule module;
@@ -337,38 +369,6 @@ bool Vulkan::ExtensionIsAvailable(const char* name, Slice<VkExtensionProperties>
         }
     }
     return false;
-}
-
-Vulkan::QueueInfo Vulkan::GetQueue(VkPhysicalDevice device, VkQueueFlagBits flags)
-{
-    DEBUG_ASSERT(device);
-
-    u32 queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties2(device, &queueFamilyCount, nullptr);
-    std::vector<VkQueueFamilyProperties2> queueFamilies(queueFamilyCount);
-    for (u32 i = 0; i < queueFamilyCount; ++i)
-    {
-        queueFamilies[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
-    }
-    vkGetPhysicalDeviceQueueFamilyProperties2(device, &queueFamilyCount, queueFamilies.data());
-
-    Vulkan::QueueInfo queueInfo = {
-        .familyIdx = UINT32_MAX,
-        .queueIdx = UINT32_MAX,
-    };
-    for (u32 i = 0; i < queueFamilyCount; ++i)
-    {
-        if (queueFamilies[i].queueFamilyProperties.queueFlags & flags)
-        {
-            DEBUG_ASSERT(queueFamilies[i].queueFamilyProperties.queueCount > 0);
-            queueInfo.familyIdx = i;
-            queueInfo.queueIdx = 0;
-            // queueInfo.queue is set after creating a logical device and calling vkGetDeviceQueue.
-            break;
-        }
-    }
-
-    return queueInfo;
 }
 
 VkMemoryBarrier2 Vulkan::MemoryBarrier(
@@ -890,7 +890,7 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
     // Logical device, queue.
     {
         // Already checked when picking a physical device.
-        Vulkan::QueueInfo queueInfo = Vulkan::GetQueue(mPhysicalDevice, VK_QUEUE_GRAPHICS_BIT);
+        Vulkan::QueueInfo queueInfo = GetQueue(mPhysicalDevice, VK_QUEUE_GRAPHICS_BIT);
 
         VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineFeatures = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
@@ -1384,6 +1384,7 @@ bool Vulkan::Device::CreateComputePipeline(const ComputePipelineDesc&& desc) con
 bool Vulkan::Device::CreateGraphicsPipeline(const GraphicsPipelineDesc&& desc) const
 {
     DEBUG_ASSERT(desc.shaderPaths.size() > 0);
+    DEBUG_ASSERT(desc.colorAttachmentFormats.size() == desc.colorBlendAttachments.size());
 
     std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
     descriptorSetLayoutBindings.reserve(32);
@@ -1505,16 +1506,89 @@ bool Vulkan::Device::CreateGraphicsPipeline(const GraphicsPipelineDesc&& desc) c
         };
     }
 
-    desc.pipelineInfo.layout = desc.pipeline.layout;
-    desc.pipelineInfo.stageCount = u32(shaderStageInfos.size());
-    desc.pipelineInfo.pStages = shaderStageInfos.data();
-    desc.pipelineInfo.layout = desc.pipeline.layout;
+    const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .colorAttachmentCount = u32(desc.colorAttachmentFormats.size()),
+        .pColorAttachmentFormats = desc.colorAttachmentFormats.begin(),
+        .depthAttachmentFormat = desc.depthFormat,
+        .stencilAttachmentFormat = desc.stencilFormat,
+    };
+
+    const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = u32(desc.vertexBindingDescriptions.size()),
+        .pVertexBindingDescriptions = desc.vertexBindingDescriptions.begin(),
+        .vertexAttributeDescriptionCount = u32(desc.vertexAttributeDescriptions.size()),
+        .pVertexAttributeDescriptions = desc.vertexAttributeDescriptions.begin(),
+    };
+
+    const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = desc.topology,
+    };
+
+    const VkPipelineViewportStateCreateInfo viewportInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = desc.viewportCount,
+        .scissorCount = u32(desc.scissorCount),
+    };
+
+    const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .depthClampEnable = desc.depthClampEnable,
+        .rasterizerDiscardEnable = desc.rasterizerDiscardEnable,
+        .polygonMode = desc.polygonMode,
+        .cullMode = desc.cullMode,
+        .frontFace = desc.frontFace,
+        .lineWidth = desc.lineWidth,
+    };
+
+    const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+
+    const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = desc.depthTestEnable,
+        .depthWriteEnable = desc.depthWriteEnable,
+        .depthCompareOp = desc.depthCompareOp,
+        .depthBoundsTestEnable = desc.depthBoundsTestEnable,
+    };
+
+    const VkPipelineColorBlendStateCreateInfo colorBlendingInfo = {
+
+        .attachmentCount = u32(desc.colorBlendAttachments.size()),
+        .pAttachments = desc.colorBlendAttachments.begin(),
+    };
+
+    const VkPipelineDynamicStateCreateInfo dynamicStateInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = u32(desc.dynamicStates.size()),
+        .pDynamicStates = desc.dynamicStates.begin(),
+    };
+
+    const VkGraphicsPipelineCreateInfo pipelineInfo = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext = &pipelineRenderingInfo,
+        .stageCount = u32(shaderStageInfos.size()),
+        .pStages = shaderStageInfos.data(),
+        .pVertexInputState = &vertexInputInfo,
+        .pInputAssemblyState = &inputAssemblyInfo,
+        .pViewportState = &viewportInfo,
+        .pRasterizationState = &rasterizationInfo,
+        .pMultisampleState = &multisampleInfo,
+        .pDepthStencilState = &depthStencilInfo,
+        .pColorBlendState = &colorBlendingInfo,
+        .pDynamicState = &dynamicStateInfo,
+        .layout = desc.pipeline.layout,
+    };
 
     VK_CHECK(vkCreateGraphicsPipelines(
         mDevice,
         VK_NULL_HANDLE,
         1,
-        &desc.pipelineInfo,
+        &pipelineInfo,
         nullptr,
         &desc.pipeline.pipeline
     ));
@@ -1581,4 +1655,47 @@ void Vulkan::Device::DestroyPipeline(Vulkan::Pipeline& pipeline) const
     pipeline.pipeline = VK_NULL_HANDLE;
     vkDestroyDescriptorUpdateTemplate(mDevice, pipeline.descriptorUpdateTemplate, nullptr);
     pipeline.descriptorUpdateTemplate = VK_NULL_HANDLE;
+}
+
+bool Vulkan::Device::QueueSubmit(const QueueSubmitDesc&& desc) const
+{
+    const VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = u32(desc.waitSemaphores.size()),
+        .pWaitSemaphores = desc.waitSemaphores.begin(),
+        .pWaitDstStageMask = &desc.waitDstStageMask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &desc.commandBuffer,
+        .signalSemaphoreCount = u32(desc.signalSemaphores.size()),
+        .pSignalSemaphores = desc.signalSemaphores.begin(),
+    };
+
+    VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, desc.fence));
+
+    return true;
+}
+
+VkResult Vulkan::Device::QueuePresent(const QueuePresentDesc&& desc) const
+{
+    const VkPresentInfoKHR presentInfo = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = u32(desc.waitSemaphores.size()),
+        .pWaitSemaphores = desc.waitSemaphores.begin(),
+        .swapchainCount = 1,
+        .pSwapchains = &desc.swapchain,
+        .pImageIndices = &desc.imageIdx,
+    };
+    return vkQueuePresentKHR(mQueueInfo.queue, &presentInfo);
+}
+
+bool Vulkan::Device::QueueWaitIdle() const
+{
+    VK_CHECK(vkQueueWaitIdle(mQueueInfo.queue));
+    return true;
+}
+
+bool Vulkan::Device::DeviceWaitIdle() const
+{
+    VK_CHECK(vkDeviceWaitIdle(mDevice));
+    return true;
 }

@@ -168,20 +168,14 @@ bool ImguiRenderer::Init(
 
         VK_CHECK(vkEndCommandBuffer(copyCmdBuffer));
 
-        const VkSubmitInfo submitInfo = {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &copyCmdBuffer,
-        };
-
-        const VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-        VkFence fence{};
-        VK_CHECK(vkCreateFence(mDevice.mDevice, &fenceInfo, nullptr, &fence));
-        DEFER(vkDestroyFence(mDevice.mDevice, fence, nullptr));
-
-        VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, fence));
-
-        VK_CHECK(vkWaitForFences(mDevice.mDevice, 1, &fence, VK_TRUE, 1'000'000'000));
+        if (!mDevice.QueueSubmit({.commandBuffer = copyCmdBuffer}))
+        {
+            return false;
+        }
+        if (!mDevice.QueueWaitIdle())
+        {
+            return false;
+        }
     }
 
     // Font texture sampler.
@@ -201,78 +195,6 @@ bool ImguiRenderer::Init(
 
     // Pipeline.
     {
-        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        };
-
-        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-            .polygonMode = VK_POLYGON_MODE_FILL,
-            .lineWidth = 1.0f,
-        };
-
-        const VkPipelineColorBlendAttachmentState blendAttachmentState = {
-            .blendEnable = VK_TRUE,
-            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-            .alphaBlendOp = VK_BLEND_OP_ADD,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-        };
-
-        const VkVertexInputBindingDescription vertexInputBindingDescriptions[] = {
-            {0, sizeof(ImDrawVert), VK_VERTEX_INPUT_RATE_VERTEX},
-        };
-        const VkVertexInputAttributeDescription vertexInputAttributes[] = {
-            {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ImDrawVert, pos)},
-            {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ImDrawVert, uv)},
-            {2, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(ImDrawVert, col)},
-        };
-
-        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-            .vertexBindingDescriptionCount = ARRAY_SIZE(vertexInputBindingDescriptions),
-            .pVertexBindingDescriptions = vertexInputBindingDescriptions,
-            .vertexAttributeDescriptionCount = ARRAY_SIZE(vertexInputAttributes),
-            .pVertexAttributeDescriptions = vertexInputAttributes,
-        };
-
-        const VkPipelineColorBlendStateCreateInfo colorBlendInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-            .attachmentCount = 1,
-            .pAttachments = &blendAttachmentState,
-        };
-
-        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-            .depthCompareOp = VK_COMPARE_OP_ALWAYS,
-            .back = {.compareOp = VK_COMPARE_OP_ALWAYS},
-        };
-
-        const VkPipelineViewportStateCreateInfo viewportInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-            .viewportCount = 1,
-            .scissorCount = 1,
-        };
-
-        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        };
-
-        const VkDynamicState dynamicStates[]
-            = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-
-        const VkPipelineDynamicStateCreateInfo dynamicInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-            .dynamicStateCount = ARRAY_SIZE(dynamicStates),
-            .pDynamicStates = dynamicStates,
-        };
-
         VkFormat stencilFormat{};
         if (!Vulkan::FindSupportedImageFormat(
                 stencilFormat,
@@ -285,30 +207,33 @@ bool ImguiRenderer::Init(
             return false;
         }
 
-        const VkPipelineRenderingCreateInfo renderingInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .colorAttachmentCount = 1,
-            .pColorAttachmentFormats = &colorFormat,
-            .stencilAttachmentFormat = stencilFormat,
-        };
-
-        VkGraphicsPipelineCreateInfo pipelineInfo = {
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = &renderingInfo,
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssemblyInfo,
-            .pViewportState = &viewportInfo,
-            .pRasterizationState = &rasterizationInfo,
-            .pMultisampleState = &multisampleInfo,
-            .pDepthStencilState = &depthStencilInfo,
-            .pColorBlendState = &colorBlendInfo,
-            .pDynamicState = &dynamicInfo,
-        };
         if (!mDevice.CreateGraphicsPipeline({
                 .pipeline = mPipeline,
                 .shaderPaths = {"Imgui.vert.hlsl.spv", "Imgui.frag.hlsl.spv"},
-                .pipelineInfo = pipelineInfo,
-                .debugName = "ImguiPass",
+                .vertexBindingDescriptions = {
+                    {0, sizeof(ImDrawVert), VK_VERTEX_INPUT_RATE_VERTEX},
+                },
+                .vertexAttributeDescriptions = {
+                    {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ImDrawVert, pos)},
+                    {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ImDrawVert, uv)},
+                    {2, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(ImDrawVert, col)},
+                },
+                .stencilFormat = stencilFormat,
+                .colorAttachmentFormats = {colorFormat},
+                .colorBlendAttachments = {
+                    {
+                        .blendEnable = VK_TRUE,
+                        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+                        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                        .colorBlendOp = VK_BLEND_OP_ADD,
+                        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                        .alphaBlendOp = VK_BLEND_OP_ADD,
+                        .colorWriteMask = Vulkan::ColorComponentAllBits,
+                    },
+                },
+                .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+                .debugName = "FullscreenPass",
             }))
         {
             return false;
@@ -325,7 +250,7 @@ void ImguiRenderer::Cleanup()
         return;
     }
 
-    (void)vkDeviceWaitIdle(mDevice.mDevice);
+    (void)mDevice.DeviceWaitIdle();
 
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();

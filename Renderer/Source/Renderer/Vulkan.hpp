@@ -87,7 +87,6 @@ bool FindSupportedImageFormat(
     std::initializer_list<VkFormat> formats
 );
 bool ExtensionIsAvailable(const char* name, Slice<VkExtensionProperties> extensions);
-QueueInfo GetQueue(VkPhysicalDevice device, VkQueueFlagBits flags);
 
 VkImageMemoryBarrier2 ImageMemoryBarrier(
     VkImage image,
@@ -156,6 +155,7 @@ bool DebugNameObject(
 // contain std::initializer_list, that has very short lifetime, rvalue refs force
 // temporaries and that prevents creating a local resource description variable
 // and passing it as an argument with a dangling pointer.
+// NOTE: uninitialized members will be zeroed out because of designated initializers.
 
 struct BufferDesc
 {
@@ -163,8 +163,8 @@ struct BufferDesc
     VkDeviceSize size;
     VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     VkMemoryPropertyFlags requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    VkDeviceSize minAlignment = 0;
-    const char* debugName = nullptr;
+    VkDeviceSize minAlignment;
+    const char* debugName;
 };
 
 struct ImageDesc
@@ -177,28 +177,72 @@ struct ImageDesc
     u32 depth = 1;
     u32 mipLevels = 1;
     u32 arrayLayers = 1;
-    const char* debugName = nullptr;
+    const char* debugName;
 };
 
 struct ComputePipelineDesc
 {
     Vulkan::Pipeline& pipeline;
     const char* shaderPath;
-    VkDescriptorSetLayout extraDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout extraDescriptorSetLayout;
     std::initializer_list<i32> specializationConstants;
-    const char* debugName = nullptr;
+    const char* debugName;
 };
+
+static constexpr VkColorComponentFlags ColorComponentAllBits = VK_COLOR_COMPONENT_R_BIT
+    | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
 struct GraphicsPipelineDesc
 {
     Vulkan::Pipeline& pipeline;
     std::initializer_list<const char*> shaderPaths;
-    VkDescriptorSetLayout extraDescriptorSetLayout = VK_NULL_HANDLE;
-    VkGraphicsPipelineCreateInfo& pipelineInfo;
+    std::initializer_list<VkVertexInputBindingDescription> vertexBindingDescriptions;
+    std::initializer_list<VkVertexInputAttributeDescription> vertexAttributeDescriptions;
+    VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    u32 viewportCount = 1;
+    u32 scissorCount = 1;
+    VkBool32 depthClampEnable;
+    VkBool32 rasterizerDiscardEnable;
+    VkPolygonMode polygonMode = VK_POLYGON_MODE_FILL;
+    VkCullModeFlags cullMode;
+    VkFrontFace frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    float lineWidth = 1.0f;
+    VkFormat depthFormat;
+    VkFormat stencilFormat;
+    VkBool32 depthTestEnable;
+    VkBool32 depthWriteEnable;
+    VkCompareOp depthCompareOp = VK_COMPARE_OP_GREATER;
+    VkBool32 depthBoundsTestEnable;
+    std::initializer_list<VkFormat> colorAttachmentFormats;
+    std::initializer_list<VkPipelineColorBlendAttachmentState> colorBlendAttachments;
+    std::initializer_list<VkDynamicState> dynamicStates;
+
+    VkDescriptorSetLayout extraDescriptorSetLayout;
     std::initializer_list<i32> specializationConstants;
-    const char* debugName = nullptr;
+    const char* debugName;
 };
 
+struct QueueSubmitDesc
+{
+    std::initializer_list<VkSemaphore> waitSemaphores;
+    VkPipelineStageFlags waitDstStageMask;
+    VkCommandBuffer commandBuffer;
+    std::initializer_list<VkSemaphore> signalSemaphores;
+    VkFence fence;
+};
+
+struct QueuePresentDesc
+{
+    std::initializer_list<VkSemaphore> waitSemaphores;
+    VkSwapchainKHR swapchain;
+    u32 imageIdx;
+};
+
+// NOTE: I don't intend to make a RHI, just simplifying some common functions.
+// I call it pain-in-the-ass-driven-development, wrangle Vulkan only when it's
+// too painful to continue. Life is great when I just write shaders all day, by
+// that logic, I should just make a decent abstraction layer with a render graph
+// but it's too much work.
 struct Device
 {
 public:
@@ -207,15 +251,21 @@ public:
 
     // TODO: managed handles.
     bool CreateBuffer(const BufferDesc&& desc) const;
-    void UnmapBuffer(Vulkan::Buffer& buffer) const;
-    void DestroyBuffer(Vulkan::Buffer& buffer) const;
+    void UnmapBuffer(Buffer& buffer) const;
+    void DestroyBuffer(Buffer& buffer) const;
 
     bool CreateImage(const ImageDesc&& desc) const;
-    void DestroyImage(Vulkan::Image& image) const;
+    void DestroyImage(Image& image) const;
 
     bool CreateComputePipeline(const ComputePipelineDesc&& desc) const;
     bool CreateGraphicsPipeline(const GraphicsPipelineDesc&& desc) const;
-    void DestroyPipeline(Vulkan::Pipeline& pipeline) const;
+    void DestroyPipeline(Pipeline& pipeline) const;
+
+    // TODO: separate compute queue for async stuff (not required for now).
+    bool QueueSubmit(const QueueSubmitDesc&& desc) const;
+    VkResult QueuePresent(const QueuePresentDesc&& desc) const;
+    bool QueueWaitIdle() const;
+    bool DeviceWaitIdle() const;
 
     VkInstance mInstance;
     VkDevice mDevice;

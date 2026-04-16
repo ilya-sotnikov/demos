@@ -188,434 +188,119 @@ bool Renderer::Init()
         );
     }
 
-    // Visibility buffer pipeline.
-    {
-        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        };
-
-        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        };
-
-        const VkPipelineViewportStateCreateInfo viewportInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-            .viewportCount = 1,
-            .scissorCount = 1,
-        };
-
-        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+    // Graphics pipelines
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mVisibilityPipeline,
+            .shaderPaths = {"VisibilityBuffer.vert.hlsl.spv", "VisibilityBuffer.frag.hlsl.spv"},
             .cullMode = VK_CULL_MODE_BACK_BIT,
-            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-            .lineWidth = 1.0f,
-        };
-
-        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        };
-
-        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthFormat = mDepthImage.format,
             .depthTestEnable = VK_TRUE,
             .depthWriteEnable = VK_TRUE,
-            .depthCompareOp = VK_COMPARE_OP_GREATER,
-        };
-
-        const VkPipelineColorBlendAttachmentState colorBlendAttachments[] = {
-            {
-                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                    | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-            },
-        };
-
-        const VkPipelineColorBlendStateCreateInfo colorBlending = {
-            .logicOp = VK_LOGIC_OP_COPY,
-            .attachmentCount = ARRAY_SIZE(colorBlendAttachments),
-            .pAttachments = colorBlendAttachments,
-        };
-
-        const VkDynamicState dynamicStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR,
-        };
-
-        const VkPipelineDynamicStateCreateInfo dynamicState = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-            .dynamicStateCount = u32(ARRAY_SIZE(dynamicStates)),
-            .pDynamicStates = dynamicStates,
-        };
-
-        const VkFormat colorAttachmentFormats[] = {mVisibilityImage.format};
-
-        const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
-            .pColorAttachmentFormats = colorAttachmentFormats,
-            .depthAttachmentFormat = mDepthImage.format,
-        };
-
-        static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
-
-        VkGraphicsPipelineCreateInfo pipelineInfo = {
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = &pipelineRenderingInfo,
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssemblyInfo,
-            .pViewportState = &viewportInfo,
-            .pRasterizationState = &rasterizationInfo,
-            .pMultisampleState = &multisampleInfo,
-            .pDepthStencilState = &depthStencilInfo,
-            .pColorBlendState = &colorBlending,
-            .pDynamicState = &dynamicState,
-        };
-
-        if (!mDevice.CreateGraphicsPipeline({
-                .pipeline = mVisibilityPipeline,
-                .shaderPaths = {"VisibilityBuffer.vert.hlsl.spv", "VisibilityBuffer.frag.hlsl.spv"},
-                .pipelineInfo = pipelineInfo,
-                .debugName = "VisibilityBufferPass",
-            }))
-        {
-            return false;
-        }
+            .colorAttachmentFormats = {mVisibilityImage.format},
+            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .debugName = "VisibilityBufferPass",
+        }))
+    {
+        return false;
     }
 
-    // Debug draw rect pipeline.
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mDebugDrawRectPipeline,
+            .shaderPaths = {"DebugDrawRect.vert.hlsl.spv", "DebugDrawRect.frag.hlsl.spv"},
+            .colorAttachmentFormats = {mRenderImage.format},
+            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .debugName = "DebugDrawRectPass",
+        }))
     {
-        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        };
-
-        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        };
-
-        const VkPipelineViewportStateCreateInfo viewportInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-            .viewportCount = 1,
-            .scissorCount = 1,
-        };
-
-        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-            .lineWidth = 1.0f,
-        };
-
-        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        };
-
-        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-        };
-
-        const VkPipelineColorBlendAttachmentState colorBlendAttachments[] = {
-            {
-                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                    | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-            },
-        };
-
-        const VkPipelineColorBlendStateCreateInfo colorBlending = {
-            .logicOp = VK_LOGIC_OP_COPY,
-            .attachmentCount = ARRAY_SIZE(colorBlendAttachments),
-            .pAttachments = colorBlendAttachments,
-        };
-
-        const VkDynamicState dynamicStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR,
-        };
-
-        const VkPipelineDynamicStateCreateInfo dynamicState = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-            .dynamicStateCount = u32(ARRAY_SIZE(dynamicStates)),
-            .pDynamicStates = dynamicStates,
-        };
-
-        const VkFormat colorAttachmentFormats[] = {mRenderImage.format};
-
-        const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
-            .pColorAttachmentFormats = colorAttachmentFormats,
-            .depthAttachmentFormat = mDepthImage.format,
-        };
-
-        static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
-
-        VkGraphicsPipelineCreateInfo pipelineInfo = {
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = &pipelineRenderingInfo,
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssemblyInfo,
-            .pViewportState = &viewportInfo,
-            .pRasterizationState = &rasterizationInfo,
-            .pMultisampleState = &multisampleInfo,
-            .pDepthStencilState = &depthStencilInfo,
-            .pColorBlendState = &colorBlending,
-            .pDynamicState = &dynamicState,
-        };
-
-        if (!mDevice.CreateGraphicsPipeline({
-                .pipeline = mDebugDrawRectPipeline,
-                .shaderPaths = {"DebugDrawRect.vert.hlsl.spv", "DebugDrawRect.frag.hlsl.spv"},
-                .pipelineInfo = pipelineInfo,
-                .debugName = "DebugDrawRectPass",
-            }))
-        {
-            return false;
-        }
+        return false;
     }
 
-    // Fullscreen triangle pipeline.
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mFullscreenPipeline,
+            .shaderPaths = {"Fullscreen.vert.hlsl.spv", "Fullscreen.frag.hlsl.spv"},
+            .colorAttachmentFormats = {mSwapchain.surfaceFormat.format},
+            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .debugName = "FullscreenPass",
+        }))
     {
-        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        };
-
-        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        };
-
-        const VkPipelineViewportStateCreateInfo viewportInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-            .viewportCount = 1,
-            .scissorCount = 1,
-        };
-
-        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-            .cullMode = VK_CULL_MODE_NONE,
-            .lineWidth = 1.0f,
-        };
-
-        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        };
-
-        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-        };
-
-        const VkPipelineColorBlendAttachmentState colorBlendAttachments[] = {
-            {
-                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                    | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-            },
-        };
-
-        const VkPipelineColorBlendStateCreateInfo colorBlending = {
-            .logicOp = VK_LOGIC_OP_COPY,
-            .attachmentCount = ARRAY_SIZE(colorBlendAttachments),
-            .pAttachments = colorBlendAttachments,
-        };
-
-        const VkDynamicState dynamicStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR,
-        };
-
-        const VkPipelineDynamicStateCreateInfo dynamicState = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-            .dynamicStateCount = u32(ARRAY_SIZE(dynamicStates)),
-            .pDynamicStates = dynamicStates,
-        };
-
-        const VkFormat colorAttachmentFormats[] = {mSwapchain.surfaceFormat.format};
-
-        const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
-            .pColorAttachmentFormats = colorAttachmentFormats,
-        };
-
-        static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
-
-        VkGraphicsPipelineCreateInfo pipelineInfo = {
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = &pipelineRenderingInfo,
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssemblyInfo,
-            .pViewportState = &viewportInfo,
-            .pRasterizationState = &rasterizationInfo,
-            .pMultisampleState = &multisampleInfo,
-            .pDepthStencilState = &depthStencilInfo,
-            .pColorBlendState = &colorBlending,
-            .pDynamicState = &dynamicState,
-        };
-
-        if (!mDevice.CreateGraphicsPipeline({
-                .pipeline = mFullscreenPipeline,
-                .shaderPaths = {"Fullscreen.vert.hlsl.spv", "Fullscreen.frag.hlsl.spv"},
-                .pipelineInfo = pipelineInfo,
-                .debugName = "FullscreenPass",
-            }))
-        {
-            return false;
-        }
+        return false;
     }
 
-    // Debug grad error pipeline.
-    {
-        const VkPipelineVertexInputStateCreateInfo vertexInputInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        };
-
-        const VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        };
-
-        const VkPipelineViewportStateCreateInfo viewportInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-            .viewportCount = 1,
-            .scissorCount = 1,
-        };
-
-        const VkPipelineRasterizationStateCreateInfo rasterizationInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mDebugGradErrorPipeline,
+            .shaderPaths = {"DebugGradError.vert.hlsl.spv", "DebugGradError.frag.hlsl.spv"},
             .cullMode = VK_CULL_MODE_BACK_BIT,
-            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-            .lineWidth = 1.0f,
-        };
-
-        const VkPipelineMultisampleStateCreateInfo multisampleInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        };
-
-        const VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthFormat = mDepthImage.format,
             .depthTestEnable = VK_TRUE,
             .depthWriteEnable = VK_TRUE,
-            .depthCompareOp = VK_COMPARE_OP_GREATER,
-        };
-
-        const VkPipelineColorBlendAttachmentState colorBlendAttachments[] = {
-            {
-                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                    | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-            },
-        };
-
-        const VkPipelineColorBlendStateCreateInfo colorBlending = {
-            .logicOp = VK_LOGIC_OP_COPY,
-            .attachmentCount = ARRAY_SIZE(colorBlendAttachments),
-            .pAttachments = colorBlendAttachments,
-        };
-
-        const VkDynamicState dynamicStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR,
-        };
-
-        const VkPipelineDynamicStateCreateInfo dynamicState = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-            .dynamicStateCount = u32(ARRAY_SIZE(dynamicStates)),
-            .pDynamicStates = dynamicStates,
-        };
-
-        const VkFormat colorAttachmentFormats[] = {mSwapchain.surfaceFormat.format};
-
-        const VkPipelineRenderingCreateInfo pipelineRenderingInfo = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-            .colorAttachmentCount = ARRAY_SIZE(colorAttachmentFormats),
-            .pColorAttachmentFormats = colorAttachmentFormats,
-            .depthAttachmentFormat = mDepthImage.format,
-        };
-
-        static_assert(ARRAY_SIZE(colorBlendAttachments) == ARRAY_SIZE(colorAttachmentFormats));
-
-        VkGraphicsPipelineCreateInfo pipelineInfo = {
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = &pipelineRenderingInfo,
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssemblyInfo,
-            .pViewportState = &viewportInfo,
-            .pRasterizationState = &rasterizationInfo,
-            .pMultisampleState = &multisampleInfo,
-            .pDepthStencilState = &depthStencilInfo,
-            .pColorBlendState = &colorBlending,
-            .pDynamicState = &dynamicState,
-        };
-
-        if (!mDevice.CreateGraphicsPipeline({
-                .pipeline = mDebugGradErrorPipeline,
-                .shaderPaths = {"DebugGradError.vert.hlsl.spv", "DebugGradError.frag.hlsl.spv"},
-                .pipelineInfo = pipelineInfo,
-                .debugName = "DebugGradErrorPass",
-            }))
-        {
-            return false;
-        }
+            .colorAttachmentFormats = {mSwapchain.surfaceFormat.format},
+            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .debugName = "DebugGradErrorPass",
+        }))
+    {
+        return false;
     }
 
     // Compute pipelines.
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mCullEarlyPipeline,
+            .shaderPath = "Cull.comp.hlsl.spv",
+            .specializationConstants = {0},
+            .debugName = "CullEarlyPass",
+        }))
     {
-        if (!mDevice.CreateComputePipeline({
-                .pipeline = mCullEarlyPipeline,
-                .shaderPath = "Cull.comp.hlsl.spv",
-                .specializationConstants = {0},
-                .debugName = "CullEarlyPass",
-            }))
-        {
-            return false;
-        }
+        return false;
+    }
 
-        if (!mDevice.CreateComputePipeline({
-                .pipeline = mCullLatePipeline,
-                .shaderPath = "Cull.comp.hlsl.spv",
-                .specializationConstants = {1},
-                .debugName = "CullLatePass",
-            }))
-        {
-            return false;
-        }
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mCullLatePipeline,
+            .shaderPath = "Cull.comp.hlsl.spv",
+            .specializationConstants = {1},
+            .debugName = "CullLatePass",
+        }))
+    {
+        return false;
+    }
 
-        if (!mDevice.CreateComputePipeline({
-                .pipeline = mRenderPipeline,
-                .shaderPath = "Renderer.comp.hlsl.spv",
-                .extraDescriptorSetLayout = mTextureDescriptorSetLayout,
-                .debugName = "RenderPass",
-            }))
-        {
-            return false;
-        }
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mRenderPipeline,
+            .shaderPath = "Renderer.comp.hlsl.spv",
+            .extraDescriptorSetLayout = mTextureDescriptorSetLayout,
+            .debugName = "RenderPass",
+        }))
+    {
+        return false;
+    }
 
-        if (!mDevice.CreateComputePipeline({
-                .pipeline = mTaaResolvePipeline,
-                .shaderPath = "TaaResolve.comp.hlsl.spv",
-                .debugName = "TaaResolvePass",
-            }))
-        {
-            return false;
-        }
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mTaaResolvePipeline,
+            .shaderPath = "TaaResolve.comp.hlsl.spv",
+            .debugName = "TaaResolvePass",
+        }))
+    {
+        return false;
+    }
 
-        if (!mDevice.CreateComputePipeline({
-                .pipeline = mDepthReducePipeline,
-                .shaderPath = "DepthReduce.comp.hlsl.spv",
-                .debugName = "DepthReducePass",
-            }))
-        {
-            return false;
-        }
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mDepthReducePipeline,
+            .shaderPath = "DepthReduce.comp.hlsl.spv",
+            .debugName = "DepthReducePass",
+        }))
+    {
+        return false;
+    }
 
-        if (!mDevice.CreateComputePipeline({
-                .pipeline = mDebugDrawFillCmdPipeline,
-                .shaderPath = "DebugDrawFillCmd.comp.hlsl.spv",
-                .debugName = "DebugDrawFillCmdPass",
-            }))
-        {
-            return false;
-        }
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mDebugDrawFillCmdPipeline,
+            .shaderPath = "DebugDrawFillCmd.comp.hlsl.spv",
+            .debugName = "DebugDrawFillCmdPass",
+        }))
+    {
+        return false;
     }
 
     // Command pool.
@@ -956,14 +641,14 @@ bool Renderer::Init()
 
         VK_CHECK(vkEndCommandBuffer(cmd));
 
-        const VkSubmitInfo submitInfo = {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &cmd,
-        };
-
-        VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
-        VK_CHECK(vkQueueWaitIdle(mDevice.mQueueInfo.queue));
+        if (!mDevice.QueueSubmit({.commandBuffer = cmd}))
+        {
+            return false;
+        }
+        if (!mDevice.QueueWaitIdle())
+        {
+            return false;
+        }
     }
 
     mSwapchainNeedsRecreating = true;
@@ -983,7 +668,7 @@ void Renderer::Cleanup()
         return;
     }
 
-    (void)vkDeviceWaitIdle(mDevice.mDevice);
+    (void)mDevice.DeviceWaitIdle();
 
     mImguiRenderer.Cleanup();
 
@@ -1178,28 +863,22 @@ bool Renderer::Render(f32 deltaTime)
         break;
     }
 
-    const VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    const VkSubmitInfo submitInfo = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &frame.imageAcquireSemaphore,
-        .pWaitDstStageMask = &waitDstStageMask,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &frame.commandBuffer,
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &mRenderFinishedSemaphores[imageIdx],
-    };
-    VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, frame.queueSubmitFence));
+    if (!mDevice.QueueSubmit({
+            .waitSemaphores = {frame.imageAcquireSemaphore},
+            .waitDstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .commandBuffer = frame.commandBuffer,
+            .signalSemaphores = {mRenderFinishedSemaphores[imageIdx]},
+            .fence = frame.queueSubmitFence,
+        }))
+    {
+        return false;
+    }
 
-    const VkPresentInfoKHR presentInfo = {
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &mRenderFinishedSemaphores[imageIdx],
-        .swapchainCount = 1,
-        .pSwapchains = &mSwapchain.swapchain,
-        .pImageIndices = &imageIdx,
-    };
-    vulkanResult = vkQueuePresentKHR(mDevice.mQueueInfo.queue, &presentInfo);
+    vulkanResult = mDevice.QueuePresent({
+        .waitSemaphores = {mRenderFinishedSemaphores[imageIdx]},
+        .swapchain = mSwapchain.swapchain,
+        .imageIdx = imageIdx,
+    });
     if (vulkanResult == VK_ERROR_OUT_OF_DATE_KHR || vulkanResult == VK_SUBOPTIMAL_KHR)
     {
         mSwapchainNeedsRecreating = true;
@@ -1393,14 +1072,14 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
 
         VK_CHECK(vkEndCommandBuffer(cmd));
 
-        const VkSubmitInfo submitInfo = {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &cmd,
-        };
-
-        VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
-        VK_CHECK(vkQueueWaitIdle(mDevice.mQueueInfo.queue));
+        if (!mDevice.QueueSubmit({.commandBuffer = cmd}))
+        {
+            return false;
+        }
+        if (!mDevice.QueueWaitIdle())
+        {
+            return false;
+        }
     }
 
     return true;
@@ -1564,14 +1243,14 @@ bool Renderer::CreateAndUploadBlas(
 
     VK_CHECK(vkEndCommandBuffer(cmd));
 
-    const VkSubmitInfo submitInfo = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &cmd,
-    };
-
-    VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
-    VK_CHECK(vkDeviceWaitIdle(mDevice.mDevice));
+    if (!mDevice.QueueSubmit({.commandBuffer = cmd}))
+    {
+        return false;
+    }
+    if (!mDevice.QueueWaitIdle())
+    {
+        return false;
+    }
 
     return true;
 }
@@ -1738,15 +1417,14 @@ bool Renderer::CreateAndUploadTlas(
 
     VK_CHECK(vkEndCommandBuffer(cmd));
 
-    const VkSubmitInfo submitInfo = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &cmd,
-    };
-
-    VK_CHECK(vkQueueSubmit(mDevice.mQueueInfo.queue, 1, &submitInfo, VK_NULL_HANDLE));
-
-    VK_CHECK(vkDeviceWaitIdle(mDevice.mDevice));
+    if (!mDevice.QueueSubmit({.commandBuffer = cmd}))
+    {
+        return false;
+    }
+    if (!mDevice.QueueWaitIdle())
+    {
+        return false;
+    }
 
     return true;
 }
@@ -2820,7 +2498,10 @@ bool Renderer::RecordCommandBuffer(u32 imageIdx)
 
 bool Renderer::CreateSwapchain()
 {
-    VK_CHECK(vkDeviceWaitIdle(mDevice.mDevice));
+    if (!mDevice.DeviceWaitIdle())
+    {
+        return false;
+    }
 
     CleanupSwapchain();
     CleanupColorResources();
