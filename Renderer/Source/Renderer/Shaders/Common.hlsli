@@ -26,6 +26,8 @@ static const uint32_t COLOR_BLUE    = 0xffff0000;
 static const uint32_t COLOR_YELLOW  = 0xff00ffff;
 static const uint32_t COLOR_MAGENTA = 0xffff00ff;
 
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+
 #ifdef VULKAN_ENABLE_DEBUG_UTILS
 #define ASSERT(expr) \
     do { \

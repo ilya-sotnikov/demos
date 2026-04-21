@@ -170,15 +170,28 @@ static void LoadGeometry(
 
                 for (cgltf_size ni = 0; ni < primVertexCount; ++ni)
                 {
-                    const Vec2 packed = PackNormalOctahedral(
-                        Vec3{
-                            tmp[ni * 3 + 0],
-                            tmp[ni * 3 + 1],
-                            tmp[ni * 3 + 2],
-                        }
+                    const Vec3 normal = {tmp[ni * 3 + 0], tmp[ni * 3 + 1], tmp[ni * 3 + 2]};
+                    const Vec2 packed = PackNormalOctahedral(normal);
+                    primVertices[ni].normal = PackFloat2ToRG8Snorm(packed);
+                }
+            }
+
+            if (const cgltf_accessor* const tangent
+                = cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0))
+            {
+                ASSERT(cgltf_num_components(tangent->type) == 4);
+                const cgltf_size size
+                    = cgltf_accessor_unpack_floats(tangent, tmp.data(), primVertexCount * 4);
+                ASSERT(size == primVertexCount * 4);
+
+                for (cgltf_size ti = 0; ti < primVertexCount; ++ti)
+                {
+                    const Vec3 t = {tmp[ti * 4 + 0], tmp[ti * 4 + 1], tmp[ti * 4 + 2]};
+                    const u32 bitangentSign = tmp[ti * 4 + 3] == 1.0f ? 1 : 0;
+
+                    primVertices[ti].tangent = u32(
+                        (bitangentSign << 31) | PackFloat2ToRG8Snorm(PackNormalOctahedral(t))
                     );
-                    primVertices[ni].nx = meshopt_quantizeHalf(packed.X());
-                    primVertices[ni].ny = meshopt_quantizeHalf(packed.Y());
                 }
             }
 

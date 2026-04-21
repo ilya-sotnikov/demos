@@ -82,3 +82,4 @@ This will take a while.
 - u -- toggle UI
 - m -- toggle mouse
 - c -- freeze camera to visualize culling
+- 1, 2, ... -- switch between render modes

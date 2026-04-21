@@ -3,8 +3,6 @@
 #include "PBR.hlsli"
 
 // https://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
-// Derivations of interpolation formulas and stuff are in this article:
-// https://chaojia.github.io/posts/21-11-29-vertex-attrib-interp/
 
 ConstantBuffer<UniformData> uniformBuffer;
 StructuredBuffer<uint32_t> drawIndicesEarlyBuffer;
@@ -69,7 +67,7 @@ float3 PerturbNormal(
 
     // Construct a scale-invariant frame.
     const float invMax = rsqrt(max(dot(T, T), dot(B, B)));
-    const float3x3 TBN = float3x3(T * invMax, B * invMax, normalWorld);
+    const float3x3 TBN = float3x3(-T * invMax, B * invMax, normalWorld);
 
     return normalize(mul(normalSampled, TBN)); // Mul order is intentional.
 }
@@ -99,7 +97,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     if (rawDrawIdx == 0)
     {
-        renderImageRW[dtid.xy] = float3(0.7, 0.8, 0.9);
+        renderImageRW[dtid.xy] = SrgbToLinear(float3(0.7, 0.8, 0.9));
         velocityImageRW[dtid.xy] = float2(0.0, 0.0);
         return;
     }
@@ -180,9 +178,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float2 uv2 = float2(v2.u, v2.v);
     const InterpolatedData2D interpUV = Interpolate2D(baryData, uv0, uv1, uv2);
 
-    const float3 n0 = UnpackNormalOctahedral(float2(v0.nx, v0.ny));
-    const float3 n1 = UnpackNormalOctahedral(float2(v1.nx, v1.ny));
-    const float3 n2 = UnpackNormalOctahedral(float2(v2.nx, v2.ny));
+    const float3 n0 = UnpackNormalOctahedral(UnpackRG8SnormToFloat2(v0.normal));
+    const float3 n1 = UnpackNormalOctahedral(UnpackRG8SnormToFloat2(v1.normal));
+    const float3 n2 = UnpackNormalOctahedral(UnpackRG8SnormToFloat2(v2.normal));
 
     const InterpolatedData3D interpNormal = Interpolate3D(baryData, n0, n1, n2);
 

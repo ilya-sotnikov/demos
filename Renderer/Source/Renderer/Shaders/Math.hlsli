@@ -156,6 +156,19 @@ float3 UnpackNormalOctahedral(float2 packed)
     return normalize(n);
 }
 
+uint16_t PackFloat2ToRG8Snorm(float2 value)
+{
+    const int2 ivalue = int2(round(value * 127.0));
+    return uint16_t((ivalue.g << 8) | ivalue.r);
+}
+
+float2 UnpackRG8SnormToFloat2(uint16_t packed)
+{
+    const int ri = (int(packed) << 24) >> 24;
+    const int gi = (int(packed) << 16) >> 24;
+    return float2(ri, gi) / 127.0;
+}
+
 // These SRGB functions are approximations.
 float3 SrgbToLinear(float3 color)
 {
@@ -373,6 +386,7 @@ struct BarycentricData
     float interpInvW;
 };
 
+// https://chaojia.github.io/posts/21-11-29-vertex-attrib-interp/
 BarycentricData CalcBarycentricData(
     float4 posClip0,
     float4 posClip1,

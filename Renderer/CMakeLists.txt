@@ -139,7 +139,9 @@ set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Fullscreen.frag.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Imgui.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Imgui.frag.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/Renderer.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/VisibilityRender.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/ForwardRender.vert.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/ForwardRender.frag.hlsl
     ${SHADER_SOURCE_DIRECTORY}/TaaResolve.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.frag.hlsl
@@ -151,6 +153,7 @@ set(SHADER_SOURCE_FILES
 set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Common.hlsli
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/ForwardRender.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Fullscreen.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Imgui.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Math.hlsli
@@ -197,6 +200,7 @@ foreach(shader ${SHADER_SOURCE_FILES})
             -Zpc
             -E Main
             -fspv-target-env=vulkan1.3
+            -fspv-preserve-bindings
             -fspv-extension=SPV_EXT_mesh_shader
             -fspv-extension=SPV_EXT_descriptor_indexing
             -fspv-extension=SPV_KHR_ray_query

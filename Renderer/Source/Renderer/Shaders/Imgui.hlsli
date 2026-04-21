@@ -2,6 +2,11 @@
 
 #include "Common.hlsli"
 
+[[vk::binding(0)]]
+Texture2D fontImage;
+[[vk::binding(1)]]
+SamplerState fontSampler;
+
 struct VertexOutput
 {
     float4 position : SV_Position;

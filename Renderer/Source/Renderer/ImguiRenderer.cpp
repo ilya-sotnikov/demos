@@ -397,11 +397,8 @@ bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
         cmd,
         mPipeline,
         {
-            {
-                mFontImage.view,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                mFontSampler,
-            },
+            {mFontImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            mFontSampler,
         }
     );
 

@@ -58,3 +58,22 @@ inline Vec3 UnpackNormalOctahedral(Vec2 packed)
     n.Y() += n.Y() >= 0.0f ? -t : t;
     return Normalize(n);
 }
+
+inline u16 PackFloat2ToRG8Snorm(Vec2 value)
+{
+    DEBUG_ASSERT(value.X() >= -1.0f);
+    DEBUG_ASSERT(value.X() <= 1.0f);
+    DEBUG_ASSERT(value.Y() >= -1.0f);
+    DEBUG_ASSERT(value.Y() <= 1.0f);
+
+    const u8 byteX = u8(roundf(value.X() * 127.0f));
+    const u8 byteY = u8(roundf(value.Y() * 127.0f));
+    return u16(byteY << 8) | byteX;
+}
+
+inline Vec2 UnpackRG8SnormToFloat2(u16 packed)
+{
+    const i32 intX = i32(packed << 24) >> 24;
+    const i32 intY = i32(packed << 16) >> 24;
+    return {f32(intX) / 127.0f, f32(intY) / 127.0f};
+}

@@ -64,6 +64,7 @@ float4 Main(VertexOutput input, uint primitiveId : SV_PrimitiveID) : SV_Target
         length(interpUV.dcdy - hwDdy) / length(hwDdy)
     );
 
+    // TODO: maybe also uv error?
     const float3 color = lerp(
         float3(0.0, 0.0, 1.0),
         float3(1.0, 0.0, 0.0),

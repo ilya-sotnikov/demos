@@ -73,7 +73,8 @@ struct UniformData
 struct Vertex
 {
     HALF px, py, pz;
-    HALF nx, ny; // 16 bit octahedral.
+    uint16_t normal; // 8-8 octahedral.
+    uint32_t tangent; // 8-8 octahedral in bits 0-15, bit 31 bitangent sign, 15 free bits.
     HALF u, v;
 };
 

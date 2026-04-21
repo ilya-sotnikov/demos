@@ -61,4 +61,34 @@ TEST("Normal octahedral encoding")
     }
 }
 
+TEST("Snorm packing")
+{
+    Vec2 v{};
+
+    v = {0.0f, 0.0f};
+    TEST_ASSERT(AlmostEqual(UnpackRG8SnormToFloat2(PackFloat2ToRG8Snorm(v)), v));
+    v = {1.0f, 0.0f};
+    TEST_ASSERT(AlmostEqual(UnpackRG8SnormToFloat2(PackFloat2ToRG8Snorm(v)), v));
+    v = {0.0f, 1.0f};
+    TEST_ASSERT(AlmostEqual(UnpackRG8SnormToFloat2(PackFloat2ToRG8Snorm(v)), v));
+    v = {1.0f, 1.0f};
+    TEST_ASSERT(AlmostEqual(UnpackRG8SnormToFloat2(PackFloat2ToRG8Snorm(v)), v));
+    v = {0.0f, -1.0f};
+    TEST_ASSERT(AlmostEqual(UnpackRG8SnormToFloat2(PackFloat2ToRG8Snorm(v)), v));
+    v = {-1.0f, 0.0f};
+    TEST_ASSERT(AlmostEqual(UnpackRG8SnormToFloat2(PackFloat2ToRG8Snorm(v)), v));
+    v = {-1.0f, -1.0f};
+    TEST_ASSERT(AlmostEqual(UnpackRG8SnormToFloat2(PackFloat2ToRG8Snorm(v)), v));
+
+    u32 lfsr = 1337;
+    for (int i = 0; i < 1000; ++i)
+    {
+        const f32 tolerance = 1e-2f;
+        const f32 v0 = LfsrNextGetFloat(lfsr, 1.0f);
+        const f32 v1 = LfsrNextGetFloat(lfsr, 1.0f);
+        v = {v0, v1};
+        TEST_ASSERT(AlmostEqual(UnpackRG8SnormToFloat2(PackFloat2ToRG8Snorm(v)), v, tolerance));
+    }
+}
+
 #endif

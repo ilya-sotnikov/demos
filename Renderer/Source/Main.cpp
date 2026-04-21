@@ -17,6 +17,7 @@ static bool sMouseRelativeMode = true;
 static bool sNeedUpdateViewMatrix = true;
 static bool sFullscreen = true;
 static bool sCullCameraFrozen = false;
+static Renderer::RenderMode sRenderMode = Renderer::RenderMode::Visibility;
 
 static bool SaveCamera(const Camera& camera, const char* path = "Camera.bin")
 {
@@ -209,6 +210,24 @@ static void ProcessInput(SDL_Window* window, f32 deltaTime, Renderer& renderer)
         sCullCameraFrozen ^= true;
         renderer.FreezeCullCamera(sCullCameraFrozen);
     }
+
+    if (sKeys[SDL_SCANCODE_1])
+    {
+        sKeys[SDL_SCANCODE_1] = 0;
+        sRenderMode = Renderer::RenderMode::Visibility;
+    }
+
+    if (sKeys[SDL_SCANCODE_2])
+    {
+        sKeys[SDL_SCANCODE_2] = 0;
+        sRenderMode = Renderer::RenderMode::Forward;
+    }
+
+    if (sKeys[SDL_SCANCODE_3])
+    {
+        sKeys[SDL_SCANCODE_3] = 0;
+        sRenderMode = Renderer::RenderMode::GradError;
+    }
 }
 
 static void ImguiCheckbox(const char* label, u32& value)
@@ -233,7 +252,7 @@ int main()
 
     renderer.mEnableUI = true;
     renderer.mUniformData.taaEnable = 1;
-    renderer.ChangeRenderMode(Renderer::RenderMode::Normal);
+    renderer.ChangeRenderMode(sRenderMode);
 
     sCamera.mPosition = {9.4f, 7.4f, 0.8f};
     sCamera.mYaw = Radians(-85.0f);
@@ -274,6 +293,8 @@ int main()
             ProcessEvent(renderer.mWindow, event, renderer);
         }
         ProcessInput(renderer.mWindow, f32(deltaTime), renderer);
+
+        renderer.ChangeRenderMode(sRenderMode);
 
         (void)renderer.StartNewFrame();
 
@@ -360,19 +381,10 @@ int main()
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            bool drawGradError = renderer.mRenderMode == Renderer::RenderMode::GradError;
-            // TODO: enum when > 2 render modes, not bool.
-            if (ImGui::Checkbox("Grad error", &drawGradError))
-            {
-                if (drawGradError)
-                {
-                    renderer.ChangeRenderMode(Renderer::RenderMode::GradError);
-                }
-                else
-                {
-                    renderer.ChangeRenderMode(Renderer::RenderMode::Normal);
-                }
-            }
+            int renderMode = static_cast<int>(sRenderMode);
+            const char* renderModes[] = {"Visibility", "Forward", "Grad error"};
+            ImGui::ListBox("Render mode", &renderMode, renderModes, ARRAY_SIZE(renderModes));
+            sRenderMode = static_cast<Renderer::RenderMode>(renderMode);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();

@@ -29,7 +29,8 @@ struct Renderer
 
     enum class RenderMode
     {
-        Normal,
+        Visibility,
+        Forward,
         GradError,
     };
 
@@ -55,7 +56,8 @@ struct Renderer
     Vulkan::Image mDepthPyramidImage;
     std::vector<VkImageView> mDepthPyramidMipImageViews;
     Vulkan::Pipeline mVisibilityPipeline;
-    Vulkan::Pipeline mRenderPipeline;
+    Vulkan::Pipeline mVisibilityRenderPipeline;
+    Vulkan::Pipeline mForwardRenderPipeline;
     Vulkan::Pipeline mFullscreenPipeline;
     Vulkan::Pipeline mCullEarlyPipeline;
     Vulkan::Pipeline mCullLatePipeline;
@@ -129,6 +131,7 @@ private:
     );
 
     void VisibilityBufferPass(VkCommandBuffer cmd, bool cullLate);
+    void ForwardPass(VkCommandBuffer cmd, bool cullLate);
     void CullPass(VkCommandBuffer cmd, bool late);
     void DepthReducePass(VkCommandBuffer cmd);
     void RenderPass(VkCommandBuffer cmd);
@@ -138,8 +141,9 @@ private:
 
     void DebugDrawGradErrorPass(VkCommandBuffer cmd, bool cullLate, u32 imageIdx);
 
-    bool RecordDebugGradErrorCommandBuffer(u32 imageIdx);
-    bool RecordCommandBuffer(u32 imageIdx);
+    bool RecordCommandBufferDebugGradError(u32 imageIdx);
+    bool RecordCommandBufferVisibility(u32 imageIdx);
+    bool RecordCommandBufferForward(u32 imageIdx);
     bool CreateSwapchain();
     void CleanupSwapchain();
     bool CreateColorResources();
