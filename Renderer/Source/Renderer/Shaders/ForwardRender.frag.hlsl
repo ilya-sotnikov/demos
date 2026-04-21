@@ -25,6 +25,7 @@ float CalcShadow(float3 posWorld, float3 sunDirectionWorld)
     return float(rayQuery.CommittedStatus() == COMMITTED_NOTHING);
 }
 
+// TODO: try unjittering uv?
 float4 SampleTex(uint32_t idx, float2 uv)
 {
     return textures[NonUniformResourceIndex(idx)].Sample(textureSampler, uv);

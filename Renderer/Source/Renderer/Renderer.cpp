@@ -823,8 +823,8 @@ bool Renderer::Render(f32 deltaTime)
         const f32 haltonY = 2.0f * HaltonSequence(mTaaJitterIdx + 1, 3) - 1.0f;
         mUniformData.prevTaaJitter = mUniformData.taaJitter;
         mUniformData.taaJitter = {
-            haltonX / (f32(mUniformData.renderWidth) * 2.0f),
-            haltonY / (f32(mUniformData.renderHeight) * 2.0f),
+            haltonX / f32(mUniformData.renderWidth),
+            haltonY / f32(mUniformData.renderHeight),
         };
 
         mTaaJitterIdx = (mTaaJitterIdx + 1) % mTaaJitterMaxIdx;
