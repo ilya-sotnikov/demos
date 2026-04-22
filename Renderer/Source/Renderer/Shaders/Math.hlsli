@@ -387,6 +387,14 @@ struct BarycentricData
 };
 
 // https://chaojia.github.io/posts/21-11-29-vertex-attrib-interp/
+// TODO: there's a rare issue, texture coordinates and derivatives
+// for a triangle or two are way off for some angles, formulas seem to be fine,
+// In the reference forward renderer it's fine so attribute quantization should not be an issue.
+// Maybe try The Forge's approach. The math makes sense except the last part:
+// https://github.com/ConfettiFX/The-Forge/blob/master/Common_3/Renderer/VisibilityBuffer2/Shaders/FSL/VisibilityBufferShadingUtilities.h.fsl#L136
+// But maybe it's better, should derive this last formula though.
+// TODO: this probably happens because we need to clip against the near plane,
+// long triangles are the worst offenders.
 BarycentricData CalcBarycentricData(
     float4 posClip0,
     float4 posClip1,
