@@ -139,6 +139,7 @@ set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Fullscreen.frag.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Imgui.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Imgui.frag.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/DSSDO.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityRender.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/ForwardRender.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/ForwardRender.frag.hlsl

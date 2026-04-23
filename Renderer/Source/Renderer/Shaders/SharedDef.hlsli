@@ -65,6 +65,8 @@ struct UniformData
     uint32_t swapchainHeight;
     uint32_t renderWidth;
     uint32_t renderHeight;
+    uint32_t ambientOcclusionWidth;
+    uint32_t ambientOcclusionHeight;
     uint32_t drawCount;
     uint32_t taaEnable;
     uint32_t drawCullAABB;

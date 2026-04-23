@@ -315,6 +315,15 @@ bool Renderer::Init()
     }
 
     if (!mDevice.CreateComputePipeline({
+            .pipeline = mAmbientOcclusionPipeline,
+            .shaderPath = "DSSDO.comp.hlsl.spv",
+            .debugName = "AmbientOcclusionPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
             .pipeline = mDebugDrawFillCmdPipeline,
             .shaderPath = "DebugDrawFillCmd.comp.hlsl.spv",
             .debugName = "DebugDrawFillCmdPass",
@@ -407,6 +416,15 @@ bool Renderer::Init()
             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         };
         VK_CHECK(vkCreateSampler(mDevice.mDevice, &samplerInfo, nullptr, &mLinearSampler));
+
+        samplerInfo = {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = VK_FILTER_NEAREST,
+            .minFilter = VK_FILTER_NEAREST,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        };
+        VK_CHECK(vkCreateSampler(mDevice.mDevice, &samplerInfo, nullptr, &mNearestSampler));
 
         const VkSamplerReductionModeCreateInfo reductionModeInfo = {
             .sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO,
@@ -736,10 +754,12 @@ void Renderer::Cleanup()
     }
     vkDestroyDescriptorPool(mDevice.mDevice, mDescriptorPool, nullptr);
     vkDestroySampler(mDevice.mDevice, mMinSampler, nullptr);
+    vkDestroySampler(mDevice.mDevice, mNearestSampler, nullptr);
     vkDestroySampler(mDevice.mDevice, mLinearSampler, nullptr);
     vkDestroySampler(mDevice.mDevice, mTextureSampler, nullptr);
     vkDestroyCommandPool(mDevice.mDevice, mCommandPool, nullptr);
     vkDestroyDescriptorSetLayout(mDevice.mDevice, mTextureDescriptorSetLayout, nullptr);
+    mDevice.DestroyPipeline(mAmbientOcclusionPipeline);
     mDevice.DestroyPipeline(mDebugDrawFillCmdPipeline);
     mDevice.DestroyPipeline(mDebugDrawRectPipeline);
     mDevice.DestroyPipeline(mDepthReducePipeline);
@@ -1745,6 +1765,39 @@ void Renderer::DepthReducePass(VkCommandBuffer cmd)
     }
 }
 
+void Renderer::AmbientOcclusionPass(VkCommandBuffer cmd)
+{
+    DEBUG_ASSERT(cmd);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, mAmbientOcclusionPipeline.pipeline);
+
+    Vulkan::CmdPushDescriptors(
+        cmd,
+        mAmbientOcclusionPipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            mDrawIndicesEarlyBuffer.buffer,
+            mDrawIndicesLateBuffer.buffer,
+            mDrawCmdEarlyBuffer2.buffer,
+            mDrawCmdLateBuffer2.buffer,
+            mDrawDataBuffer.buffer,
+            mIndexBuffer.buffer,
+            mVertexBuffer.buffer,
+            mNearestSampler,
+            {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mAmbientOcclusionImage.view, VK_IMAGE_LAYOUT_GENERAL},
+        }
+    );
+
+    vkCmdDispatch(
+        cmd,
+        GetDispatchSize(mAmbientOcclusionImageExtent.width, RENDERER_DSSDO_WORKGROUP_SIZE_X),
+        GetDispatchSize(mAmbientOcclusionImageExtent.height, RENDERER_DSSDO_WORKGROUP_SIZE_Y),
+        1
+    );
+}
+
 void Renderer::RenderPass(VkCommandBuffer cmd)
 {
     DEBUG_ASSERT(cmd);
@@ -1764,9 +1817,11 @@ void Renderer::RenderPass(VkCommandBuffer cmd)
             mIndexBuffer.buffer,
             mVertexBuffer.buffer,
             mMaterialBuffer.buffer,
+            mLinearSampler,
             mTextureSampler,
             mTlas,
             {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mAmbientOcclusionImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mVelocityImage.view, VK_IMAGE_LAYOUT_GENERAL},
             {mRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
         }
@@ -2458,6 +2513,33 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
                 VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
             ),
             Vulkan::ImageMemoryBarrier(
+                mDepthImage.image,
+                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                VK_IMAGE_ASPECT_DEPTH_BIT
+            ),
+            Vulkan::ImageMemoryBarrier(
+                mAmbientOcclusionImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
+        }
+    );
+
+    AmbientOcclusionPass(cmd);
+
+    Vulkan::CmdImageMemoryBarrier(
+        cmd,
+        {
+            Vulkan::ImageMemoryBarrier(
                 mRenderImage.image,
                 VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_GENERAL,
@@ -2475,6 +2557,15 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
             ),
+            Vulkan::ImageMemoryBarrier(
+                mAmbientOcclusionImage.image,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            ),
         }
     );
 
@@ -2491,16 +2582,6 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
             ),
             Vulkan::ImageMemoryBarrier(
                 frame.resolvedRenderImage.image,
@@ -3189,6 +3270,23 @@ bool Renderer::CreateColorResources()
             .width = mRenderImageExtent.width,
             .height = mRenderImageExtent.height,
             .debugName = "VisibilityImage",
+        }))
+    {
+        return false;
+    }
+
+    mAmbientOcclusionImageExtent = {mRenderImageExtent.width, mRenderImageExtent.height};
+
+    mUniformData.ambientOcclusionWidth = mAmbientOcclusionImageExtent.width;
+    mUniformData.ambientOcclusionHeight = mAmbientOcclusionImageExtent.height;
+
+    if (!mDevice.CreateImage({
+            .image = mAmbientOcclusionImage,
+            .formats = {VK_FORMAT_R16G16B16A16_SFLOAT},
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mAmbientOcclusionImageExtent.width,
+            .height = mAmbientOcclusionImageExtent.height,
+            .debugName = "AmbientOcclusionImage",
         }))
     {
         return false;

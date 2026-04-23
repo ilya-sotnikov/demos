@@ -13,10 +13,12 @@ StructuredBuffer<DrawData> drawDataBuffer;
 StructuredBuffer<uint32_t> indexBuffer;
 StructuredBuffer<Vertex> vertexBuffer;
 StructuredBuffer<Material> materialBuffer;
+SamplerState linearSampler;
 SamplerState textureSampler;
 RaytracingAccelerationStructure tlas;
 
 Texture2D<uint2> visibilityImage;
+Texture2D<float4> ambientOcclusionImage;
 [[vk::image_format("rg16f")]]
 RWTexture2D<float2> velocityImageRW;
 RWTexture2D<float3> renderImageRW;
@@ -251,9 +253,24 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         shadow = CalcShadow(pixelWorld, uniformBuffer.sunDirectionWorld);
     }
 
-    const float3 ambient = albedo.rgb * uniformBuffer.ambientIntensity;
+    const float4 occlusionSample =
+        ambientOcclusionImage.SampleLevel(linearSampler, (dtid.xy + 0.5) / renderImageSize, 0);
 
-    const float3 color = radianceOut * shadow + ambient;
+    // TODO: math for reconstruction (?) seems a bit sketchy, it makes sence intuitively,
+    // AO term can be taken from L0, and L1 encodes low frequency directional occlusion,
+    // so scalar product with light vectors should give some nice local colored shadows,
+    // but idk, should definitely leave a comment when I find at least somewhat rigorous
+    // explanation why this is ok.
+    const float ambientOcclusion = pow(1.0 - saturate(occlusionSample.w), 2);
+    const float3 ambient = albedo.rgb * uniformBuffer.ambientIntensity * ambientOcclusion;
+
+    // NOTE: this stuff should look good with local lights, in general we should
+    // calculate a dot product with every light, clustered lighting should be a
+    // great optimization for this.
+    const float directionalOcclusion =
+        (1.0 - saturate(dot(occlusionSample.xyz, -uniformBuffer.sunDirectionWorld)));
+
+    const float3 color = ambient + radianceOut * directionalOcclusion * shadow;
 
     renderImageRW[dtid.xy] = color;
 

@@ -25,6 +25,7 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 - normal mapping
 - HDR (HDR -> SDR)
 - TAA
+- directional occlusion (DSSDO)
 - hardware raytraced hard directional shadow
 - bindless textures (descriptor indexing)
 - indirect drawing
