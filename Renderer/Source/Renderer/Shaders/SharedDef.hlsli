@@ -70,6 +70,7 @@ struct UniformData
     uint32_t drawCount;
     uint32_t taaEnable;
     uint32_t drawCullAABB;
+    uint32_t renderMode;
 };
 
 struct Vertex
@@ -133,4 +134,15 @@ enum RenderPassFlagBits
 {
     RENDER_PASS_OPAQUE_BIT      = (1U << 0),
     RENDER_PASS_TRANSLUCENT_BIT = (1U << 1),
+};
+
+enum RenderMode
+{
+    RENDER_MODE_VISIBILITY,
+    RENDER_MODE_FORWARD,
+    RENDER_MODE_GRAD_ERROR,
+    RENDER_MODE_OCCLUSION_L1,
+    RENDER_MODE_OCCLUSION_AMBIENT,
+    RENDER_MODE_OCCLUSION_DIRECTIONAL,
+    RENDER_MODE_COUNT,
 };

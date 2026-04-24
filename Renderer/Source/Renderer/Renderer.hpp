@@ -27,13 +27,6 @@ struct Renderer
     static_assert(sizeof(PushConstantsVisibilityBuffer) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
     static_assert(sizeof(PushConstantsDepthReduce) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
 
-    enum class RenderMode
-    {
-        Visibility,
-        Forward,
-        GradError,
-    };
-
     struct Frame
     {
         VkCommandBuffer commandBuffer;
@@ -112,7 +105,6 @@ struct Renderer
     bool mEnableUI;
     bool mRenderModeChanged;
     bool mCullCameraFrozen;
-    RenderMode mRenderMode;
 
     bool Init();
     void Cleanup();

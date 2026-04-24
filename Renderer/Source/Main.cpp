@@ -17,7 +17,7 @@ static bool sMouseRelativeMode = true;
 static bool sNeedUpdateViewMatrix = true;
 static bool sFullscreen = true;
 static bool sCullCameraFrozen = false;
-static Renderer::RenderMode sRenderMode = Renderer::RenderMode::Visibility;
+static RenderMode sRenderMode = RENDER_MODE_VISIBILITY;
 
 static bool SaveCamera(const Camera& camera, const char* path = "Camera.bin")
 {
@@ -214,19 +214,37 @@ static void ProcessInput(SDL_Window* window, f32 deltaTime, Renderer& renderer)
     if (sKeys[SDL_SCANCODE_1])
     {
         sKeys[SDL_SCANCODE_1] = 0;
-        sRenderMode = Renderer::RenderMode::Visibility;
+        sRenderMode = RENDER_MODE_VISIBILITY;
     }
 
     if (sKeys[SDL_SCANCODE_2])
     {
         sKeys[SDL_SCANCODE_2] = 0;
-        sRenderMode = Renderer::RenderMode::Forward;
+        sRenderMode = RENDER_MODE_FORWARD;
     }
 
     if (sKeys[SDL_SCANCODE_3])
     {
         sKeys[SDL_SCANCODE_3] = 0;
-        sRenderMode = Renderer::RenderMode::GradError;
+        sRenderMode = RENDER_MODE_GRAD_ERROR;
+    }
+
+    if (sKeys[SDL_SCANCODE_4])
+    {
+        sKeys[SDL_SCANCODE_4] = 0;
+        sRenderMode = RENDER_MODE_OCCLUSION_L1;
+    }
+
+    if (sKeys[SDL_SCANCODE_5])
+    {
+        sKeys[SDL_SCANCODE_5] = 0;
+        sRenderMode = RENDER_MODE_OCCLUSION_AMBIENT;
+    }
+
+    if (sKeys[SDL_SCANCODE_6])
+    {
+        sKeys[SDL_SCANCODE_6] = 0;
+        sRenderMode = RENDER_MODE_OCCLUSION_DIRECTIONAL;
     }
 }
 
@@ -382,9 +400,11 @@ int main()
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             int renderMode = static_cast<int>(sRenderMode);
-            const char* renderModes[] = {"Visibility", "Forward", "Grad error"};
+            const char* renderModes[]
+                = {"Visibility", "Forward", "Grad error", "Occlusion L1", "AO", "DO"};
             ImGui::ListBox("Render mode", &renderMode, renderModes, ARRAY_SIZE(renderModes));
-            sRenderMode = static_cast<Renderer::RenderMode>(renderMode);
+            sRenderMode = static_cast<RenderMode>(renderMode);
+            static_assert(ARRAY_SIZE(renderModes) == RENDER_MODE_COUNT);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();

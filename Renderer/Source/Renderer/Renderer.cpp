@@ -837,7 +837,7 @@ bool Renderer::Render(f32 deltaTime)
 
     mUniformData.deltaTime = deltaTime;
 
-    if ((mUniformData.taaEnable == 1) && (mRenderMode != RenderMode::GradError))
+    if ((mUniformData.taaEnable == 1) && (mUniformData.renderMode != RENDER_MODE_GRAD_ERROR))
     {
         const f32 haltonX = 2.0f * HaltonSequence(mTaaJitterIdx + 1, 2) - 1.0f;
         const f32 haltonY = 2.0f * HaltonSequence(mTaaJitterIdx + 1, 3) - 1.0f;
@@ -888,26 +888,25 @@ bool Renderer::Render(f32 deltaTime)
 
     memcpy(frame.uniformBuffer.mapped, &mUniformData, sizeof(mUniformData));
 
-    switch (mRenderMode)
+    switch (mUniformData.renderMode)
     {
-    case RenderMode::Visibility:
-        if (!RecordCommandBufferVisibility(imageIdx))
-        {
-            return false;
-        }
-        break;
-    case RenderMode::Forward:
+    case RENDER_MODE_FORWARD:
         if (!RecordCommandBufferForward(imageIdx))
         {
             return false;
         }
         break;
-    case RenderMode::GradError:
+    case RENDER_MODE_GRAD_ERROR:
         if (!RecordCommandBufferDebugGradError(imageIdx))
         {
             return false;
         }
         break;
+    default:
+        if (!RecordCommandBufferVisibility(imageIdx))
+        {
+            return false;
+        }
     }
 
     if (!mDevice.QueueSubmit({
@@ -960,10 +959,10 @@ void Renderer::PauseRendering(bool paused)
 
 void Renderer::ChangeRenderMode(RenderMode mode)
 {
-    if (mRenderMode != mode)
+    if (mUniformData.renderMode != static_cast<u32>(mode))
     {
         mRenderModeChanged = true;
-        mRenderMode = mode;
+        mUniformData.renderMode = static_cast<u32>(mode);
     }
 }
 

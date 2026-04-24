@@ -270,7 +270,20 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float directionalOcclusion =
         (1.0 - saturate(dot(occlusionSample.xyz, -uniformBuffer.sunDirectionWorld)));
 
-    const float3 color = ambient + radianceOut * directionalOcclusion * shadow;
+    float3 color = ambient + radianceOut * directionalOcclusion * shadow;
+
+    switch (uniformBuffer.renderMode)
+    {
+    case RENDER_MODE_OCCLUSION_L1:
+        color = occlusionSample.rgb;
+        break;
+    case RENDER_MODE_OCCLUSION_AMBIENT:
+        color = ambientOcclusion;
+        break;
+    case RENDER_MODE_OCCLUSION_DIRECTIONAL:
+        color = directionalOcclusion;
+        break;
+    }
 
     renderImageRW[dtid.xy] = color;
 
