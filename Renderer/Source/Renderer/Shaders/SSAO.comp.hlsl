@@ -13,14 +13,16 @@ StructuredBuffer<Vertex> vertexBuffer;
 SamplerState nearestSampler;
 Texture2D<float> depthImage;
 Texture2D<uint2> visibilityImage;
-[[vk::image_format("rgba16f")]]
-RWTexture2D<float4> outImage;
+[[vk::image_format("r8")]]
+RWTexture2D<float> outImage;
 
 // https://kayru.org/articles/dssdo/
 // https://github.com/kayru/dssdo/blob/master/dssdo.hlsl
+// Except that for now we'll just calculate L0 (ambient occlusion).
+// TODO: maybe revisit SH after adding point lights (and clustered lighting)?
 
 [shader("compute")]
-[numthreads(RENDERER_DSSDO_WORKGROUP_SIZE_X, RENDERER_DSSDO_WORKGROUP_SIZE_Y, 1)]
+[numthreads(RENDERER_SSAO_WORKGROUP_SIZE_X, RENDERER_SSAO_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
     const uint2 imageSize = uint2(
@@ -35,7 +37,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     // TODO: reconstructing normals from the depth buffer should be faster:
     // https://turanszkij.wpcomstaging.com/2019/09/improved-normal-reconstruction-from-depth/
-    const uint2 visibilityData = visibilityImage[dtid.xy];
+    const uint2 visibilityData = visibilityImage[dtid.xy * 2];
     uint rawDrawIdx = visibilityData.y;
 
     const bool isCullLate = rawDrawIdx & 0x80000000;
@@ -43,7 +45,8 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     if (rawDrawIdx == 0)
     {
-        return; // TODO
+        outImage[dtid.xy] = 0.0;
+        return;
     }
 
     --rawDrawIdx;
@@ -170,19 +173,11 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float radius = 0.25 / centerDepth; // TODO: uniform.
     const float maxDistanceInv = 1.0 / 2.0; // TODO: uniform.
 
-    const float fudgeFactorL0 = 2.0; // TODO: uniform.
-    const float fudgeFactorL1 = 10.0; // TODO: uniform.
-
-    const float shWeightL0  = fudgeFactorL0 * 0.5 * sqrt(1.0 / M_PIf);
-    const float3 shWeightL1 = fudgeFactorL1 * 0.5 * sqrt(3.0 / M_PIf);
-
-    const float4 shWeight = float4(shWeightL1, shWeightL0) / numSamples;
-
     Pcg32 pcg32;
-
     pcg32.Init(uint64_t(dtid.y) << 32 | dtid.x, 0);
 
-    float4 occlusionSH = 0;
+    float occlusion = 0;
+    const float weight = 1.0 / numSamples;
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -207,14 +202,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
         attenuation = attenuation * attenuation * step(0.1, dp);
 
-        occlusionSH += sampleDepth > 0.0 ?
-            attenuation * shWeight * float4(centerToSampleNormalized, 1.0) :
-            0.0;
+        occlusion += sampleDepth > 0.0 ? attenuation * weight : 0.0;
     }
 
-    outImage[dtid.xy] = occlusionSH;
-    // TODO: half resolution.
-    // TODO: reconstruct from depth (will also be usable from forward pipelines).
+    outImage[dtid.xy] = occlusion;
     // TODO: half resolution 16 bit depth buffer?
-    // TODO: denoise (bilateral blur?).
 }

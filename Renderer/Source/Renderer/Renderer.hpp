@@ -44,6 +44,7 @@ struct Renderer
     Vulkan::Image mRenderImage;
     Vulkan::Image mVelocityImage;
     Vulkan::Image mAmbientOcclusionImage;
+    Vulkan::Image mAmbientOcclusionBlurredImage;
     VkExtent2D mRenderImageExtent;
     VkExtent2D mAmbientOcclusionImageExtent;
     VkExtent2D mDepthPyramidImageExtent;
@@ -52,6 +53,7 @@ struct Renderer
     std::vector<VkImageView> mDepthPyramidMipImageViews;
     Vulkan::Pipeline mVisibilityPipeline;
     Vulkan::Pipeline mAmbientOcclusionPipeline;
+    Vulkan::Pipeline mAmbientOcclusionBlurPipeline;
     Vulkan::Pipeline mVisibilityRenderPipeline;
     Vulkan::Pipeline mForwardRenderPipeline;
     Vulkan::Pipeline mFullscreenPipeline;
@@ -130,7 +132,8 @@ private:
     void ForwardPass(VkCommandBuffer cmd, bool cullLate);
     void CullPass(VkCommandBuffer cmd, bool late);
     void DepthReducePass(VkCommandBuffer cmd);
-    void AmbientOcclusionPass(VkCommandBuffer cmd);
+    void AmbientOcclusionPass(VkCommandBuffer cmd); // TODO: AO and blur to async after RT -> CSM.
+    void AmbientOcclusionBlurPass(VkCommandBuffer cmd);
     void RenderPass(VkCommandBuffer cmd);
     void TaaResolvePass(VkCommandBuffer cmd);
     void DebugDrawPass(VkCommandBuffer cmd);

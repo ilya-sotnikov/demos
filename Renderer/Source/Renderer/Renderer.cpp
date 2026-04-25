@@ -316,8 +316,17 @@ bool Renderer::Init()
 
     if (!mDevice.CreateComputePipeline({
             .pipeline = mAmbientOcclusionPipeline,
-            .shaderPath = "DSSDO.comp.hlsl.spv",
+            .shaderPath = "SSAO.comp.hlsl.spv",
             .debugName = "AmbientOcclusionPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mAmbientOcclusionBlurPipeline,
+            .shaderPath = "BlurSSAO.comp.hlsl.spv",
+            .debugName = "AmbientOcclusionBlurPass",
         }))
     {
         return false;
@@ -759,6 +768,7 @@ void Renderer::Cleanup()
     vkDestroySampler(mDevice.mDevice, mTextureSampler, nullptr);
     vkDestroyCommandPool(mDevice.mDevice, mCommandPool, nullptr);
     vkDestroyDescriptorSetLayout(mDevice.mDevice, mTextureDescriptorSetLayout, nullptr);
+    mDevice.DestroyPipeline(mAmbientOcclusionBlurPipeline);
     mDevice.DestroyPipeline(mAmbientOcclusionPipeline);
     mDevice.DestroyPipeline(mDebugDrawFillCmdPipeline);
     mDevice.DestroyPipeline(mDebugDrawRectPipeline);
@@ -1791,8 +1801,34 @@ void Renderer::AmbientOcclusionPass(VkCommandBuffer cmd)
 
     vkCmdDispatch(
         cmd,
-        GetDispatchSize(mAmbientOcclusionImageExtent.width, RENDERER_DSSDO_WORKGROUP_SIZE_X),
-        GetDispatchSize(mAmbientOcclusionImageExtent.height, RENDERER_DSSDO_WORKGROUP_SIZE_Y),
+        GetDispatchSize(mAmbientOcclusionImageExtent.width, RENDERER_SSAO_WORKGROUP_SIZE_X),
+        GetDispatchSize(mAmbientOcclusionImageExtent.height, RENDERER_SSAO_WORKGROUP_SIZE_Y),
+        1
+    );
+}
+
+void Renderer::AmbientOcclusionBlurPass(VkCommandBuffer cmd)
+{
+    DEBUG_ASSERT(cmd);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, mAmbientOcclusionBlurPipeline.pipeline);
+
+    Vulkan::CmdPushDescriptors(
+        cmd,
+        mAmbientOcclusionBlurPipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            mLinearSampler,
+            {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mAmbientOcclusionImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mAmbientOcclusionBlurredImage.view, VK_IMAGE_LAYOUT_GENERAL},
+        }
+    );
+
+    vkCmdDispatch(
+        cmd,
+        GetDispatchSize(mAmbientOcclusionImageExtent.width, RENDERER_SSAO_BLUR_WORKGROUP_SIZE_X),
+        GetDispatchSize(mAmbientOcclusionImageExtent.height, RENDERER_SSAO_BLUR_WORKGROUP_SIZE_Y),
         1
     );
 }
@@ -1820,7 +1856,7 @@ void Renderer::RenderPass(VkCommandBuffer cmd)
             mTextureSampler,
             mTlas,
             {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mAmbientOcclusionImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mAmbientOcclusionBlurredImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mVelocityImage.view, VK_IMAGE_LAYOUT_GENERAL},
             {mRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
         }
@@ -2539,6 +2575,32 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
         cmd,
         {
             Vulkan::ImageMemoryBarrier(
+                mAmbientOcclusionImage.image,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            ),
+            Vulkan::ImageMemoryBarrier(
+                mAmbientOcclusionBlurredImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
+        }
+    );
+
+    AmbientOcclusionBlurPass(cmd);
+
+    Vulkan::CmdImageMemoryBarrier(
+        cmd,
+        {
+            Vulkan::ImageMemoryBarrier(
                 mRenderImage.image,
                 VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_GENERAL,
@@ -2557,7 +2619,7 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
             ),
             Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionImage.image,
+                mAmbientOcclusionBlurredImage.image,
                 VK_IMAGE_LAYOUT_GENERAL,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -3274,18 +3336,30 @@ bool Renderer::CreateColorResources()
         return false;
     }
 
-    mAmbientOcclusionImageExtent = {mRenderImageExtent.width, mRenderImageExtent.height};
+    mAmbientOcclusionImageExtent = {mRenderImageExtent.width / 2, mRenderImageExtent.height / 2};
 
     mUniformData.ambientOcclusionWidth = mAmbientOcclusionImageExtent.width;
     mUniformData.ambientOcclusionHeight = mAmbientOcclusionImageExtent.height;
 
     if (!mDevice.CreateImage({
             .image = mAmbientOcclusionImage,
-            .formats = {VK_FORMAT_R16G16B16A16_SFLOAT},
+            .formats = {VK_FORMAT_R8_UNORM},
             .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             .width = mAmbientOcclusionImageExtent.width,
             .height = mAmbientOcclusionImageExtent.height,
             .debugName = "AmbientOcclusionImage",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateImage({
+            .image = mAmbientOcclusionBlurredImage,
+            .formats = {mAmbientOcclusionImage.format},
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mAmbientOcclusionImageExtent.width,
+            .height = mAmbientOcclusionImageExtent.height,
+            .debugName = "AmbientOcclusionBlurredImage",
         }))
     {
         return false;
@@ -3329,6 +3403,8 @@ void Renderer::CleanupColorResources()
     {
         mDevice.DestroyImage(mFrame[i].resolvedRenderImage);
     }
+    mDevice.DestroyImage(mAmbientOcclusionBlurredImage);
+    mDevice.DestroyImage(mAmbientOcclusionImage);
     mDevice.DestroyImage(mVisibilityImage);
     mDevice.DestroyImage(mRenderImage);
     mDevice.DestroyImage(mVelocityImage);

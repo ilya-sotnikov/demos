@@ -232,19 +232,7 @@ static void ProcessInput(SDL_Window* window, f32 deltaTime, Renderer& renderer)
     if (sKeys[SDL_SCANCODE_4])
     {
         sKeys[SDL_SCANCODE_4] = 0;
-        sRenderMode = RENDER_MODE_OCCLUSION_L1;
-    }
-
-    if (sKeys[SDL_SCANCODE_5])
-    {
-        sKeys[SDL_SCANCODE_5] = 0;
-        sRenderMode = RENDER_MODE_OCCLUSION_AMBIENT;
-    }
-
-    if (sKeys[SDL_SCANCODE_6])
-    {
-        sKeys[SDL_SCANCODE_6] = 0;
-        sRenderMode = RENDER_MODE_OCCLUSION_DIRECTIONAL;
+        sRenderMode = RENDER_MODE_AMBIENT_OCCLUSION;
     }
 }
 
@@ -400,8 +388,7 @@ int main()
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             int renderMode = static_cast<int>(sRenderMode);
-            const char* renderModes[]
-                = {"Visibility", "Forward", "Grad error", "Occlusion L1", "AO", "DO"};
+            const char* renderModes[] = {"Visibility", "Forward", "Grad error", "AO"};
             ImGui::ListBox("Render mode", &renderMode, renderModes, ARRAY_SIZE(renderModes));
             sRenderMode = static_cast<RenderMode>(renderMode);
             static_assert(ARRAY_SIZE(renderModes) == RENDER_MODE_COUNT);
