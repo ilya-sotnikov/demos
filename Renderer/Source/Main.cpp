@@ -367,6 +367,7 @@ int main()
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::SeparatorText("Misc");
+
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::SliderFloat(
@@ -378,6 +379,7 @@ int main()
             );
             ImGui::TableNextColumn();
             ImGui::Text("Sun intensity");
+
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::SliderFloat(
@@ -389,6 +391,8 @@ int main()
             );
             ImGui::TableNextColumn();
             ImGui::Text("Ambient intensity");
+
+            // TODO: sun direction.
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();

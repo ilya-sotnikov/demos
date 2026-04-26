@@ -1,6 +1,7 @@
 #include "Common.hlsli"
 #include "Math.hlsli"
 #include "PBR.hlsli"
+#include "Sky.hlsli"
 
 // https://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
 
@@ -97,9 +98,19 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const bool isCullLate = rawDrawIdx & 0x80000000;
     rawDrawIdx &= 0x7fffffff;
 
+    float2 pixelNdc = ((dtid.xy + 0.5) / renderImageSize) * 2.0 - 1.0;
+    pixelNdc.y *= -1.0;
+
     if (rawDrawIdx == 0)
     {
-        renderImageRW[dtid.xy] = SrgbToLinear(float3(0.7, 0.8, 0.9));
+        const float4 pos = mul(
+            uniformBuffer.clipToWorld,
+            float4(pixelNdc, 1.0, 1.0)
+        );
+        const float3 viewDirectionWorld = normalize(pos.xyz / pos.w - uniformBuffer.cameraPosition);
+
+        // TODO: at least calculate lighting with the sun color.
+        renderImageRW[dtid.xy] = CalcSky(viewDirectionWorld, uniformBuffer.sunDirectionWorld);
         velocityImageRW[dtid.xy] = float2(0.0, 0.0);
         return;
     }
@@ -157,9 +168,6 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float4 posClip0 = mul(uniformBuffer.worldToClip, float4(posWorld0, 1.0));
     const float4 posClip1 = mul(uniformBuffer.worldToClip, float4(posWorld1, 1.0));
     const float4 posClip2 = mul(uniformBuffer.worldToClip, float4(posWorld2, 1.0));
-
-    float2 pixelNdc = ((dtid.xy + 0.5) / renderImageSize) * 2.0 - 1.0;
-    pixelNdc.y *= -1.0;
 
     const BarycentricData baryData = CalcBarycentricData(
         posClip0,

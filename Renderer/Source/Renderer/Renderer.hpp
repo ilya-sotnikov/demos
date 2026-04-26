@@ -144,6 +144,10 @@ private:
 
     bool RecordCommandBufferDebugGradError(u32 imageIdx);
     bool RecordCommandBufferVisibility(u32 imageIdx);
+    // NOTE: forward renderer is implemented as a reference, to help with
+    // debugging visibility buffer, I won't implement every feature here
+    // though, sice the main brittle points are attribute interpolation
+    // and analytic derivatives.
     bool RecordCommandBufferForward(u32 imageIdx);
     bool CreateSwapchain();
     void CleanupSwapchain();

@@ -163,6 +163,7 @@ set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/SharedConfig.hlsli
     ${SHADER_SOURCE_DIRECTORY}/SharedDef.hlsli
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/Sky.hlsli
     ${SHADER_SOURCE_DIRECTORY}/DebugDrawRect.hlsli
     ${SHADER_SOURCE_DIRECTORY}/DebugDraw.hlsli
 )

@@ -27,6 +27,7 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 - TAA
 - SSAO
 - hardware raytraced hard directional shadow
+- very simplified atmospheric scattering
 - bindless textures (descriptor indexing)
 - indirect drawing
 - SPIR-V reflection to manage push descriptors
