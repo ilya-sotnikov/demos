@@ -188,155 +188,7 @@ bool Renderer::Init()
         );
     }
 
-    // Graphics pipelines
-    if (!mDevice.CreateGraphicsPipeline({
-            .pipeline = mVisibilityPipeline,
-            .shaderPaths = {"VisibilityBuffer.vert.hlsl.spv", "VisibilityBuffer.frag.hlsl.spv"},
-            .cullMode = VK_CULL_MODE_BACK_BIT,
-            .depthFormat = mDepthImage.format,
-            .depthTestEnable = VK_TRUE,
-            .depthWriteEnable = VK_TRUE,
-            .colorAttachmentFormats = {mVisibilityImage.format},
-            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
-            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
-            .debugName = "VisibilityBufferPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateGraphicsPipeline({
-            .pipeline = mForwardRenderPipeline,
-            .shaderPaths = {"ForwardRender.vert.hlsl.spv", "ForwardRender.frag.hlsl.spv"},
-            .cullMode = VK_CULL_MODE_BACK_BIT,
-            .depthFormat = mDepthImage.format,
-            .depthTestEnable = VK_TRUE,
-            .depthWriteEnable = VK_TRUE,
-            .colorAttachmentFormats = {mRenderImage.format, mVelocityImage.format},
-            .colorBlendAttachments = {
-                {.colorWriteMask = Vulkan::ColorComponentAllBits},
-                {.colorWriteMask = Vulkan::ColorComponentAllBits},
-            },
-            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
-            .extraDescriptorSetLayout = mTextureDescriptorSetLayout,
-            .debugName = "ForwardRenderPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateGraphicsPipeline({
-            .pipeline = mDebugDrawRectPipeline,
-            .shaderPaths = {"DebugDrawRect.vert.hlsl.spv", "DebugDrawRect.frag.hlsl.spv"},
-            .colorAttachmentFormats = {mRenderImage.format},
-            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
-            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
-            .debugName = "DebugDrawRectPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateGraphicsPipeline({
-            .pipeline = mFullscreenPipeline,
-            .shaderPaths = {"Fullscreen.vert.hlsl.spv", "Fullscreen.frag.hlsl.spv"},
-            .colorAttachmentFormats = {mSwapchain.surfaceFormat.format},
-            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
-            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
-            .debugName = "FullscreenPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateGraphicsPipeline({
-            .pipeline = mDebugGradErrorPipeline,
-            .shaderPaths = {"DebugGradError.vert.hlsl.spv", "DebugGradError.frag.hlsl.spv"},
-            .cullMode = VK_CULL_MODE_BACK_BIT,
-            .depthFormat = mDepthImage.format,
-            .depthTestEnable = VK_TRUE,
-            .depthWriteEnable = VK_TRUE,
-            .colorAttachmentFormats = {mSwapchain.surfaceFormat.format},
-            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
-            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
-            .debugName = "DebugGradErrorPass",
-        }))
-    {
-        return false;
-    }
-
-    // Compute pipelines.
-    if (!mDevice.CreateComputePipeline({
-            .pipeline = mCullEarlyPipeline,
-            .shaderPath = "Cull.comp.hlsl.spv",
-            .specializationConstants = {0},
-            .debugName = "CullEarlyPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateComputePipeline({
-            .pipeline = mCullLatePipeline,
-            .shaderPath = "Cull.comp.hlsl.spv",
-            .specializationConstants = {1},
-            .debugName = "CullLatePass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateComputePipeline({
-            .pipeline = mVisibilityRenderPipeline,
-            .shaderPath = "VisibilityRender.comp.hlsl.spv",
-            .extraDescriptorSetLayout = mTextureDescriptorSetLayout,
-            .debugName = "VisibilityRenderPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateComputePipeline({
-            .pipeline = mTaaResolvePipeline,
-            .shaderPath = "TaaResolve.comp.hlsl.spv",
-            .debugName = "TaaResolvePass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateComputePipeline({
-            .pipeline = mDepthReducePipeline,
-            .shaderPath = "DepthReduce.comp.hlsl.spv",
-            .debugName = "DepthReducePass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateComputePipeline({
-            .pipeline = mAmbientOcclusionPipeline,
-            .shaderPath = "SSAO.comp.hlsl.spv",
-            .debugName = "AmbientOcclusionPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateComputePipeline({
-            .pipeline = mAmbientOcclusionBlurPipeline,
-            .shaderPath = "BlurSSAO.comp.hlsl.spv",
-            .debugName = "AmbientOcclusionBlurPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateComputePipeline({
-            .pipeline = mDebugDrawFillCmdPipeline,
-            .shaderPath = "DebugDrawFillCmd.comp.hlsl.spv",
-            .debugName = "DebugDrawFillCmdPass",
-        }))
+    if (!RecompilePipelines())
     {
         return false;
     }
@@ -719,6 +571,7 @@ void Renderer::Cleanup()
 
     mImguiRenderer.Cleanup();
 
+    CleanupPipelines();
     CleanupColorResources();
     CleanupDepthResources();
 
@@ -768,19 +621,6 @@ void Renderer::Cleanup()
     vkDestroySampler(mDevice.mDevice, mTextureSampler, nullptr);
     vkDestroyCommandPool(mDevice.mDevice, mCommandPool, nullptr);
     vkDestroyDescriptorSetLayout(mDevice.mDevice, mTextureDescriptorSetLayout, nullptr);
-    mDevice.DestroyPipeline(mAmbientOcclusionBlurPipeline);
-    mDevice.DestroyPipeline(mAmbientOcclusionPipeline);
-    mDevice.DestroyPipeline(mDebugDrawFillCmdPipeline);
-    mDevice.DestroyPipeline(mDebugDrawRectPipeline);
-    mDevice.DestroyPipeline(mDepthReducePipeline);
-    mDevice.DestroyPipeline(mDebugGradErrorPipeline);
-    mDevice.DestroyPipeline(mTaaResolvePipeline);
-    mDevice.DestroyPipeline(mCullLatePipeline);
-    mDevice.DestroyPipeline(mCullEarlyPipeline);
-    mDevice.DestroyPipeline(mFullscreenPipeline);
-    mDevice.DestroyPipeline(mVisibilityRenderPipeline);
-    mDevice.DestroyPipeline(mForwardRenderPipeline);
-    mDevice.DestroyPipeline(mVisibilityPipeline);
     CleanupSwapchain();
     vkDestroySurfaceKHR(mDevice.mInstance, mSurface, nullptr);
     mDevice.Destroy();
@@ -979,6 +819,185 @@ void Renderer::ChangeRenderMode(RenderMode mode)
 void Renderer::FreezeCullCamera(bool frozen)
 {
     mCullCameraFrozen = frozen;
+}
+
+void Renderer::CleanupPipelines()
+{
+    mDevice.DestroyPipeline(mAmbientOcclusionBlurPipeline);
+    mDevice.DestroyPipeline(mAmbientOcclusionPipeline);
+    mDevice.DestroyPipeline(mDebugDrawFillCmdPipeline);
+    mDevice.DestroyPipeline(mDebugDrawRectPipeline);
+    mDevice.DestroyPipeline(mDepthReducePipeline);
+    mDevice.DestroyPipeline(mDebugGradErrorPipeline);
+    mDevice.DestroyPipeline(mTaaResolvePipeline);
+    mDevice.DestroyPipeline(mCullLatePipeline);
+    mDevice.DestroyPipeline(mCullEarlyPipeline);
+    mDevice.DestroyPipeline(mFullscreenPipeline);
+    mDevice.DestroyPipeline(mVisibilityRenderPipeline);
+    mDevice.DestroyPipeline(mForwardRenderPipeline);
+    mDevice.DestroyPipeline(mVisibilityPipeline);
+}
+
+bool Renderer::RecompilePipelines()
+{
+    (void)mDevice.DeviceWaitIdle();
+
+    CleanupPipelines();
+
+    // Graphics pipelines
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mVisibilityPipeline,
+            .shaderPaths = {"VisibilityBuffer.vert.hlsl.spv", "VisibilityBuffer.frag.hlsl.spv"},
+            .cullMode = VK_CULL_MODE_BACK_BIT,
+            .depthFormat = mDepthImage.format,
+            .depthTestEnable = VK_TRUE,
+            .depthWriteEnable = VK_TRUE,
+            .colorAttachmentFormats = {mVisibilityImage.format},
+            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .debugName = "VisibilityBufferPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mForwardRenderPipeline,
+            .shaderPaths = {"ForwardRender.vert.hlsl.spv", "ForwardRender.frag.hlsl.spv"},
+            .cullMode = VK_CULL_MODE_BACK_BIT,
+            .depthFormat = mDepthImage.format,
+            .depthTestEnable = VK_TRUE,
+            .depthWriteEnable = VK_TRUE,
+            .colorAttachmentFormats = {mRenderImage.format, mVelocityImage.format},
+            .colorBlendAttachments = {
+                {.colorWriteMask = Vulkan::ColorComponentAllBits},
+                {.colorWriteMask = Vulkan::ColorComponentAllBits},
+            },
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .extraDescriptorSetLayout = mTextureDescriptorSetLayout,
+            .debugName = "ForwardRenderPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mDebugDrawRectPipeline,
+            .shaderPaths = {"DebugDrawRect.vert.hlsl.spv", "DebugDrawRect.frag.hlsl.spv"},
+            .colorAttachmentFormats = {mRenderImage.format},
+            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .debugName = "DebugDrawRectPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mFullscreenPipeline,
+            .shaderPaths = {"Fullscreen.vert.hlsl.spv", "Fullscreen.frag.hlsl.spv"},
+            .colorAttachmentFormats = {mSwapchain.surfaceFormat.format},
+            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .debugName = "FullscreenPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mDebugGradErrorPipeline,
+            .shaderPaths = {"DebugGradError.vert.hlsl.spv", "DebugGradError.frag.hlsl.spv"},
+            .cullMode = VK_CULL_MODE_BACK_BIT,
+            .depthFormat = mDepthImage.format,
+            .depthTestEnable = VK_TRUE,
+            .depthWriteEnable = VK_TRUE,
+            .colorAttachmentFormats = {mSwapchain.surfaceFormat.format},
+            .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .debugName = "DebugGradErrorPass",
+        }))
+    {
+        return false;
+    }
+
+    // Compute pipelines.
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mCullEarlyPipeline,
+            .shaderPath = "Cull.comp.hlsl.spv",
+            .specializationConstants = {0},
+            .debugName = "CullEarlyPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mCullLatePipeline,
+            .shaderPath = "Cull.comp.hlsl.spv",
+            .specializationConstants = {1},
+            .debugName = "CullLatePass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mVisibilityRenderPipeline,
+            .shaderPath = "VisibilityRender.comp.hlsl.spv",
+            .extraDescriptorSetLayout = mTextureDescriptorSetLayout,
+            .debugName = "VisibilityRenderPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mTaaResolvePipeline,
+            .shaderPath = "TaaResolve.comp.hlsl.spv",
+            .debugName = "TaaResolvePass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mDepthReducePipeline,
+            .shaderPath = "DepthReduce.comp.hlsl.spv",
+            .debugName = "DepthReducePass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mAmbientOcclusionPipeline,
+            .shaderPath = "SSAO.comp.hlsl.spv",
+            .debugName = "AmbientOcclusionPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mAmbientOcclusionBlurPipeline,
+            .shaderPath = "BlurSSAO.comp.hlsl.spv",
+            .debugName = "AmbientOcclusionBlurPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mDebugDrawFillCmdPipeline,
+            .shaderPath = "DebugDrawFillCmd.comp.hlsl.spv",
+            .debugName = "DebugDrawFillCmdPass",
+        }))
+    {
+        return false;
+    }
+
+    return true;
 }
 
 bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)

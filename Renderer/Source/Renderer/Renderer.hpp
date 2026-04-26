@@ -116,6 +116,7 @@ struct Renderer
     void PauseRendering(bool paused);
     void ChangeRenderMode(RenderMode mode);
     void FreezeCullCamera(bool frozen);
+    bool RecompilePipelines();
 
 private:
     bool UploadTextures(const std::vector<std::string>& texturePaths);
@@ -150,4 +151,5 @@ private:
     void CleanupColorResources();
     bool CreateDepthResources();
     void CleanupDepthResources();
+    void CleanupPipelines();
 };

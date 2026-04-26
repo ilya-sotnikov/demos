@@ -211,6 +211,15 @@ static void ProcessInput(SDL_Window* window, f32 deltaTime, Renderer& renderer)
         renderer.FreezeCullCamera(sCullCameraFrozen);
     }
 
+    if (sKeys[SDL_SCANCODE_R])
+    {
+        sKeys[SDL_SCANCODE_R] = 0;
+        if (!renderer.RecompilePipelines())
+        {
+            fprintf(stderr, "renderer: pipeline recompilation failed\n");
+        }
+    }
+
     if (sKeys[SDL_SCANCODE_1])
     {
         sKeys[SDL_SCANCODE_1] = 0;

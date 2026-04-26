@@ -25,7 +25,7 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 - normal mapping
 - HDR (HDR -> SDR)
 - TAA
-- directional occlusion (DSSDO)
+- SSAO
 - hardware raytraced hard directional shadow
 - bindless textures (descriptor indexing)
 - indirect drawing
@@ -79,6 +79,7 @@ This will take a while.
 
 - WASD/ZX -- position control, Z/X are down/up
 - Escape -- close
+- r -- reload shaders (after recompiling with CMake)
 - . -- toggle fullscreen
 - u -- toggle UI
 - m -- toggle mouse
