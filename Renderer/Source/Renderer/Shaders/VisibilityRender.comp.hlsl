@@ -16,40 +16,24 @@ StructuredBuffer<Vertex> vertexBuffer;
 StructuredBuffer<Material> materialBuffer;
 SamplerState linearSampler;
 SamplerState textureSampler;
-RaytracingAccelerationStructure tlas;
+SamplerComparisonState shadowSampler;
+SamplerState shadowPcfJitterSampler;
 
+Texture2DArray<float> shadowImage;
+Texture3D shadowPcfJitterImage;
 Texture2D<uint2> visibilityImage;
 Texture2D<float> ambientOcclusionImage;
 [[vk::image_format("rg16f")]]
 RWTexture2D<float2> velocityImageRW;
 RWTexture2D<float3> renderImageRW;
 
+// TODO: very messy.
+#include "CalcShadow.hlsli"
+
 // NOTE: full bindless is not practical yet since it messes up synchronization validation.
 // For now it's only for read-only resources (textures).
 [[vk::binding(0, 1)]]
 Texture2D textures[];
-
-float CalcShadow(float3 posWorld, float3 sunDirectionWorld)
-{
-    RayDesc rayDesc;
-    rayDesc.Origin = posWorld;
-    // TODO: jitter and blur in screen space for soft shadows.
-    rayDesc.Direction = -sunDirectionWorld;
-    rayDesc.TMin = 0.01; // TODO: offset by geometric normal instead?
-    rayDesc.TMax = 100.0;
-
-    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_CULL_NON_OPAQUE> rayQuery;
-    rayQuery.TraceRayInline(
-        tlas,
-        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_CULL_NON_OPAQUE,
-        0xff,
-        rayDesc
-    );
-
-    rayQuery.Proceed();
-
-    return float(rayQuery.CommittedStatus() == COMMITTED_NOTHING);
-}
 
 // http://www.thetenthplanet.de/archives/1180
 // https://github.com/ConfettiFX/The-Forge/blob/master/Common_3/Renderer/VisibilityBuffer2/Shaders/FSL/VisibilityBufferShadingUtilities.h.fsl
@@ -194,7 +178,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     const InterpolatedData3D interpNormal = Interpolate3D(baryData, n0, n1, n2);
 
-    float3 normal = QuatRotate(drawData.orientation, normalize(interpNormal.c));
+    const float3 normalWorld = normalize(QuatRotate(drawData.orientation, interpNormal.c));
 
     float4 albedo = material.albedoFactor;
     if (material.albedoTexIdx > 0)
@@ -209,6 +193,8 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     }
     const float metallic = metallicRoughness.r;
     const float roughness = metallicRoughness.g;
+
+    float3 normal = normalWorld;
 
     if (material.normalTexIdx > 0)
     {
@@ -255,11 +241,54 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float3 radianceOut =
         (kDiffuse * albedo.rgb / M_PIf + specular) * uniformBuffer.sunIntensity * dotNormalLight;
 
-    float shadow = 1.0;
-    if (dotNormalLight > 0.0)
+    float3 positionShadow;
+
+    // Choosing cascade not by split distances, but by determining the smallest
+    // cascade that contains this fragment.
+    // TODO: somehow optimize? Maybe even ditch the idea above and choose by split distances.
+    // TODO: better offsetting.
+    const float normalOffsetScale =
+        saturate(1.0 - dot(-uniformBuffer.sunDirectionWorld, normalWorld))
+        * uniformBuffer.shadow.normalOffset;
+    const float3 scaledNormalWorld = normalWorld * normalOffsetScale;
+    int cascadeIdx = -1;
+    for (int i = 0; i < RENDERER_SHADOW_MAP_CASCADE_COUNT; ++i)
     {
-        shadow = CalcShadow(pixelWorld, uniformBuffer.sunDirectionWorld);
+        // Leaving a small room for PCF kernel, to avoid sampling outside the cascade.
+        // TODO: hacky.
+        const float MAX_VALUE = 0.99;
+
+        const float4 shadowOffset = float4(
+            scaledNormalWorld * uniformBuffer.shadow.texelSizes[i],
+            0.0
+        );
+        positionShadow = mul(
+            uniformBuffer.shadow.worldToClip[i],
+            float4(pixelWorld, 1.0) + shadowOffset
+        ).xyz;
+        positionShadow.z += uniformBuffer.shadow.constantOffset / uniformBuffer.shadow.texelSizes[i];
+        positionShadow.xy = positionShadow.xy * 0.5 + 0.5;
+
+        const float minCoord = Min(positionShadow);
+        const float maxCoord = Max(positionShadow);
+
+        if ((minCoord >= 0.0) && (maxCoord <= MAX_VALUE))
+        {
+            cascadeIdx = i;
+            break;
+        }
     }
+
+    const float shadow = cascadeIdx == -1 ? 1.0 :
+        CalcShadow(
+            uniformBuffer.shadow.enablePcf,
+            uniformBuffer.shadow.pcfKernelScale,
+            uniformBuffer.shadow.pcfKernelCascadeScales[cascadeIdx],
+            positionShadow,
+            float2(dtid.xy),
+            dotNormalLight,
+            cascadeIdx
+        );
 
     const float ambientOcclusionSample =
         ambientOcclusionImage.SampleLevel(linearSampler, (dtid.xy + 0.5) / renderImageSize, 0);

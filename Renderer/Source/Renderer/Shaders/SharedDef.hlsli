@@ -71,6 +71,22 @@ struct UniformData
     uint32_t taaEnable;
     uint32_t drawCullAABB;
     uint32_t renderMode;
+
+    struct
+    {
+        MAT_4X4 worldToClip[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+        float texelSizes[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+        // float frustumPlaneXX[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+        // float frustumPlaneXZ[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+        // float frustumPlaneYY[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+        // float frustumPlaneYZ[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+        float pcfKernelCascadeScales[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+        float normalOffset;
+        float constantOffset;
+        float pcfKernelScale;
+        uint32_t enableCascadeColor;
+        uint32_t enablePcf;
+    } shadow;
 };
 
 struct Vertex
@@ -128,6 +144,12 @@ struct PushConstantsDepthReduce
     uint32_t mipLevel;
     uint32_t outWidth;
     uint32_t outHeight;
+};
+
+struct PushConstantsShadow
+{
+    int32_t shadowCascadeIdx;
+    uint32_t renderPassFlags;
 };
 
 enum RenderPassFlagBits

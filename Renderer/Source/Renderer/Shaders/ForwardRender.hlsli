@@ -24,8 +24,6 @@ StructuredBuffer<Vertex> vertexBuffer;
 StructuredBuffer<Material> materialBuffer;
 [[vk::binding(5)]]
 SamplerState textureSampler;
-[[vk::binding(6)]]
-RaytracingAccelerationStructure tlas;
 
 // NOTE: full bindless is not practical yet since it messes up synchronization validation.
 // For now it's only for read-only resources (textures).

@@ -26,7 +26,7 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 - HDR (HDR -> SDR)
 - TAA
 - SSAO
-- hardware raytraced hard directional shadow
+- stable cascaded shadow maps (CSM) with soft shadows (PCF with adaptive sampling)
 - very simplified atmospheric scattering
 - bindless textures (descriptor indexing)
 - indirect drawing

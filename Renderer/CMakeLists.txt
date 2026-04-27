@@ -133,8 +133,11 @@ endif()
 set(SHADER_SOURCE_DIRECTORY ${CMAKE_SOURCE_DIR}/Source/Renderer/Shaders/)
 set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Cull.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/ShadowCull.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.frag.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/Shadow.vert.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/Shadow.frag.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Fullscreen.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Fullscreen.frag.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Imgui.vert.hlsl
@@ -155,6 +158,7 @@ set(SHADER_SOURCE_FILES
 set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Common.hlsli
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/Shadow.hlsli
     ${SHADER_SOURCE_DIRECTORY}/ForwardRender.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Fullscreen.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Imgui.hlsli
@@ -164,6 +168,7 @@ set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/SharedDef.hlsli
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Sky.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/CalcShadow.hlsli
     ${SHADER_SOURCE_DIRECTORY}/DebugDrawRect.hlsli
     ${SHADER_SOURCE_DIRECTORY}/DebugDraw.hlsli
 )
@@ -204,9 +209,8 @@ foreach(shader ${SHADER_SOURCE_FILES})
             -E Main
             -fspv-target-env=vulkan1.3
             -fspv-preserve-bindings
-            -fspv-extension=SPV_EXT_mesh_shader
+            #-fspv-extension=SPV_EXT_mesh_shader
             -fspv-extension=SPV_EXT_descriptor_indexing
-            -fspv-extension=SPV_KHR_ray_query
             -Fo ${SPIRV} ${shader}
         DEPENDS ${shader} ${SHADER_INCLUDE_FILES}
     )

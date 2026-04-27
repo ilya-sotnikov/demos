@@ -24,6 +24,57 @@ static u32 GetDispatchSize(u32 size, u32 workgroupSize)
     return (size + workgroupSize - 1) / workgroupSize;
 }
 
+// GPU gems 2, Chapter 17, Efficient Soft-Edged Shadows Using Pixel Shader Branching, Yury Uralsky.
+static std::vector<i8> CreateShadowJitterOffsets(size_t size, size_t samplesU, size_t samplesV)
+{
+    u32 randomU32 = 1337;
+
+    std::vector<i8> result(size * size * samplesU * samplesV * 4 / 2);
+
+    const size_t gridSize = samplesU * samplesV / 2;
+
+    for (size_t i = 0; i < size; ++i)
+    {
+        for (size_t j = 0; j < size; ++j)
+        {
+            for (size_t k = 0; k < gridSize; ++k)
+            {
+                const size_t x = k % (samplesU / 2);
+                const size_t y = (samplesV - 1) - k / (samplesU / 2);
+
+                // Generate points on a regular rectangular grid size samplesU * samplesV.
+                Vec4 gridPoints{};
+                gridPoints[0] = (static_cast<f32>(x) * 2.0f + 0.5f) / static_cast<f32>(samplesU);
+                gridPoints[1] = (static_cast<f32>(y) + 0.5f) / static_cast<f32>(samplesV);
+                gridPoints[2]
+                    = (static_cast<f32>(x) * 2.0f + 1.0f + 0.5f) / static_cast<f32>(samplesU);
+                gridPoints[3] = gridPoints[1];
+
+                // Jitter position.
+                gridPoints[0] += LfsrNextGetFloat(randomU32, 0.5f / static_cast<f32>(samplesU));
+                gridPoints[1] += LfsrNextGetFloat(randomU32, 0.5f / static_cast<f32>(samplesV));
+                gridPoints[2] += LfsrNextGetFloat(randomU32, 0.5f / static_cast<f32>(samplesU));
+                gridPoints[3] += LfsrNextGetFloat(randomU32, 0.5f / static_cast<f32>(samplesV));
+
+                // Warp jittered rectangular grid to disk.
+                const Vec4 diskPoints = {
+                    sqrtf(gridPoints[1]) * cosf(M_PIf * 2.0f * gridPoints[0]),
+                    sqrtf(gridPoints[1]) * sinf(M_PIf * 2.0f * gridPoints[0]),
+                    sqrtf(gridPoints[3]) * cosf(M_PIf * 2.0f * gridPoints[2]),
+                    sqrtf(gridPoints[3]) * sinf(M_PIf * 2.0f * gridPoints[2]),
+                };
+
+                result[(k * size * size + j * size + i) * 4 + 0] = i8(diskPoints[0] * 127.0f);
+                result[(k * size * size + j * size + i) * 4 + 1] = i8(diskPoints[1] * 127.0f);
+                result[(k * size * size + j * size + i) * 4 + 2] = i8(diskPoints[2] * 127.0f);
+                result[(k * size * size + j * size + i) * 4 + 3] = i8(diskPoints[3] * 127.0f);
+            }
+        }
+    }
+
+    return result;
+}
+
 bool Renderer::Init()
 {
     // SDL.
@@ -188,6 +239,19 @@ bool Renderer::Init()
         );
     }
 
+    if (!mDevice.CreateImage({
+            .image = mShadowImage,
+            .formats = {VK_FORMAT_D16_UNORM},
+            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = RENDERER_SHADOW_MAP_DIMENSIONS,
+            .height = RENDERER_SHADOW_MAP_DIMENSIONS,
+            .arrayLayers = RENDERER_SHADOW_MAP_CASCADE_COUNT,
+            .debugName = "ShadowImage",
+        }))
+    {
+        return false;
+    }
+
     if (!RecompilePipelines())
     {
         return false;
@@ -253,6 +317,171 @@ bool Renderer::Init()
                 nullptr,
                 &mFrame[i].imageAcquireSemaphore
             ));
+        }
+    }
+
+    // Shadow map resources.
+    {
+        // One image view per cascade.
+        for (int i = 0; i < RENDERER_SHADOW_MAP_CASCADE_COUNT; ++i)
+        {
+            const VkImageViewCreateInfo imageViewInfo = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .image = mShadowImage.image,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+                .format = mShadowImage.format,
+                .subresourceRange = {
+                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                    .levelCount = 1,
+                    .baseArrayLayer = u32(i),
+                    .layerCount = 1,
+                },
+            };
+            VK_CHECK(vkCreateImageView(
+                mDevice.mDevice,
+                &imageViewInfo,
+                nullptr,
+                &mShadowImageViewCascade[i]
+            ));
+        }
+
+        {
+            const VkSamplerCreateInfo samplerInfo = {
+                .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                .magFilter = VK_FILTER_LINEAR,
+                .minFilter = VK_FILTER_LINEAR,
+                .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                .compareEnable = VK_TRUE,
+                .compareOp = VK_COMPARE_OP_GREATER,
+                .maxLod = VK_LOD_CLAMP_NONE,
+            };
+            VK_CHECK(vkCreateSampler(mDevice.mDevice, &samplerInfo, nullptr, &mShadowSampler));
+        }
+
+        // PCF jitter offsets.
+        {
+            if (!mDevice.CreateImage({
+                    .image = mShadowPcfJitterImage,
+                    .formats = {VK_FORMAT_R8G8B8A8_SNORM},
+                    .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                    .width = RENDERER_SHADOW_MAP_JITTER_OFFSETS_SIZE,
+                    .height = RENDERER_SHADOW_MAP_JITTER_OFFSETS_SIZE,
+                    .depth = RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_U
+                        * RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_V / 2,
+                    .debugName = "ShadowPcfJitterImage",
+                }))
+            {
+                return false;
+            }
+
+            const std::vector<i8> jitterOffsets = CreateShadowJitterOffsets(
+                RENDERER_SHADOW_MAP_JITTER_OFFSETS_SIZE,
+                RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_U,
+                RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_V
+            );
+
+            Vulkan::Buffer stagingBuffer{};
+            const VkDeviceSize uploadSize = VEC_SIZE_BYTES(jitterOffsets);
+            if (!mDevice.CreateBuffer({
+                    .buffer = stagingBuffer,
+                    .size = uploadSize,
+                    .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    .requiredFlags
+                    = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    .debugName = "StagingBuffer",
+                }))
+            {
+                return false;
+            }
+            DEFER(mDevice.DestroyBuffer(stagingBuffer));
+
+            memcpy(stagingBuffer.mapped, jitterOffsets.data(), uploadSize);
+
+            const VkCommandBuffer cmd = mFrame[0].commandBuffer;
+
+            VK_CHECK(vkResetCommandBuffer(cmd, 0));
+
+            VkCommandBufferBeginInfo beginInfo{};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+
+            Vulkan::CmdImageMemoryBarrier(
+                cmd,
+                {
+                    Vulkan::ImageMemoryBarrier(
+                        mShadowPcfJitterImage.image,
+                        VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_PIPELINE_STAGE_2_HOST_BIT,
+                        VK_ACCESS_2_NONE,
+                        VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                        VK_ACCESS_2_TRANSFER_WRITE_BIT
+                    ),
+                }
+            );
+
+            VkImageSubresourceLayers imageSubresource{};
+            imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            imageSubresource.layerCount = 1;
+
+            VkBufferImageCopy bufferCopyRegion{};
+            bufferCopyRegion.imageSubresource = imageSubresource;
+            // clang-format off
+            bufferCopyRegion.imageExtent = {
+                u32(RENDERER_SHADOW_MAP_JITTER_OFFSETS_SIZE),
+                u32(RENDERER_SHADOW_MAP_JITTER_OFFSETS_SIZE),
+                u32(RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_U *
+                    RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_V / 2)
+            };
+            // clang-format on
+            vkCmdCopyBufferToImage(
+                cmd,
+                stagingBuffer.buffer,
+                mShadowPcfJitterImage.image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1,
+                &bufferCopyRegion
+            );
+
+            Vulkan::CmdImageMemoryBarrier(
+                cmd,
+                {
+                    Vulkan::ImageMemoryBarrier(
+                        mShadowPcfJitterImage.image,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                        VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                        VK_ACCESS_2_SHADER_READ_BIT
+                    ),
+                }
+            );
+
+            VK_CHECK(vkEndCommandBuffer(cmd));
+
+            if (!mDevice.QueueSubmit({.commandBuffer = cmd}))
+            {
+                return false;
+            }
+
+            (void)mDevice.DeviceWaitIdle();
+
+            const VkSamplerCreateInfo samplerInfo = {
+                .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                .magFilter = VK_FILTER_NEAREST,
+                .minFilter = VK_FILTER_NEAREST,
+                .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            };
+            VK_CHECK(
+                vkCreateSampler(mDevice.mDevice, &samplerInfo, nullptr, &mShadowPcfJitterSampler)
+            );
         }
     }
 
@@ -403,6 +632,16 @@ bool Renderer::Init()
         }
 
         if (!mDevice.CreateBuffer({
+                .buffer = mDrawCmdShadowBuffer,
+                .size = sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .debugName = "DrawCmdShadowBuffer",
+            }))
+        {
+            return false;
+        }
+
+        if (!mDevice.CreateBuffer({
                 .buffer = mDrawIndicesEarlyBuffer,
                 .size = sizeof(u32) * MAX_DRAW_CALLS,
                 .debugName = "DrawIndicesEarlyBuffer",
@@ -415,6 +654,15 @@ bool Renderer::Init()
                 .buffer = mDrawIndicesLateBuffer,
                 .size = sizeof(u32) * MAX_DRAW_CALLS,
                 .debugName = "DrawIndicesLateBuffer",
+            }))
+        {
+            return false;
+        }
+
+        if (!mDevice.CreateBuffer({
+                .buffer = mDrawIndicesShadowBuffer,
+                .size = sizeof(u32) * MAX_DRAW_CALLS,
+                .debugName = "DrawIndicesShadowBuffer",
             }))
         {
             return false;
@@ -448,20 +696,6 @@ bool Renderer::Init()
         memcpy(mMaterialBuffer.mapped, materials.data(), VEC_SIZE_BYTES(materials));
 
         memcpy(mDrawDataBuffer.mapped, drawData.data(), VEC_SIZE_BYTES(drawData));
-
-        // TODO: would be nice if something like VK_NV_cluster_acceleration_structure
-        // would become core eventually.
-        if (!CreateAndUploadBlas(meshPrimitives, drawCmds))
-        {
-            printf("vulkan: BLAS creating and uploading failed\n");
-            return false;
-        }
-
-        if (!CreateAndUploadTlas(meshPrimitives, drawData))
-        {
-            printf("vulkan: TLAS creating and uploading failed\n");
-            return false;
-        }
     }
 
     // Descriptor pool, descriptor set.
@@ -557,12 +791,31 @@ bool Renderer::Init()
     mUniformData.sunIntensity = 5.0f;
     mUniformData.gradErrorMax = 0.01f;
 
+    mUniformData.shadow.enablePcf = 1;
+    mUniformData.shadow.pcfKernelScale = 3.0f;
+    mUniformData.shadow.pcfKernelCascadeScales[0] = 1.0f;
+    mUniformData.shadow.pcfKernelCascadeScales[1] = 0.40f;
+    mUniformData.shadow.pcfKernelCascadeScales[2] = 0.0f;
+    mUniformData.shadow.pcfKernelCascadeScales[3] = 0.0f;
+    mUniformData.shadow.normalOffset = 1.0f;
+    mUniformData.shadow.constantOffset = 0.00003f;
+
+    // TODO: try SDSM? In theory, due to 2-pass occlusion culling we have a depth pyramid
+    // of last visible objects (just add a max sampler too), not sure if it's ok to use it,
+    // but making another depth pyramid sounds stupid (unless it can be useful for other stuff?).
+    // TODO: or, if I use mesh shaders, virtual shadow mapping can be very efficient,
+    // and it looks great because of high resolution.
+    mShadowCascadeRadii[0] = 3.0f;
+    mShadowCascadeRadii[1] = 6.0f;
+    mShadowCascadeRadii[2] = 10.0f;
+    mShadowCascadeRadii[3] = 20.0f;
+
     return true;
 }
 
 void Renderer::Cleanup()
 {
-    if (mDevice.mDevice)
+    if (!mDevice.mDevice)
     {
         return;
     }
@@ -580,24 +833,25 @@ void Renderer::Cleanup()
         mDevice.DestroyImage(tex);
     }
 
-    for (VkAccelerationStructureKHR as : mBlas)
+    for (int i = 0; i < RENDERER_SHADOW_MAP_CASCADE_COUNT; ++i)
     {
-        vkDestroyAccelerationStructureKHR(mDevice.mDevice, as, nullptr);
+        vkDestroyImageView(mDevice.mDevice, mShadowImageViewCascade[i], nullptr);
     }
-    vkDestroyAccelerationStructureKHR(mDevice.mDevice, mTlas, nullptr);
+    mDevice.DestroyImage(mShadowImage);
+    mDevice.DestroyImage(mShadowPcfJitterImage);
     mDevice.DestroyBuffer(mDebugDrawCmdBuffer);
     mDevice.DestroyBuffer(mDebugDrawRectBuffer);
     mDevice.DestroyBuffer(mDebugDrawCountBuffer);
     mDevice.DestroyBuffer(mMeshPrimitiveVisibleBuffer);
-    mDevice.DestroyBuffer(mTlasBuffer);
-    mDevice.DestroyBuffer(mBlasBuffer);
     mDevice.DestroyBuffer(mDrawCountBuffer);
     mDevice.DestroyBuffer(mMaterialBuffer);
     mDevice.DestroyBuffer(mDrawDataBuffer);
     mDevice.DestroyBuffer(mVertexBuffer);
     mDevice.DestroyBuffer(mIndexBuffer);
+    mDevice.DestroyBuffer(mDrawIndicesShadowBuffer);
     mDevice.DestroyBuffer(mDrawIndicesEarlyBuffer);
     mDevice.DestroyBuffer(mDrawIndicesLateBuffer);
+    mDevice.DestroyBuffer(mDrawCmdShadowBuffer);
     mDevice.DestroyBuffer(mDrawCmdEarlyBuffer2);
     mDevice.DestroyBuffer(mDrawCmdLateBuffer2);
     mDevice.DestroyBuffer(mDrawCmdBuffer1);
@@ -615,6 +869,8 @@ void Renderer::Cleanup()
         vkDestroySemaphore(mDevice.mDevice, sem, nullptr);
     }
     vkDestroyDescriptorPool(mDevice.mDevice, mDescriptorPool, nullptr);
+    vkDestroySampler(mDevice.mDevice, mShadowPcfJitterSampler, nullptr);
+    vkDestroySampler(mDevice.mDevice, mShadowSampler, nullptr);
     vkDestroySampler(mDevice.mDevice, mMinSampler, nullptr);
     vkDestroySampler(mDevice.mDevice, mNearestSampler, nullptr);
     vkDestroySampler(mDevice.mDevice, mLinearSampler, nullptr);
@@ -736,6 +992,8 @@ bool Renderer::Render(f32 deltaTime)
         mUniformData.cullWorldToView = mUniformData.worldToView;
     }
 
+    UpdateShadowCascades();
+
     memcpy(frame.uniformBuffer.mapped, &mUniformData, sizeof(mUniformData));
 
     switch (mUniformData.renderMode)
@@ -823,6 +1081,8 @@ void Renderer::FreezeCullCamera(bool frozen)
 
 void Renderer::CleanupPipelines()
 {
+    mDevice.DestroyPipeline(mShadowCullPipeline);
+    mDevice.DestroyPipeline(mShadowPipeline);
     mDevice.DestroyPipeline(mAmbientOcclusionBlurPipeline);
     mDevice.DestroyPipeline(mAmbientOcclusionPipeline);
     mDevice.DestroyPipeline(mDebugDrawFillCmdPipeline);
@@ -921,6 +1181,21 @@ bool Renderer::RecompilePipelines()
         return false;
     }
 
+    if (!mDevice.CreateGraphicsPipeline({
+            .pipeline = mShadowPipeline,
+            .shaderPaths = {"Shadow.vert.hlsl.spv", "Shadow.frag.hlsl.spv"},
+            .depthClampEnable = VK_TRUE,
+            .cullMode = VK_CULL_MODE_BACK_BIT,
+            .depthFormat = mShadowImage.format,
+            .depthTestEnable = VK_TRUE,
+            .depthWriteEnable = VK_TRUE,
+            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
+            .debugName = "ShadowPass",
+        }))
+    {
+        return false;
+    }
+
     // Compute pipelines.
     if (!mDevice.CreateComputePipeline({
             .pipeline = mCullEarlyPipeline,
@@ -937,6 +1212,15 @@ bool Renderer::RecompilePipelines()
             .shaderPath = "Cull.comp.hlsl.spv",
             .specializationConstants = {1},
             .debugName = "CullLatePass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mShadowCullPipeline,
+            .shaderPath = "ShadowCull.comp.hlsl.spv",
+            .debugName = "ShadowCullPass",
         }))
     {
         return false;
@@ -1160,348 +1444,52 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
     return true;
 }
 
-bool Renderer::CreateAndUploadBlas(
-    const std::vector<MeshPrimitive>& meshPrimitives,
-    const std::vector<VkDrawIndexedIndirectCommand>& drawCmds
-)
+void Renderer::UpdateShadowCascades()
 {
-    DEBUG_ASSERT(!meshPrimitives.empty());
-    DEBUG_ASSERT(!drawCmds.empty());
-    DEBUG_ASSERT(meshPrimitives.size() == drawCmds.size());
+    const Mat4 viewToWorld = Inverse(mUniformData.worldToView);
+    const Mat4 worldToLight = LookAt(Vec3{0.0f}, mUniformData.sunDirectionWorld, WORLD_Y);
 
-    std::vector<VkAccelerationStructureGeometryKHR> geometries(meshPrimitives.size());
-    std::vector<VkAccelerationStructureBuildGeometryInfoKHR> buildInfos(meshPrimitives.size());
-    std::vector<u32> primitiveCounts(meshPrimitives.size());
-    std::vector<size_t> accelerationOffsets(meshPrimitives.size());
-    std::vector<size_t> accelerationSizes(meshPrimitives.size());
-    std::vector<size_t> scratchOffsets(meshPrimitives.size());
-
-    const size_t ALIGNMENT = 256;
-
-    size_t totalAccelerationSize = 0;
-    size_t totalPrimitiveCount = 0;
-    size_t totalScratchSize = 0;
-
-    for (size_t i = 0; i < meshPrimitives.size(); ++i)
+    // Calculate a combined view and orthographic projection matrix for each cascade.
+    for (int i = 0; i < RENDERER_SHADOW_MAP_CASCADE_COUNT; ++i)
     {
-        const MeshPrimitive& primitive = meshPrimitives[i];
-        const VkDrawIndexedIndirectCommand& drawCmd = drawCmds[i];
-        VkAccelerationStructureGeometryKHR& geometry = geometries[i];
-        VkAccelerationStructureBuildGeometryInfoKHR& buildInfo = buildInfos[i];
+        // By using radius instead of min/max points of the frustum, we fix the projection size,
+        // since a sphere can enclose any possible frustum orientation.
+        // This helps with shadow map stability.
+        const f32 sphereRadius = mShadowCascadeRadii[i];
+        const f32 sphereDiameter = sphereRadius * 2.0f;
 
-        ASSERT(primitive.vertexCount > 0);
+        const Mat4 worldToLightScaled
+            = Scale(worldToLight, RENDERER_SHADOW_MAP_DIMENSIONS / sphereDiameter);
+        const Mat4 lightToWorldScaled = Inverse(worldToLightScaled);
 
-        primitiveCounts[i] = drawCmd.indexCount / 3;
+        // TODO: push as far as it can be pushed without gaps.
+        Vec4 sphereCenter = {0.0f, 0.0f, -sphereRadius, 1.0f};
+        sphereCenter = viewToWorld * sphereCenter;
+        // Texel snapping in light space to further stabilize shadow maps.
+        sphereCenter = worldToLightScaled * sphereCenter;
+        sphereCenter.X() = floorf(sphereCenter.X());
+        sphereCenter.Y() = floorf(sphereCenter.Y());
+        sphereCenter = lightToWorldScaled * sphereCenter;
 
-        geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-        geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-        geometry.geometry.triangles.sType
-            = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-        geometry.geometry.triangles.vertexFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-        geometry.geometry.triangles.vertexData.deviceAddress
-            = mVertexBuffer.deviceAddress + size_t(drawCmd.vertexOffset) * sizeof(Vertex);
-        geometry.geometry.triangles.vertexStride = sizeof(Vertex);
-        geometry.geometry.triangles.maxVertex = u32(primitive.vertexCount - 1);
-        geometry.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
-        geometry.geometry.triangles.indexData.deviceAddress
-            = mIndexBuffer.deviceAddress + drawCmd.firstIndex * sizeof(u32);
-        geometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-
-        buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-        buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-        buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-        buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-        buildInfo.geometryCount = 1;
-        buildInfo.pGeometries = &geometry;
-
-        VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
-        sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
-        vkGetAccelerationStructureBuildSizesKHR(
-            mDevice.mDevice,
-            VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-            &buildInfo,
-            &primitiveCounts[i],
-            &sizeInfo
+        const Mat4 lightViewMatrix = LookAt(
+            sphereCenter.XYZ() - mUniformData.sunDirectionWorld * sphereRadius,
+            sphereCenter.XYZ(),
+            WORLD_Y
         );
 
-        accelerationOffsets[i] = totalAccelerationSize;
-        accelerationSizes[i] = sizeInfo.accelerationStructureSize;
-        scratchOffsets[i] = totalScratchSize;
-
-        totalAccelerationSize = Utils::AlignUpPow2(
-            totalAccelerationSize + sizeInfo.accelerationStructureSize,
-            ALIGNMENT
-        );
-        totalScratchSize
-            = Utils::AlignUpPow2(totalScratchSize + sizeInfo.buildScratchSize, ALIGNMENT);
-        totalPrimitiveCount += primitiveCounts[i];
-    }
-
-    if (!mDevice.CreateBuffer({
-            .buffer = mBlasBuffer,
-            .size = totalAccelerationSize,
-            .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
-                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            .debugName = "BlasBuffer",
-        }))
-    {
-        return false;
-    }
-
-    Vulkan::Buffer scratchBuffer{};
-    if (!mDevice.CreateBuffer({
-            .buffer = scratchBuffer,
-            .size = totalScratchSize,
-            .minAlignment = ALIGNMENT,
-            .debugName = "ScratchBuffer",
-        }))
-    {
-        return false;
-    }
-    DEFER(mDevice.DestroyBuffer(scratchBuffer));
-
-    printf(
-        "BLAS accelerationStructureSize: %.2f MB, scratchSize: %.2f MB, %.3fM "
-        "triangles\n",
-        f64(totalAccelerationSize) / 1.0e6,
-        f64(totalScratchSize) / 1.0e6,
-        f64(totalPrimitiveCount) / 1.0e6
-    );
-
-    mBlas.resize(meshPrimitives.size());
-
-    for (size_t i = 0; i < meshPrimitives.size(); ++i)
-    {
-        const VkAccelerationStructureCreateInfoKHR accelerationInfo = {
-            .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
-            .buffer = mBlasBuffer.buffer,
-            .offset = accelerationOffsets[i],
-            .size = accelerationSizes[i],
-            .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+        // (1, 1) is negative to flip Y.
+        // clang-format off
+        const Mat4 lightProjectionMatrix = {
+            1.0f / sphereRadius, 0.0f, 0.0f, 0.0f,
+            0.0f, -1.0f / sphereRadius, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f / sphereDiameter, 0.0f,
+            0.0f, 0.0f, 1.0f, 1.0f
         };
-        VK_CHECK(
-            vkCreateAccelerationStructureKHR(mDevice.mDevice, &accelerationInfo, nullptr, &mBlas[i])
-        );
+        // clang-format on
+
+        mUniformData.shadow.texelSizes[i] = sphereDiameter / RENDERER_SHADOW_MAP_DIMENSIONS;
+        mUniformData.shadow.worldToClip[i] = lightProjectionMatrix * lightViewMatrix;
     }
-
-    std::vector<VkAccelerationStructureBuildRangeInfoKHR> buildRanges(meshPrimitives.size());
-    std::vector<const VkAccelerationStructureBuildRangeInfoKHR*> buildRangePtrs(
-        meshPrimitives.size()
-    );
-
-    for (size_t i = 0; i < meshPrimitives.size(); ++i)
-    {
-        buildInfos[i].dstAccelerationStructure = mBlas[i];
-        buildInfos[i].scratchData.deviceAddress = scratchBuffer.deviceAddress + scratchOffsets[i];
-
-        buildRanges[i].primitiveCount = primitiveCounts[i];
-        buildRangePtrs[i] = &buildRanges[i];
-    }
-
-    const VkCommandBuffer cmd = mFrame[0].commandBuffer;
-
-    VK_CHECK(vkResetCommandBuffer(cmd, 0));
-
-    const VkCommandBufferBeginInfo beginInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-
-    VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
-
-    vkCmdBuildAccelerationStructuresKHR(
-        cmd,
-        u32(buildInfos.size()),
-        buildInfos.data(),
-        buildRangePtrs.data()
-    );
-
-    VK_CHECK(vkEndCommandBuffer(cmd));
-
-    if (!mDevice.QueueSubmit({.commandBuffer = cmd}))
-    {
-        return false;
-    }
-    if (!mDevice.QueueWaitIdle())
-    {
-        return false;
-    }
-
-    return true;
-}
-
-bool Renderer::CreateAndUploadTlas(
-    const std::vector<MeshPrimitive>& meshPrimitives,
-    const std::vector<DrawData>& drawData
-)
-{
-    DEBUG_ASSERT(!meshPrimitives.empty());
-    DEBUG_ASSERT(!drawData.empty());
-
-    const size_t ALIGNMENT = 256;
-    const VkCommandBuffer cmd = mFrame[0].commandBuffer;
-
-    Vulkan::Buffer instances{};
-    if (!mDevice.CreateBuffer({
-            .buffer = instances,
-            .size = sizeof(VkAccelerationStructureInstanceKHR) * meshPrimitives.size(),
-            .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
-                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            .requiredFlags
-            = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            .debugName = "InstanceBuffer",
-        }))
-    {
-        return false;
-    }
-    DEFER(mDevice.DestroyBuffer(instances));
-
-    std::vector<VkDeviceAddress> blasAddresses(mBlas.size());
-
-    for (size_t i = 0; i < mBlas.size(); ++i)
-    {
-        const VkAccelerationStructureDeviceAddressInfoKHR info = {
-            .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
-            .accelerationStructure = mBlas[i],
-        };
-        blasAddresses[i] = vkGetAccelerationStructureDeviceAddressKHR(mDevice.mDevice, &info);
-        if (!blasAddresses[i])
-        {
-            fprintf(stderr, "vkGetAccelerationStructureDeviceAddressKHR failed, idx = %zu\n", i);
-            return false;
-        }
-    }
-
-    for (size_t i = 0; i < drawData.size(); ++i)
-    {
-        const Mat4 transform
-            = Transpose(Model(drawData[i].position, drawData[i].orientation, drawData[i].scale));
-
-        VkAccelerationStructureInstanceKHR instance{};
-        memcpy(
-            instance.transform.matrix[0],
-            &transform.col[0].val[0],
-            sizeof(instance.transform.matrix[0])
-        );
-        memcpy(
-            instance.transform.matrix[1],
-            &transform.col[1].val[0],
-            sizeof(instance.transform.matrix[1])
-        );
-        memcpy(
-            instance.transform.matrix[2],
-            &transform.col[2].val[0],
-            sizeof(instance.transform.matrix[2])
-        );
-        instance.instanceCustomIndex = u32(i);
-        instance.mask = 0xff;
-        instance.accelerationStructureReference = blasAddresses[i];
-        instance.flags = drawData[i].renderPassFlags == RENDER_PASS_OPAQUE_BIT
-            ? VkGeometryInstanceFlagsKHR(VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR)
-            : VkGeometryInstanceFlagsKHR(VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR);
-
-        memcpy(
-            static_cast<VkAccelerationStructureInstanceKHR*>(instances.mapped) + i,
-            &instance,
-            sizeof(VkAccelerationStructureInstanceKHR)
-        );
-    }
-
-    VkAccelerationStructureGeometryKHR geometry{};
-    geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-    geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
-    geometry.geometry.instances.sType
-        = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
-    geometry.geometry.instances.data.deviceAddress = instances.deviceAddress;
-
-    VkAccelerationStructureBuildGeometryInfoKHR buildInfo{};
-    buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-    buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-    buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-    buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    buildInfo.geometryCount = 1;
-    buildInfo.pGeometries = &geometry;
-
-    const u32 primitiveCount = u32(meshPrimitives.size());
-
-    VkAccelerationStructureBuildSizesInfoKHR sizeInfo = {
-        .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
-    };
-    vkGetAccelerationStructureBuildSizesKHR(
-        mDevice.mDevice,
-        VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-        &buildInfo,
-        &primitiveCount,
-        &sizeInfo
-    );
-
-    printf(
-        "TLAS accelerationStructureSize: %.2f MB, scratchSize: %.2f MB\n",
-        f64(sizeInfo.accelerationStructureSize) / 1.0e6,
-        f64(sizeInfo.buildScratchSize) / 1.0e6
-    );
-
-    if (!mDevice.CreateBuffer({
-            .buffer = mTlasBuffer,
-            .size = sizeInfo.accelerationStructureSize,
-            .usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
-                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            .debugName = "TlasBuffer",
-        }))
-    {
-        return false;
-    }
-
-    Vulkan::Buffer scratchBuffer{};
-    if (!mDevice.CreateBuffer({
-            .buffer = scratchBuffer,
-            .size = sizeInfo.buildScratchSize,
-            .minAlignment = ALIGNMENT,
-            .debugName = "ScratchBuffer",
-        }))
-    {
-        return false;
-    }
-    DEFER(mDevice.DestroyBuffer(scratchBuffer));
-
-    const VkAccelerationStructureCreateInfoKHR accelerationInfo = {
-        .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
-        .buffer = mTlasBuffer.buffer,
-        .size = sizeInfo.accelerationStructureSize,
-        .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-    };
-
-    VK_CHECK(vkCreateAccelerationStructureKHR(mDevice.mDevice, &accelerationInfo, nullptr, &mTlas));
-
-    buildInfo.dstAccelerationStructure = mTlas;
-    buildInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
-
-    const VkAccelerationStructureBuildRangeInfoKHR buildRange = {
-        .primitiveCount = primitiveCount,
-    };
-    const VkAccelerationStructureBuildRangeInfoKHR* const buildRangePtr = &buildRange;
-
-    VK_CHECK(vkResetCommandBuffer(cmd, 0));
-
-    const VkCommandBufferBeginInfo cmdBeginInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    };
-    VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
-
-    vkCmdBuildAccelerationStructuresKHR(cmd, 1, &buildInfo, &buildRangePtr);
-
-    VK_CHECK(vkEndCommandBuffer(cmd));
-
-    if (!mDevice.QueueSubmit({.commandBuffer = cmd}))
-    {
-        return false;
-    }
-    if (!mDevice.QueueWaitIdle())
-    {
-        return false;
-    }
-
-    return true;
 }
 
 void Renderer::VisibilityBufferPass(VkCommandBuffer cmd, bool cullLate)
@@ -1606,7 +1594,6 @@ void Renderer::ForwardPass(VkCommandBuffer cmd, bool cullLate)
             mVertexBuffer.buffer,
             mMaterialBuffer.buffer,
             mTextureSampler,
-            mTlas,
         }
     );
 
@@ -1826,6 +1813,127 @@ void Renderer::AmbientOcclusionPass(VkCommandBuffer cmd)
     );
 }
 
+void Renderer::ShadowCullPass(VkCommandBuffer cmd)
+{
+    DEBUG_ASSERT(cmd);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, mShadowCullPipeline.pipeline);
+
+    const PushConstantsShadow pushConstants = {
+        .shadowCascadeIdx = 0,
+        .renderPassFlags = RENDER_PASS_OPAQUE_BIT,
+    };
+    vkCmdPushConstants(
+        cmd,
+        mShadowCullPipeline.layout,
+        VK_SHADER_STAGE_ALL,
+        0,
+        sizeof(pushConstants),
+        &pushConstants
+    );
+
+    Vulkan::CmdPushDescriptors(
+        cmd,
+        mShadowCullPipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            mDrawDataBuffer.buffer,
+            mDrawCountBuffer.buffer,
+            mDrawCmdBuffer1.buffer,
+            mDrawCmdShadowBuffer.buffer,
+            mDrawIndicesShadowBuffer.buffer,
+        }
+    );
+
+    vkCmdDispatch(cmd, GetDispatchSize(mUniformData.drawCount, RENDERER_CULL_WORKGROUP_SIZE), 1, 1);
+}
+
+void Renderer::ShadowPass(VkCommandBuffer cmd)
+{
+    DEBUG_ASSERT(cmd);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowPipeline.pipeline);
+
+    Vulkan::CmdPushDescriptors(
+        cmd,
+        mShadowPipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            mDrawIndicesShadowBuffer.buffer,
+            mDrawDataBuffer.buffer,
+            mVertexBuffer.buffer,
+        }
+    );
+
+    VkRenderingAttachmentInfo depthAttachmentInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = mShadowImageViewCascade[0],
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = {{{0.0f, 0}}},
+    };
+
+    const VkRect2D renderArea = {
+        .extent = {RENDERER_SHADOW_MAP_DIMENSIONS, RENDERER_SHADOW_MAP_DIMENSIONS},
+    };
+
+    const VkRenderingInfo renderingInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = renderArea,
+        .layerCount = 1,
+        .pDepthAttachment = &depthAttachmentInfo,
+    };
+
+    const VkViewport viewport = {
+        .width = f32(RENDERER_SHADOW_MAP_DIMENSIONS),
+        .height = f32(RENDERER_SHADOW_MAP_DIMENSIONS),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    const VkRect2D scissor = {
+        .extent = {RENDERER_SHADOW_MAP_DIMENSIONS, RENDERER_SHADOW_MAP_DIMENSIONS},
+    };
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    vkCmdBindIndexBuffer(cmd, mIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+    // TODO: check out VK_KHR_multiview.
+    for (int i = 0; i < RENDERER_SHADOW_MAP_CASCADE_COUNT; ++i)
+    {
+        depthAttachmentInfo.imageView = mShadowImageViewCascade[i];
+
+        const PushConstantsShadow pushConstants = {
+            .shadowCascadeIdx = i,
+            .renderPassFlags = RENDER_PASS_OPAQUE_BIT,
+        };
+        vkCmdPushConstants(
+            cmd,
+            mShadowPipeline.layout,
+            VK_SHADER_STAGE_ALL,
+            0,
+            sizeof(pushConstants),
+            &pushConstants
+        );
+
+        vkCmdBeginRendering(cmd, &renderingInfo);
+
+        vkCmdDrawIndexedIndirectCount(
+            cmd,
+            mDrawCmdShadowBuffer.buffer,
+            0,
+            mDrawCountBuffer.buffer,
+            0,
+            mUniformData.drawCount,
+            sizeof(VkDrawIndexedIndirectCommand)
+        );
+
+        vkCmdEndRendering(cmd);
+    }
+}
+
 void Renderer::AmbientOcclusionBlurPass(VkCommandBuffer cmd)
 {
     DEBUG_ASSERT(cmd);
@@ -1873,7 +1981,10 @@ void Renderer::RenderPass(VkCommandBuffer cmd)
             mMaterialBuffer.buffer,
             mLinearSampler,
             mTextureSampler,
-            mTlas,
+            mShadowSampler,
+            mShadowPcfJitterSampler,
+            {mShadowImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mShadowPcfJitterImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mAmbientOcclusionBlurredImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mVelocityImage.view, VK_IMAGE_LAYOUT_GENERAL},
@@ -2404,8 +2515,7 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
         cmd,
         {
             Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                 VK_ACCESS_2_TRANSFER_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
@@ -2554,6 +2664,66 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
 
     VisibilityBufferPass(cmd, true);
 
+    Vulkan::CmdMemoryBarrier(
+        cmd,
+        {
+            Vulkan::MemoryBarrier(
+                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                VK_ACCESS_2_NONE
+            ),
+        }
+    );
+
+    vkCmdFillBuffer(cmd, mDrawCountBuffer.buffer, 0, sizeof(u32), 0);
+
+    Vulkan::CmdMemoryBarrier(
+        cmd,
+        {
+            Vulkan::MemoryBarrier(
+                VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
+        }
+    );
+
+    ShadowCullPass(cmd);
+
+    Vulkan::CmdBarrier(
+        cmd,
+        {
+            Vulkan::MemoryBarrier(
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
+            ),
+        },
+        {},
+        {
+            Vulkan::ImageMemoryBarrier(
+                mShadowImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                VK_REMAINING_MIP_LEVELS,
+                RENDERER_SHADOW_MAP_CASCADE_COUNT
+            ),
+        }
+    );
+
+    ShadowPass(cmd);
+
     Vulkan::CmdImageMemoryBarrier(
         cmd,
         {
@@ -2645,6 +2815,19 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            ),
+            Vulkan::ImageMemoryBarrier(
+                mShadowImage.image,
+                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                VK_REMAINING_MIP_LEVELS,
+                RENDERER_SHADOW_MAP_CASCADE_COUNT
             ),
         }
     );

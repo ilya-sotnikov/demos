@@ -45,6 +45,9 @@ struct Renderer
     Vulkan::Image mVelocityImage;
     Vulkan::Image mAmbientOcclusionImage;
     Vulkan::Image mAmbientOcclusionBlurredImage;
+    Vulkan::Image mShadowImage;
+    Vulkan::Image mShadowPcfJitterImage;
+    VkImageView mShadowImageViewCascade[RENDERER_SHADOW_MAP_CASCADE_COUNT];
     VkExtent2D mRenderImageExtent;
     VkExtent2D mAmbientOcclusionImageExtent;
     VkExtent2D mDepthPyramidImageExtent;
@@ -54,6 +57,8 @@ struct Renderer
     Vulkan::Pipeline mVisibilityPipeline;
     Vulkan::Pipeline mAmbientOcclusionPipeline;
     Vulkan::Pipeline mAmbientOcclusionBlurPipeline;
+    Vulkan::Pipeline mShadowCullPipeline;
+    Vulkan::Pipeline mShadowPipeline;
     Vulkan::Pipeline mVisibilityRenderPipeline;
     Vulkan::Pipeline mForwardRenderPipeline;
     Vulkan::Pipeline mFullscreenPipeline;
@@ -69,19 +74,17 @@ struct Renderer
     Vulkan::Buffer mDrawCmdBuffer1;
     Vulkan::Buffer mDrawCmdEarlyBuffer2;
     Vulkan::Buffer mDrawCmdLateBuffer2;
+    Vulkan::Buffer mDrawCmdShadowBuffer;
     Vulkan::Buffer mDrawIndicesEarlyBuffer;
     Vulkan::Buffer mDrawIndicesLateBuffer;
+    Vulkan::Buffer mDrawIndicesShadowBuffer;
     Vulkan::Buffer mMaterialBuffer;
     Vulkan::Buffer mDrawDataBuffer;
     Vulkan::Buffer mDrawCountBuffer;
-    Vulkan::Buffer mBlasBuffer;
-    Vulkan::Buffer mTlasBuffer;
     Vulkan::Buffer mMeshPrimitiveVisibleBuffer;
     Vulkan::Buffer mDebugDrawCountBuffer;
     Vulkan::Buffer mDebugDrawRectBuffer;
     Vulkan::Buffer mDebugDrawCmdBuffer;
-    std::vector<VkAccelerationStructureKHR> mBlas;
-    VkAccelerationStructureKHR mTlas;
     ImguiRenderer mImguiRenderer;
     VkDescriptorPool mDescriptorPool;
     VkDescriptorSet mTextureDescriptorSet;
@@ -90,11 +93,14 @@ struct Renderer
     VkSampler mLinearSampler;
     VkSampler mNearestSampler;
     VkSampler mMinSampler;
+    VkSampler mShadowSampler;
+    VkSampler mShadowPcfJitterSampler;
     VkCommandPool mCommandPool;
     VkSampleCountFlagBits mSampleCount;
     std::vector<VkSemaphore> mRenderFinishedSemaphores;
     std::vector<Vulkan::Image> mTextures;
     Frame mFrame[RENDERER_MAX_FRAMES_IN_FLIGHT];
+    f32 mShadowCascadeRadii[RENDERER_SHADOW_MAP_CASCADE_COUNT];
     int mFrameIdx;
     int mPrevFrameIdx;
     u32 mTaaJitterIdx;
@@ -120,14 +126,7 @@ struct Renderer
 
 private:
     bool UploadTextures(const std::vector<std::string>& texturePaths);
-    bool CreateAndUploadBlas(
-        const std::vector<MeshPrimitive>& meshPrimitives,
-        const std::vector<VkDrawIndexedIndirectCommand>& drawCmds
-    );
-    bool CreateAndUploadTlas(
-        const std::vector<MeshPrimitive>& meshPrimitives,
-        const std::vector<DrawData>& drawData
-    );
+    void UpdateShadowCascades();
 
     void VisibilityBufferPass(VkCommandBuffer cmd, bool cullLate);
     void ForwardPass(VkCommandBuffer cmd, bool cullLate);
@@ -135,6 +134,8 @@ private:
     void DepthReducePass(VkCommandBuffer cmd);
     void AmbientOcclusionPass(VkCommandBuffer cmd); // TODO: AO and blur to async after RT -> CSM.
     void AmbientOcclusionBlurPass(VkCommandBuffer cmd);
+    void ShadowCullPass(VkCommandBuffer cmd);
+    void ShadowPass(VkCommandBuffer cmd);
     void RenderPass(VkCommandBuffer cmd);
     void TaaResolvePass(VkCommandBuffer cmd);
     void DebugDrawPass(VkCommandBuffer cmd);

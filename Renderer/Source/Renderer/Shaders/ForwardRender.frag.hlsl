@@ -3,28 +3,6 @@
 #include "PBR.hlsli"
 #include "ForwardRender.hlsli"
 
-float CalcShadow(float3 posWorld, float3 sunDirectionWorld)
-{
-    RayDesc rayDesc;
-    rayDesc.Origin = posWorld;
-    // TODO: jitter and blur in screen space for soft shadows.
-    rayDesc.Direction = -sunDirectionWorld;
-    rayDesc.TMin = 0.01; // TODO: offset by geometric normal instead?
-    rayDesc.TMax = 100.0;
-
-    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_CULL_NON_OPAQUE> rayQuery;
-    rayQuery.TraceRayInline(
-        tlas,
-        RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_CULL_NON_OPAQUE,
-        0xff,
-        rayDesc
-    );
-
-    rayQuery.Proceed();
-
-    return float(rayQuery.CommittedStatus() == COMMITTED_NOTHING);
-}
-
 // TODO: try unjittering uv?
 float4 SampleTex(uint32_t idx, float2 uv)
 {
@@ -104,11 +82,8 @@ void Main(VertexOutput input, out FragmentOutput output)
     const float3 radianceOut =
         (kDiffuse * albedo.rgb / M_PIf + specular) * uniformBuffer.sunIntensity * dotNormalLight;
 
+    // TODO
     float shadow = 1.0;
-    if (dotNormalLight > 0.0)
-    {
-        shadow = CalcShadow(positionWorld, uniformBuffer.sunDirectionWorld);
-    }
 
     const float3 ambient = albedo.rgb * uniformBuffer.ambientIntensity;
 

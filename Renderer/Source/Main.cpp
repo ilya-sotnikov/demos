@@ -394,6 +394,8 @@ int main()
 
             // TODO: sun direction.
 
+            // TODO: shadow stuff.
+
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImguiCheckbox("Draw cull AABB", renderer.mUniformData.drawCullAABB);
