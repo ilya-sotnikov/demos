@@ -2,7 +2,6 @@
 #include "Math.hlsli"
 #include "Shadow.hlsli"
 
-[shader("vertex")]
 void Main(
     uint vertexId : SV_VertexID,
     // Dummy semantics just to please the compiler.

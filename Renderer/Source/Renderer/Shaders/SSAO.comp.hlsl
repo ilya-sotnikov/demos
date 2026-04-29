@@ -21,7 +21,6 @@ RWTexture2D<float> outImage;
 // Except that for now we'll just calculate L0 (ambient occlusion).
 // TODO: maybe revisit SH after adding point lights (and clustered lighting)?
 
-[shader("compute")]
 [numthreads(RENDERER_SSAO_WORKGROUP_SIZE_X, RENDERER_SSAO_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {

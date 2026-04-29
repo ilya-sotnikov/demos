@@ -7,7 +7,6 @@ Texture2D<float> inImage;
 [[vk::image_format("r8")]]
 RWTexture2D<float> outImage;
 
-[shader("compute")]
 [numthreads(RENDERER_SSAO_BLUR_WORKGROUP_SIZE_X, RENDERER_SSAO_BLUR_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {

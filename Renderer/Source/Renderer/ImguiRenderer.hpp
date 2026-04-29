@@ -46,5 +46,5 @@ struct ImguiRenderer
     void Cleanup();
     bool UpdateVertexIndexBuffers(u32 frameIndex);
     void StartNewFrame() const;
-    bool Render(VkCommandBuffer cmd, u32 frameIndex);
+    bool Render(VkCommandBuffer cb, u32 frameIndex);
 };

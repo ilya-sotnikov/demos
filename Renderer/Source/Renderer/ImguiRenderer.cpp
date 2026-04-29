@@ -168,11 +168,14 @@ bool ImguiRenderer::Init(
 
         VK_CHECK(vkEndCommandBuffer(copyCmdBuffer));
 
-        if (!mDevice.QueueSubmit({.commandBuffer = copyCmdBuffer}))
+        if (!mDevice.QueueSubmit({
+                .queueInfo = mDevice.mGraphicsQueueInfo,
+                .commandBuffer = copyCmdBuffer,
+            }))
         {
             return false;
         }
-        if (!mDevice.QueueWaitIdle())
+        if (!mDevice.QueueWaitIdle(mDevice.mGraphicsQueueInfo))
         {
             return false;
         }
@@ -371,7 +374,7 @@ void ImguiRenderer::StartNewFrame() const
     ImGui::NewFrame();
 }
 
-bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
+bool ImguiRenderer::Render(VkCommandBuffer cb, u32 frameIndex)
 {
     const ImDrawData* const drawData = ImGui::GetDrawData();
     i32 vertexOffset = 0;
@@ -391,10 +394,10 @@ bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
 
     const ImGuiIO& io = ImGui::GetIO();
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline.pipeline);
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline.pipeline);
 
     Vulkan::CmdPushDescriptors(
-        cmd,
+        cb,
         mPipeline,
         {
             {mFontImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
@@ -407,7 +410,7 @@ bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
         .translate = Vec2{-1.0f},
     };
     vkCmdPushConstants(
-        cmd,
+        cb,
         mPipeline.layout,
         VK_SHADER_STAGE_ALL,
         0,
@@ -416,14 +419,14 @@ bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
     );
 
     VkDeviceSize offsets[1]{};
-    vkCmdBindVertexBuffers(cmd, 0, 1, &frame.vertexBuffer.buffer, offsets);
-    vkCmdBindIndexBuffer(cmd, frame.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindVertexBuffers(cb, 0, 1, &frame.vertexBuffer.buffer, offsets);
+    vkCmdBindIndexBuffer(cb, frame.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 
     const VkViewport viewport = {
         .width = io.DisplaySize.x,
         .height = io.DisplaySize.y,
     };
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    vkCmdSetViewport(cb, 0, 1, &viewport);
 
     for (int i = 0; i < drawData->CmdListsCount; ++i)
     {
@@ -437,9 +440,9 @@ bool ImguiRenderer::Render(VkCommandBuffer cmd, u32 frameIndex)
                 .offset = {Max(i32(rect.x), 0), Max(i32(rect.y), 0)},
                 .extent = {u32(rect.z - rect.x), u32(rect.w - rect.y)},
             };
-            vkCmdSetScissor(cmd, 0, 1, &scissorRect);
+            vkCmdSetScissor(cb, 0, 1, &scissorRect);
 
-            vkCmdDrawIndexed(cmd, imCmd.ElemCount, 1, indexOffset, vertexOffset, 0);
+            vkCmdDrawIndexed(cb, imCmd.ElemCount, 1, indexOffset, vertexOffset, 0);
             indexOffset += imCmd.ElemCount;
         }
         vertexOffset += cmdList->VtxBuffer.Size;

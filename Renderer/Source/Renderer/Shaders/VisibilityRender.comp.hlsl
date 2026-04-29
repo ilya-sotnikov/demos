@@ -65,7 +65,6 @@ float4 SampleTex(uint32_t idx, InterpolatedData2D uv)
         .SampleGrad(textureSampler, uv.c, uv.dcdx, uv.dcdy);
 }
 
-[shader("compute")]
 [numthreads(RENDERER_RENDER_WORKGROUP_SIZE_X, RENDERER_RENDER_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {

@@ -13,7 +13,6 @@ SamplerState minSampler;
 [[vk::push_constant]]
 PushConstantsDepthReduce pushConstants;
 
-[shader("compute")]
 [numthreads(RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_X, RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {

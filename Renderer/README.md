@@ -19,6 +19,7 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 ## Features
 
 - visibility buffer -> "forward" rendering
+- async compute
 - GPU frustum culling
 - GPU 2-pass Hi-Z occlusion culling
 - PBR (metallic workflow, no IBL)
@@ -31,6 +32,39 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 - bindless textures (descriptor indexing)
 - indirect drawing
 - SPIR-V reflection to manage push descriptors
+
+## Frame overview (passes)
+
+- (G) is graphics (vert/frag)
+- (C) is compute (comp)
+- branches represent async compute
+- debug passes are not shown
+
+```
+CullEarly (C)
+  |
+VisBufEarly (G)
+  |
+DepthReduce (C)
+  |
+CullLate (C)
+  |
+VisBufLate (G)
+  |
+  +-------------------------+
+  |                         |
+CsmCull (C)               SSAO (C)
+  |                         |
+CSM (G)                   Blur (C)
+  |                         |
+  +-------------------------+
+  |
+Render (C)
+  |
+TaaResolve (C)
+  |
+Fullscreen (G)
+```
 
 ## Build and run
 

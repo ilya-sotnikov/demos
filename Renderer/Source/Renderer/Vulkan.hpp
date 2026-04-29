@@ -98,7 +98,9 @@ VkImageMemoryBarrier2 ImageMemoryBarrier(
     VkAccessFlags2 dstAccessMask,
     VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
     u32 levelCount = VK_REMAINING_MIP_LEVELS,
-    u32 layerCount = 1
+    u32 layerCount = VK_REMAINING_ARRAY_LAYERS,
+    u32 srcQueueFamilyIdx = VK_QUEUE_FAMILY_IGNORED,
+    u32 dstQueueFamilyIdx = VK_QUEUE_FAMILY_IGNORED
 );
 VkBufferMemoryBarrier2 BufferMemoryBarrier(
     VkBuffer buffer,
@@ -114,17 +116,17 @@ VkMemoryBarrier2 MemoryBarrier(
     VkPipelineStageFlags2 dstStageMask,
     VkAccessFlags2 dstAccessMask
 );
-void CmdMemoryBarrier(VkCommandBuffer cmd, std::initializer_list<VkMemoryBarrier2> barriers);
+void CmdMemoryBarrier(VkCommandBuffer cb, std::initializer_list<VkMemoryBarrier2> barriers);
 void CmdBufferMemoryBarrier(
-    VkCommandBuffer cmd,
+    VkCommandBuffer cb,
     std::initializer_list<VkBufferMemoryBarrier2> barriers
 );
 void CmdImageMemoryBarrier(
-    VkCommandBuffer cmd,
+    VkCommandBuffer cb,
     std::initializer_list<VkImageMemoryBarrier2> barriers
 );
 void CmdBarrier(
-    VkCommandBuffer cmd,
+    VkCommandBuffer cb,
     std::initializer_list<VkMemoryBarrier2> memoryBarriers,
     std::initializer_list<VkBufferMemoryBarrier2> bufferMemoryBarriers,
     std::initializer_list<VkImageMemoryBarrier2> imageMemoryBarriers
@@ -137,7 +139,7 @@ bool FindMemoryType(
 );
 
 void CmdPushDescriptors(
-    VkCommandBuffer cmd,
+    VkCommandBuffer cb,
     const Vulkan::Pipeline& pipeline,
     std::initializer_list<Vulkan::DescriptorInfo> descriptorInfos
 );
@@ -148,6 +150,17 @@ bool DebugNameObject(
     u64 objectHandle,
     const char* objectName
 );
+
+struct TimelineSemaphore
+{
+    VkSemaphore semaphore;
+    u64 value;
+
+    u64 Inc()
+    {
+        return ++value;
+    }
+};
 
 // Based on Sebastian Aaltonen's approach with designated initializers:
 // https://youtu.be/m3bW8d4Brec?si=7V8xsxykqCHbskvu&t=2233
@@ -224,6 +237,7 @@ struct GraphicsPipelineDesc
 
 struct QueueSubmitDesc
 {
+    QueueInfo queueInfo;
     std::initializer_list<VkSemaphore> waitSemaphores;
     VkPipelineStageFlags waitDstStageMask;
     VkCommandBuffer commandBuffer;
@@ -233,6 +247,7 @@ struct QueueSubmitDesc
 
 struct QueuePresentDesc
 {
+    QueueInfo queueInfo;
     std::initializer_list<VkSemaphore> waitSemaphores;
     VkSwapchainKHR swapchain;
     u32 imageIdx;
@@ -245,7 +260,6 @@ struct QueuePresentDesc
 // but it's too much work.
 struct Device
 {
-public:
     bool Create(VkSurfaceKHR& surface, SDL_Window* window);
     void Destroy();
 
@@ -261,17 +275,17 @@ public:
     bool CreateGraphicsPipeline(const GraphicsPipelineDesc&& desc) const;
     void DestroyPipeline(Pipeline& pipeline) const;
 
-    // TODO: separate compute queue for async stuff (not required for now).
     bool QueueSubmit(const QueueSubmitDesc&& desc) const;
     VkResult QueuePresent(const QueuePresentDesc&& desc) const;
-    bool QueueWaitIdle() const;
+    bool QueueWaitIdle(QueueInfo queueInfo) const;
     bool DeviceWaitIdle() const;
 
     VkInstance mInstance;
     VkDevice mDevice;
     VkPhysicalDevice mPhysicalDevice;
     VmaAllocator mVmaAllocator;
-    Vulkan::QueueInfo mQueueInfo;
+    Vulkan::QueueInfo mGraphicsQueueInfo;
+    Vulkan::QueueInfo mComputeQueueInfo;
     char mGpuName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
 };
 

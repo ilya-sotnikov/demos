@@ -90,7 +90,11 @@ static FileData FileRead(const char* path)
     return result;
 }
 
-static Vulkan::QueueInfo GetQueue(VkPhysicalDevice device, VkQueueFlagBits flags)
+static Vulkan::QueueInfo GetQueue(
+    VkPhysicalDevice device,
+    VkQueueFlagBits flags,
+    VkQueueFlagBits notFlags = static_cast<VkQueueFlagBits>(0)
+)
 {
     DEBUG_ASSERT(device);
 
@@ -115,7 +119,10 @@ static Vulkan::QueueInfo GetQueue(VkPhysicalDevice device, VkQueueFlagBits flags
             queueInfo.familyIdx = i;
             queueInfo.queueIdx = 0;
             // queueInfo.queue is set after creating a logical device and calling vkGetDeviceQueue.
-            break;
+            if ((notFlags != 0) && !(queueFamilies[i].queueFamilyProperties.queueFlags & notFlags))
+            {
+                break;
+            }
         }
     }
 
@@ -424,7 +431,9 @@ VkImageMemoryBarrier2 Vulkan::ImageMemoryBarrier(
     VkAccessFlags2 dstAccessMask,
     VkImageAspectFlags aspectMask,
     u32 levelCount,
-    u32 layerCount
+    u32 layerCount,
+    u32 srcQueueFamilyIdx,
+    u32 dstQueueFamilyIdx
 )
 {
     DEBUG_ASSERT(image);
@@ -437,8 +446,8 @@ VkImageMemoryBarrier2 Vulkan::ImageMemoryBarrier(
         .dstAccessMask = dstAccessMask,
         .oldLayout = oldLayout,
         .newLayout = newLayout,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .srcQueueFamilyIndex = srcQueueFamilyIdx,
+        .dstQueueFamilyIndex = dstQueueFamilyIdx,
         .image = image,
         .subresourceRange = {
             .aspectMask = aspectMask,
@@ -450,9 +459,9 @@ VkImageMemoryBarrier2 Vulkan::ImageMemoryBarrier(
     return barrier;
 }
 
-void Vulkan::CmdMemoryBarrier(VkCommandBuffer cmd, std::initializer_list<VkMemoryBarrier2> barriers)
+void Vulkan::CmdMemoryBarrier(VkCommandBuffer cb, std::initializer_list<VkMemoryBarrier2> barriers)
 {
-    DEBUG_ASSERT(cmd);
+    DEBUG_ASSERT(cb);
     DEBUG_ASSERT(barriers.size() > 0);
 
     const VkDependencyInfo dependencyInfo = {
@@ -460,15 +469,15 @@ void Vulkan::CmdMemoryBarrier(VkCommandBuffer cmd, std::initializer_list<VkMemor
         .memoryBarrierCount = u32(barriers.size()),
         .pMemoryBarriers = barriers.begin(),
     };
-    vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    vkCmdPipelineBarrier2(cb, &dependencyInfo);
 }
 
 void Vulkan::CmdBufferMemoryBarrier(
-    VkCommandBuffer cmd,
+    VkCommandBuffer cb,
     std::initializer_list<VkBufferMemoryBarrier2> barriers
 )
 {
-    DEBUG_ASSERT(cmd);
+    DEBUG_ASSERT(cb);
     DEBUG_ASSERT(barriers.size() > 0);
 
     const VkDependencyInfo dependencyInfo = {
@@ -476,15 +485,15 @@ void Vulkan::CmdBufferMemoryBarrier(
         .bufferMemoryBarrierCount = u32(barriers.size()),
         .pBufferMemoryBarriers = barriers.begin(),
     };
-    vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    vkCmdPipelineBarrier2(cb, &dependencyInfo);
 }
 
 void Vulkan::CmdImageMemoryBarrier(
-    VkCommandBuffer cmd,
+    VkCommandBuffer cb,
     std::initializer_list<VkImageMemoryBarrier2> barriers
 )
 {
-    DEBUG_ASSERT(cmd);
+    DEBUG_ASSERT(cb);
     DEBUG_ASSERT(barriers.size() > 0);
 
     const VkDependencyInfo dependencyInfo = {
@@ -492,17 +501,17 @@ void Vulkan::CmdImageMemoryBarrier(
         .imageMemoryBarrierCount = u32(barriers.size()),
         .pImageMemoryBarriers = barriers.begin(),
     };
-    vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    vkCmdPipelineBarrier2(cb, &dependencyInfo);
 }
 
 void Vulkan::CmdBarrier(
-    VkCommandBuffer cmd,
+    VkCommandBuffer cb,
     std::initializer_list<VkMemoryBarrier2> memoryBarriers,
     std::initializer_list<VkBufferMemoryBarrier2> bufferMemoryBarriers,
     std::initializer_list<VkImageMemoryBarrier2> imageMemoryBarriers
 )
 {
-    DEBUG_ASSERT(cmd);
+    DEBUG_ASSERT(cb);
     DEBUG_ASSERT(
         (memoryBarriers.size() > 0) || (bufferMemoryBarriers.size() > 0)
         || (imageMemoryBarriers.size() > 0)
@@ -517,7 +526,7 @@ void Vulkan::CmdBarrier(
         .imageMemoryBarrierCount = u32(imageMemoryBarriers.size()),
         .pImageMemoryBarriers = imageMemoryBarriers.begin(),
     };
-    vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    vkCmdPipelineBarrier2(cb, &dependencyInfo);
 }
 
 bool Vulkan::FindMemoryType(
@@ -552,12 +561,12 @@ bool Vulkan::FindMemoryType(
 }
 
 void Vulkan::CmdPushDescriptors(
-    VkCommandBuffer cmd,
+    VkCommandBuffer cb,
     const Vulkan::Pipeline& pipeline,
     std::initializer_list<Vulkan::DescriptorInfo> descriptorInfos
 )
 {
-    DEBUG_ASSERT(cmd);
+    DEBUG_ASSERT(cb);
     DEBUG_ASSERT(pipeline.pipeline);
     DEBUG_ASSERT(pipeline.descriptorSetLayout);
     DEBUG_ASSERT(pipeline.descriptorUpdateTemplate);
@@ -565,7 +574,7 @@ void Vulkan::CmdPushDescriptors(
     DEBUG_ASSERT(descriptorInfos.size() > 0);
 
     vkCmdPushDescriptorSetWithTemplate(
-        cmd,
+        cb,
         pipeline.descriptorUpdateTemplate,
         pipeline.layout,
         0,
@@ -828,6 +837,7 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
             supportsRequiredFeatures &= vulkanFeatures12.drawIndirectCount;
             supportsRequiredFeatures &= vulkanFeatures12.shaderFloat16;
             supportsRequiredFeatures &= vulkanFeatures12.samplerFilterMinmax;
+            supportsRequiredFeatures &= vulkanFeatures12.timelineSemaphore;
             supportsRequiredFeatures &= vulkanFeatures11.shaderDrawParameters;
             supportsRequiredFeatures &= vulkanFeatures11.storagePushConstant16;
             supportsRequiredFeatures &= vulkanFeatures11.storageBuffer16BitAccess;
@@ -878,7 +888,9 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
     // Logical device, queue.
     {
         // Already checked when picking a physical device.
-        Vulkan::QueueInfo queueInfo = GetQueue(mPhysicalDevice, VK_QUEUE_GRAPHICS_BIT);
+        Vulkan::QueueInfo graphicsQueueInfo = GetQueue(mPhysicalDevice, VK_QUEUE_GRAPHICS_BIT);
+        Vulkan::QueueInfo computeQueueInfo
+            = GetQueue(mPhysicalDevice, VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
 
         VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
@@ -907,6 +919,7 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
             .runtimeDescriptorArray = VK_TRUE,
             .samplerFilterMinmax = VK_TRUE,
             .scalarBlockLayout = VK_TRUE,
+            .timelineSemaphore = VK_TRUE,
             .bufferDeviceAddress = VK_TRUE,
         };
         VkPhysicalDeviceVulkan11Features vulkanFeatures11 = {
@@ -939,18 +952,26 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
 
         const f32 queuePriority = 1.0f;
 
-        const VkDeviceQueueCreateInfo deviceQueueInfo = {
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .queueFamilyIndex = queueInfo.queueIdx,
-            .queueCount = 1,
-            .pQueuePriorities = &queuePriority,
+        const VkDeviceQueueCreateInfo deviceQueueInfos[] = {
+            {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .queueFamilyIndex = graphicsQueueInfo.familyIdx,
+                .queueCount = 1,
+                .pQueuePriorities = &queuePriority,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .queueFamilyIndex = computeQueueInfo.familyIdx,
+                .queueCount = 1,
+                .pQueuePriorities = &queuePriority,
+            },
         };
 
         const VkDeviceCreateInfo deviceInfo = {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
             .pNext = &physicalDeviceFeatures,
-            .queueCreateInfoCount = 1,
-            .pQueueCreateInfos = &deviceQueueInfo,
+            .queueCreateInfoCount = ARRAY_SIZE(deviceQueueInfos),
+            .pQueueCreateInfos = deviceQueueInfos,
             .enabledExtensionCount = u32(ARRAY_SIZE(requiredDeviceExtensions)),
             .ppEnabledExtensionNames = requiredDeviceExtensions,
         };
@@ -959,8 +980,21 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
 
         volkLoadDevice(mDevice);
 
-        vkGetDeviceQueue(mDevice, queueInfo.familyIdx, queueInfo.queueIdx, &queueInfo.queue);
-        mQueueInfo = queueInfo;
+        vkGetDeviceQueue(
+            mDevice,
+            graphicsQueueInfo.familyIdx,
+            graphicsQueueInfo.queueIdx,
+            &graphicsQueueInfo.queue
+        );
+        mGraphicsQueueInfo = graphicsQueueInfo;
+
+        vkGetDeviceQueue(
+            mDevice,
+            computeQueueInfo.familyIdx,
+            computeQueueInfo.queueIdx,
+            &computeQueueInfo.queue
+        );
+        mComputeQueueInfo = computeQueueInfo;
     }
 
     // VMA.
@@ -1646,7 +1680,7 @@ bool Vulkan::Device::QueueSubmit(const QueueSubmitDesc&& desc) const
         .pSignalSemaphores = desc.signalSemaphores.begin(),
     };
 
-    VK_CHECK(vkQueueSubmit(mQueueInfo.queue, 1, &submitInfo, desc.fence));
+    VK_CHECK(vkQueueSubmit(desc.queueInfo.queue, 1, &submitInfo, desc.fence));
 
     return true;
 }
@@ -1661,12 +1695,12 @@ VkResult Vulkan::Device::QueuePresent(const QueuePresentDesc&& desc) const
         .pSwapchains = &desc.swapchain,
         .pImageIndices = &desc.imageIdx,
     };
-    return vkQueuePresentKHR(mQueueInfo.queue, &presentInfo);
+    return vkQueuePresentKHR(desc.queueInfo.queue, &presentInfo);
 }
 
-bool Vulkan::Device::QueueWaitIdle() const
+bool Vulkan::Device::QueueWaitIdle(QueueInfo queueInfo) const
 {
-    VK_CHECK(vkQueueWaitIdle(mQueueInfo.queue));
+    VK_CHECK(vkQueueWaitIdle(queueInfo.queue));
     return true;
 }
 

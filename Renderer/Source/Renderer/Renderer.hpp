@@ -26,12 +26,19 @@ struct Renderer
     static_assert(sizeof(PushConstantsImgui) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
     static_assert(sizeof(PushConstantsVisibilityBuffer) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
     static_assert(sizeof(PushConstantsDepthReduce) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
+    static_assert(sizeof(PushConstantsShadow) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
 
     struct Frame
     {
-        VkCommandBuffer commandBuffer;
-        VkFence queueSubmitFence;
-        VkSemaphore imageAcquireSemaphore;
+        VkCommandBuffer commandBufferStart;
+        VkCommandBuffer commandBufferShadow;
+        VkCommandBuffer commandBufferEnd;
+        VkCommandBuffer commandBufferSSAO;
+        VkFence fenceQueueSubmit;
+        VkSemaphore semaphoreImageAcquire;
+        Vulkan::TimelineSemaphore semaphoreStart;
+        Vulkan::TimelineSemaphore semaphoreShadow;
+        Vulkan::TimelineSemaphore semaphoreSSAO;
         Vulkan::Buffer uniformBuffer;
         Vulkan::Image resolvedRenderImage;
     };
@@ -95,7 +102,8 @@ struct Renderer
     VkSampler mMinSampler;
     VkSampler mShadowSampler;
     VkSampler mShadowPcfJitterSampler;
-    VkCommandPool mCommandPool;
+    VkCommandPool mCommandPoolGraphics;
+    VkCommandPool mCommandPoolCompute;
     VkSampleCountFlagBits mSampleCount;
     std::vector<VkSemaphore> mRenderFinishedSemaphores;
     std::vector<Vulkan::Image> mTextures;
@@ -128,20 +136,20 @@ private:
     bool UploadTextures(const std::vector<std::string>& texturePaths);
     void UpdateShadowCascades();
 
-    void VisibilityBufferPass(VkCommandBuffer cmd, bool cullLate);
-    void ForwardPass(VkCommandBuffer cmd, bool cullLate);
-    void CullPass(VkCommandBuffer cmd, bool late);
-    void DepthReducePass(VkCommandBuffer cmd);
-    void AmbientOcclusionPass(VkCommandBuffer cmd); // TODO: AO and blur to async after RT -> CSM.
-    void AmbientOcclusionBlurPass(VkCommandBuffer cmd);
-    void ShadowCullPass(VkCommandBuffer cmd);
-    void ShadowPass(VkCommandBuffer cmd);
-    void RenderPass(VkCommandBuffer cmd);
-    void TaaResolvePass(VkCommandBuffer cmd);
-    void DebugDrawPass(VkCommandBuffer cmd);
-    void FullscreenPass(VkCommandBuffer cmd, u32 imageIdx);
+    void VisibilityBufferPass(VkCommandBuffer cb, bool cullLate);
+    void ForwardPass(VkCommandBuffer cb, bool cullLate);
+    void CullPass(VkCommandBuffer cb, bool late);
+    void DepthReducePass(VkCommandBuffer cb);
+    void AmbientOcclusionPass(VkCommandBuffer cb);
+    void AmbientOcclusionBlurPass(VkCommandBuffer cb);
+    void ShadowCullPass(VkCommandBuffer cb);
+    void ShadowPass(VkCommandBuffer cb);
+    void RenderPass(VkCommandBuffer cb);
+    void TaaResolvePass(VkCommandBuffer cb);
+    void DebugDrawPass(VkCommandBuffer cb);
+    void FullscreenPass(VkCommandBuffer cb, u32 imageIdx);
 
-    void DebugDrawGradErrorPass(VkCommandBuffer cmd, bool cullLate, u32 imageIdx);
+    void DebugDrawGradErrorPass(VkCommandBuffer cb, bool cullLate, u32 imageIdx);
 
     bool RecordCommandBufferDebugGradError(u32 imageIdx);
     bool RecordCommandBufferVisibility(u32 imageIdx);
