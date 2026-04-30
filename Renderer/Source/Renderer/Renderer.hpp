@@ -131,6 +131,7 @@ struct Renderer
     void ChangeRenderMode(RenderMode mode);
     void FreezeCullCamera(bool frozen);
     bool RecompilePipelines();
+    void SetSunDirection(f32 yaw, f32 pitch);
 
 private:
     bool UploadTextures(const std::vector<std::string>& texturePaths);

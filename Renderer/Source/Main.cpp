@@ -252,6 +252,17 @@ static void ImguiCheckbox(const char* label, u32& value)
     value = boolValue;
 }
 
+static void DirToYawPitchDeg(f32& yaw, f32& pitch, Vec3 dir)
+{
+    yaw = atan2f(dir.X(), dir.Z());
+    if (yaw < 0.0f)
+    {
+        yaw += 2.0f * M_PIf;
+    }
+    yaw = Degrees(yaw);
+    pitch = Degrees(asinf(-dir.Y()));
+}
+
 int main()
 {
     Renderer renderer{};
@@ -264,6 +275,10 @@ int main()
     DEFER(renderer.Cleanup());
 
     bool enableCameraLoading = true;
+    f32 sunYaw = 0.0f;
+    f32 sunPitch = 0.0f;
+
+    DirToYawPitchDeg(sunYaw, sunPitch, renderer.mUniformData.sunDirectionWorld);
 
     renderer.mEnableUI = true;
     renderer.mUniformData.taaEnable = 1;
@@ -392,7 +407,19 @@ int main()
             ImGui::TableNextColumn();
             ImGui::Text("Ambient intensity");
 
-            // TODO: sun direction.
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::SliderFloat("##SunYaw", &sunYaw, 0.0f, 360.0f);
+            ImGui::TableNextColumn();
+            ImGui::Text("Sun yaw");
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::SliderFloat("##SunPitch", &sunPitch, 0.0f, 89.9f);
+            ImGui::TableNextColumn();
+            ImGui::Text("Sun pitch");
+
+            renderer.SetSunDirection(Radians(sunYaw), Radians(sunPitch));
 
             // TODO: shadow stuff.
 

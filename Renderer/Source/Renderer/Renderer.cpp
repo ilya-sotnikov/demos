@@ -1072,10 +1072,6 @@ bool Renderer::Render(f32 deltaTime)
     mUniformData.worldToClip = mUniformData.viewToClip * mUniformData.worldToView;
     mUniformData.clipToWorld = Inverse(mUniformData.worldToClip);
 
-    mUniformData.sunDirectionView
-        = (mUniformData.worldToView * Vec4{mUniformData.sunDirectionWorld, 0.0f}).XYZ();
-    mUniformData.sunDirectionView = Normalize(mUniformData.sunDirectionView);
-
     // https://fgiesen.wordpress.com/2012/08/31/frustum-planes-from-the-projection-matrix/
     // Also, niagara:
     // https://github.com/zeux/niagara
@@ -1546,6 +1542,16 @@ bool Renderer::RecompilePipelines()
     }
 
     return true;
+}
+
+void Renderer::SetSunDirection(f32 yaw, f32 pitch)
+{
+    DEBUG_ASSERT(yaw >= 0.0f);
+    DEBUG_ASSERT(pitch >= 0.0f);
+
+    mUniformData.sunDirectionWorld.X() = sinf(yaw) * cosf(pitch);
+    mUniformData.sunDirectionWorld.Y() = -sinf(pitch);
+    mUniformData.sunDirectionWorld.Z() = cosf(yaw) * cosf(pitch);
 }
 
 bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
