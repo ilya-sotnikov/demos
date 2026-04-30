@@ -22,6 +22,9 @@ float3 CalcSky(float3 viewDirectionWorld, float3 sunDirectionWorld)
     const float wSun = 0.0002;
 
     const float dotViewSun = dot(viewDirectionWorld, sunDirectionWorld);
+    // Tweaking a little to prevent divisions by zero.
+    const float sunY = sunDirectionWorld.y + 1e-5;
+    const float viewY = viewDirectionWorld.y + 2e-5;
 
     const float phaseRayleigh = 3.0 / (16.0 * M_PIf) * (1.0 + dotViewSun * dotViewSun);
 
@@ -40,7 +43,6 @@ float3 CalcSky(float3 viewDirectionWorld, float3 sunDirectionWorld)
     const float surfaceDarkening = viewDirectionWorld.y < 0.0 ? 0.3 : 1.0;
 
     return I0 * surfaceDarkening *
-        sunDirectionWorld.y / (sunDirectionWorld.y + viewDirectionWorld.y) *
-        (phaseSum / sigmaSum) *
-        (exp(sigmaSum / sunDirectionWorld.y) - exp(-sigmaSum / abs(viewDirectionWorld.y)));
+        sunY / (sunY + viewY) * (phaseSum / sigmaSum) *
+        (exp(sigmaSum / sunY) - exp(-sigmaSum / abs(viewY)));
 }

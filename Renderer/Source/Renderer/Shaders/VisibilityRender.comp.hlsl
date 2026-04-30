@@ -92,7 +92,6 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         );
         const float3 viewDirectionWorld = normalize(pos.xyz / pos.w - uniformBuffer.cameraPosition);
 
-        // TODO: at least calculate lighting with the sun color.
         renderImageRW[dtid.xy] = CalcSky(viewDirectionWorld, uniformBuffer.sunDirectionWorld);
         velocityImageRW[dtid.xy] = float2(0.0, 0.0);
         return;
@@ -237,8 +236,12 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     float3 kDiffuse = 1.0 - kSpecular;
     kDiffuse *= 1.0 - metallic;
 
+    const float3 sunColor =
+        CalcSky(-uniformBuffer.sunDirectionWorld, uniformBuffer.sunDirectionWorld);
+
     const float3 radianceOut =
-        (kDiffuse * albedo.rgb / M_PIf + specular) * uniformBuffer.sunIntensity * dotNormalLight;
+        (kDiffuse * albedo.rgb / M_PIf + specular) * dotNormalLight *
+        uniformBuffer.sunIntensity * sunColor;
 
     float3 positionShadow;
 

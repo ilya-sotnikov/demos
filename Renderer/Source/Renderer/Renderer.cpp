@@ -847,7 +847,7 @@ bool Renderer::Init()
     mTaaJitterMaxIdx = 8;
     mUniformData.taaBlendWeight = 0.1f;
     mUniformData.ambientIntensity = 0.1f;
-    mUniformData.sunIntensity = 5.0f;
+    mUniformData.sunIntensity = 1.0f;
     mUniformData.gradErrorMax = 0.01f;
 
     mUniformData.shadow.enablePcf = 1;
