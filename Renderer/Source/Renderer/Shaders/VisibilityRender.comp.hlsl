@@ -236,12 +236,8 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     float3 kDiffuse = 1.0 - kSpecular;
     kDiffuse *= 1.0 - metallic;
 
-    const float3 sunColor =
-        CalcSky(-uniformBuffer.sunDirectionWorld, uniformBuffer.sunDirectionWorld);
-
     const float3 radianceOut =
-        (kDiffuse * albedo.rgb / M_PIf + specular) * dotNormalLight *
-        uniformBuffer.sunIntensity * sunColor;
+        (kDiffuse * albedo.rgb / M_PIf + specular) * dotNormalLight * uniformBuffer.sunIntensity;
 
     float3 positionShadow;
 
@@ -298,7 +294,10 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float ambientOcclusion = pow(1.0 - saturate(ambientOcclusionSample), 2);
     const float3 ambient = albedo.rgb * uniformBuffer.ambientIntensity * ambientOcclusion;
 
-    float3 color = ambient + radianceOut * shadow;
+    const float3 sunColor =
+        CalcSky(-uniformBuffer.sunDirectionWorld, uniformBuffer.sunDirectionWorld);
+
+    float3 color = (ambient * (-uniformBuffer.sunDirectionWorld.y) + radianceOut * shadow) * sunColor;
 
     switch (uniformBuffer.renderMode)
     {
