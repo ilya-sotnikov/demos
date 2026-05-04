@@ -288,12 +288,12 @@ void Main(uint3 dtid : SV_DispatchThreadID)
             cascadeIdx
         );
 
-    const float ambientOcclusionSample =
+    const float ambientOcclusion =
         ambientOcclusionImage.SampleLevel(linearSampler, (dtid.xy + 0.5) / renderImageSize, 0);
 
-    const float ambientOcclusion = pow(1.0 - saturate(ambientOcclusionSample), 2);
     const float3 ambient = albedo.rgb * uniformBuffer.ambientIntensity * ambientOcclusion;
 
+    // TODO: precompute.
     const float3 sunColor =
         CalcSky(-uniformBuffer.sunDirectionWorld, uniformBuffer.sunDirectionWorld);
 
@@ -317,5 +317,6 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         (pixelNdc - uniformBuffer.taaJitter) - (prevPixelNdc - uniformBuffer.prevTaaJitter);
     velocity.y *= -1.0;
 
+    // TODO: motion vectors only for dynamic objects.
     velocityImageRW[dtid.xy] = velocity;
 }

@@ -27,6 +27,7 @@ struct Renderer
     static_assert(sizeof(PushConstantsVisibilityBuffer) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
     static_assert(sizeof(PushConstantsDepthReduce) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
     static_assert(sizeof(PushConstantsShadow) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
+    static_assert(sizeof(PushConstantsSsaoBlur) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
 
     struct Frame
     {
@@ -51,7 +52,8 @@ struct Renderer
     Vulkan::Image mRenderImage;
     Vulkan::Image mVelocityImage;
     Vulkan::Image mAmbientOcclusionImage;
-    Vulkan::Image mAmbientOcclusionBlurredImage;
+    Vulkan::Image mAmbientOcclusionBlurredHorizontalImage;
+    Vulkan::Image mAmbientOcclusionBlurredVerticalImage;
     Vulkan::Image mShadowImage;
     Vulkan::Image mShadowPcfJitterImage;
     VkImageView mShadowImageViewCascade[RENDERER_SHADOW_MAP_CASCADE_COUNT];
@@ -59,9 +61,12 @@ struct Renderer
     VkExtent2D mAmbientOcclusionImageExtent;
     VkExtent2D mDepthPyramidImageExtent;
     Vulkan::Image mDepthImage;
+    Vulkan::Image mDepthViewQuarterResImage;
     Vulkan::Image mDepthPyramidImage;
+    Vulkan::Image mDebugImage;
     std::vector<VkImageView> mDepthPyramidMipImageViews;
     Vulkan::Pipeline mVisibilityPipeline;
+    Vulkan::Pipeline mDepthViewQuarterResPipeline;
     Vulkan::Pipeline mAmbientOcclusionPipeline;
     Vulkan::Pipeline mAmbientOcclusionBlurPipeline;
     Vulkan::Pipeline mShadowCullPipeline;
@@ -141,10 +146,14 @@ private:
     void ForwardPass(VkCommandBuffer cb, bool cullLate);
     void CullPass(VkCommandBuffer cb, bool late);
     void DepthReducePass(VkCommandBuffer cb);
+
+    void DepthViewQuarterResPass(VkCommandBuffer cb);
     void AmbientOcclusionPass(VkCommandBuffer cb);
-    void AmbientOcclusionBlurPass(VkCommandBuffer cb);
+    void AmbientOcclusionBlurPass(VkCommandBuffer cb, bool horizontal);
+
     void ShadowCullPass(VkCommandBuffer cb);
     void ShadowPass(VkCommandBuffer cb);
+
     void RenderPass(VkCommandBuffer cb);
     void TaaResolvePass(VkCommandBuffer cb);
     void DebugDrawPass(VkCommandBuffer cb);

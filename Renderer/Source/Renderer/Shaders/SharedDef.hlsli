@@ -48,6 +48,7 @@ struct UniformData
     FLOAT_3 sunDirectionWorld;
     FLOAT_2 taaJitter;
     FLOAT_2 prevTaaJitter;
+    FLOAT_2 viewToClipInv0011;
     float taaBlendWeight;
     float cullFrustumPlaneXX;
     float cullFrustumPlaneXZ;
@@ -59,6 +60,7 @@ struct UniformData
     float gradErrorMax;
     float depthPyramidWidth;
     float depthPyramidHeight;
+    float aspect;
     uint64_t frameCount;
     uint32_t swapchainWidth;
     uint32_t swapchainHeight;
@@ -149,6 +151,12 @@ struct PushConstantsShadow
 {
     int32_t shadowCascadeIdx;
     uint32_t renderPassFlags;
+};
+
+struct PushConstantsSsaoBlur
+{
+    int32_t pixelOffsetX;
+    int32_t pixelOffsetY;
 };
 
 enum RenderPassFlagBits

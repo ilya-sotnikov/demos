@@ -1,12 +1,31 @@
 #include "Common.hlsli"
 
+// Referenced this:
+// Robust Screen Space Ambient Occlusion in 1 ms in 1080p on PS4, Wojciech Sterna, GPU Zen.
+
 ConstantBuffer<UniformData> uniformBuffer;
-SamplerState linearSampler;
-Texture2D<float> depthImage;
+Texture2D<float> depthViewImage;
 Texture2D<float> inImage;
 [[vk::image_format("r8")]]
 RWTexture2D<float> outImage;
 
+[[vk::push_constant]]
+PushConstantsSsaoBlur pushConstants;
+
+// Sigma = 3.0;
+static float GAUSS_WEIGHTS[] =
+{
+    0.106595f,
+    0.140367f,
+    0.165569f,
+    0.174938f,
+    0.165569f,
+    0.140367f,
+    0.106595f
+};
+
+// Bilateral depth-aware filter with 2 passes (vertical and horizontal).
+// NOTE: although bilateral filters are not separable, it's mostly fine and definitely faster.
 [numthreads(RENDERER_SSAO_BLUR_WORKGROUP_SIZE_X, RENDERER_SSAO_BLUR_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
@@ -20,34 +39,29 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         return;
     }
 
-    const float EPSILON = 1e-5;
-
-    const uint2 center = dtid.xy;
-    const float centerDepth = RENDERER_NEAR_PLANE / (depthImage[center * 2] + EPSILON);
+    const float depth = depthViewImage[dtid.xy];
 
     float result = 0.0;
-    float kSum = 0.0;
+    float weightSum = 0.0;
 
-    // TODO: better filter.
-    // TODO: optimize (i.e. proper linear sampling, maybe separate x/y, maybe shared memory).
-    // TODO: look into upsampling.
-    for (int x = -1; x <= 1; ++x)
+    // 7 samples in horizontal and vertical direction (separate passes).
+    for (int i = -3; i <= 3; ++i)
     {
-        for (int y = -1; y <= 1; ++y)
-        {
-            int2 sampleCoord = center + int2(x, y);
-            sampleCoord = clamp(sampleCoord, int2(0, 0), imageSize - 1);
-            float k = exp(-(x * x + y * y) * 0.5); // TODO: LUT?
-            const float sampleDepth = RENDERER_NEAR_PLANE / depthImage[sampleCoord * 2] + EPSILON;
-            k = k / (abs(centerDepth - sampleDepth) + EPSILON); // Somewhat depth aware i guess.
-            result += k * inImage.SampleLevel(
-                linearSampler,
-                float2(sampleCoord + 0.5) / imageSize,
-                0
-            );
-            kSum += k;
-        }
+        int2 sampleCoord =
+            dtid.xy + i * int2(pushConstants.pixelOffsetX, pushConstants.pixelOffsetY);
+        sampleCoord = clamp(sampleCoord, int2(0, 0), imageSize - 1);
+        const float sampleDepth = depthViewImage[sampleCoord];
+
+        float deltaDepth = 0.1 * abs(depth - sampleDepth);
+        deltaDepth *= deltaDepth;
+
+        const float weight = GAUSS_WEIGHTS[3 + i] / (deltaDepth + 1e-5);
+
+        result += weight * inImage[sampleCoord];
+        weightSum += weight;
     }
 
-    outImage[dtid.xy] = result / kSum;
+    outImage[dtid.xy] = result / weightSum;
+
+    // TODO: look into upsampling.
 }
