@@ -49,6 +49,7 @@ struct UniformData
     FLOAT_2 taaJitter;
     FLOAT_2 prevTaaJitter;
     FLOAT_2 viewToClipInv0011;
+    FLOAT_2 ambientOcclusionPixelSize;
     float taaBlendWeight;
     float cullFrustumPlaneXX;
     float cullFrustumPlaneXZ;
@@ -75,6 +76,7 @@ struct UniformData
 
     struct
     {
+        // TODO: 1 matrix plus offsets and scales for each cascade should be enough.
         MAT_4X4 worldToClip[RENDERER_SHADOW_MAP_CASCADE_COUNT];
         float texelSizes[RENDERER_SHADOW_MAP_CASCADE_COUNT];
         // float frustumPlaneXX[RENDERER_SHADOW_MAP_CASCADE_COUNT];

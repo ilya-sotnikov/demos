@@ -64,7 +64,8 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     // TODO: unjitter uv or something, TAA messes it up.
 
-    // TODO: reconstructing normals from the depth buffer should be faster:
+    // TODO: reconstructing normals from the depth buffer may be faster
+    // and usable in forward pipelines:
     // https://turanszkij.wpcomstaging.com/2019/09/improved-normal-reconstruction-from-depth/
     const uint2 visibilityData = visibilityImage[dtid.xy * 2];
     uint rawDrawIdx = visibilityData.y;
@@ -131,7 +132,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float4 posClip1 = mul(uniformBuffer.worldToClip, float4(posWorld1, 1.0));
     const float4 posClip2 = mul(uniformBuffer.worldToClip, float4(posWorld2, 1.0));
 
-    const float2 pixelUV = (dtid.xy + 0.5) / imageSize;
+    const float2 pixelSize = uniformBuffer.ambientOcclusionPixelSize;
+
+    const float2 pixelUV = (dtid.xy + 0.5) * pixelSize;
     float2 pixelNdc = pixelUV * 2.0 - 1.0;
     pixelNdc.y *= -1.0;
 
@@ -140,7 +143,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         posClip1,
         posClip2,
         pixelNdc,
-        2.0 / imageSize
+        2.0 * pixelSize
     );
 
     const float3 posView = CalcPosView(pixelUV);
@@ -152,15 +155,15 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const InterpolatedData3D interpNormal = Interpolate3D(baryData, n0, n1, n2);
 
     const float3 normalWorld = QuatRotate(drawData.orientation, normalize(interpNormal.c));
-    const float3 normalView = mul(uniformBuffer.worldToView, float4(interpNormal.c, 0.0)).xyz;
+    const float3 normalView = mul(uniformBuffer.worldToView, float4(normalWorld, 0.0)).xyz;
 
     const float noisePixel = InterleavedGradientNoise(dtid.x, dtid.y);
 
     float2 radiusScreen = RADIUS_WORLD / posView.z;
     // To prevent radiusScreen getting too large for pixels that are close to the camera.
     radiusScreen = min(radiusScreen, MAX_RADIUS_SCREEN);
-    // Vogel disk returns samples in the [0, 1] unit disk,
-    // multiplying by aspect ratio preserves this unit disk.
+    // Vogel disk returns samples in the [0, 1] unit disk, multiplying by aspect ratio
+    // preserves this unit disk, otherwise it would be an ellipse.
     radiusScreen.y *= uniformBuffer.aspect;
 
     float occlusion = 0.0;

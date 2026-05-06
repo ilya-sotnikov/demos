@@ -4050,6 +4050,8 @@ bool Renderer::CreateColorResources()
 
     mUniformData.ambientOcclusionWidth = mAmbientOcclusionImageExtent.width;
     mUniformData.ambientOcclusionHeight = mAmbientOcclusionImageExtent.height;
+    mUniformData.ambientOcclusionPixelSize
+        = {1.0f / mUniformData.ambientOcclusionWidth, 1.0f / mUniformData.ambientOcclusionHeight};
 
     if (!mDevice.CreateImage({
             .image = mDebugImage,

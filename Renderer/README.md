@@ -53,15 +53,15 @@ VisBufLate (G)
   |
   +-------------------------+
   |                         |
-CsmCull (C)               SSAO (C)
+CsmCull (C)               DepthViewQuarterRes (C)
   |                         |
-CSM (G)                   Blur (C)
+CSM (C)                   SSAO (C)
   |                         |
-  +-------------------------+
-  |
-Render (C)
-  |
-TaaResolve (C)
+  +--------------------+  BlurX (C)
+  |                    |    |
+Render (C)             |  BlurY (C)
+  |                    |    |
+TaaResolve (C)         +----+
   |
 Fullscreen (G)
 ```
