@@ -14,7 +14,6 @@ StructuredBuffer<DrawData> drawDataBuffer;
 StructuredBuffer<uint32_t> indexBuffer;
 StructuredBuffer<Vertex> vertexBuffer;
 StructuredBuffer<Material> materialBuffer;
-SamplerState linearSampler;
 SamplerState textureSampler;
 SamplerComparisonState shadowSampler;
 SamplerState shadowPcfJitterSampler;
@@ -288,8 +287,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
             cascadeIdx
         );
 
-    const float ambientOcclusion =
-        ambientOcclusionImage.SampleLevel(linearSampler, (dtid.xy + 0.5) / renderImageSize, 0);
+    const float ambientOcclusion = ambientOcclusionImage[dtid.xy];
 
     const float3 ambient = albedo.rgb * uniformBuffer.ambientIntensity * ambientOcclusion;
 

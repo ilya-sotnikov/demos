@@ -132,9 +132,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float4 posClip1 = mul(uniformBuffer.worldToClip, float4(posWorld1, 1.0));
     const float4 posClip2 = mul(uniformBuffer.worldToClip, float4(posWorld2, 1.0));
 
-    const float2 pixelSize = uniformBuffer.ambientOcclusionPixelSize;
+    const float2 imageSizeInv = uniformBuffer.ambientOcclusionImageSizeInv;
 
-    const float2 pixelUV = (dtid.xy + 0.5) * pixelSize;
+    const float2 pixelUV = (dtid.xy + 0.5) * imageSizeInv;
     float2 pixelNdc = pixelUV * 2.0 - 1.0;
     pixelNdc.y *= -1.0;
 
@@ -143,7 +143,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         posClip1,
         posClip2,
         pixelNdc,
-        2.0 * pixelSize
+        2.0 * imageSizeInv
     );
 
     const float3 posView = CalcPosView(pixelUV);

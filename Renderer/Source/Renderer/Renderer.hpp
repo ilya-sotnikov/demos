@@ -54,6 +54,7 @@ struct Renderer
     Vulkan::Image mAmbientOcclusionImage;
     Vulkan::Image mAmbientOcclusionBlurredHorizontalImage;
     Vulkan::Image mAmbientOcclusionBlurredVerticalImage;
+    Vulkan::Image mAmbientOcclusionUpsampledImage;
     Vulkan::Image mShadowImage;
     Vulkan::Image mShadowPcfJitterImage;
     VkImageView mShadowImageViewCascade[RENDERER_SHADOW_MAP_CASCADE_COUNT];
@@ -69,6 +70,7 @@ struct Renderer
     Vulkan::Pipeline mDepthViewQuarterResPipeline;
     Vulkan::Pipeline mAmbientOcclusionPipeline;
     Vulkan::Pipeline mAmbientOcclusionBlurPipeline;
+    Vulkan::Pipeline mAmbientOcclusionUpsamplePipeline;
     Vulkan::Pipeline mShadowCullPipeline;
     Vulkan::Pipeline mShadowPipeline;
     Vulkan::Pipeline mVisibilityRenderPipeline;
@@ -150,6 +152,7 @@ private:
     void DepthViewQuarterResPass(VkCommandBuffer cb);
     void AmbientOcclusionPass(VkCommandBuffer cb);
     void AmbientOcclusionBlurPass(VkCommandBuffer cb, bool horizontal);
+    void AmbientOcclusionUpsamplePass(VkCommandBuffer cb);
 
     void ShadowCullPass(VkCommandBuffer cb);
     void ShadowPass(VkCommandBuffer cb);

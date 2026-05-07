@@ -49,7 +49,8 @@ struct UniformData
     FLOAT_2 taaJitter;
     FLOAT_2 prevTaaJitter;
     FLOAT_2 viewToClipInv0011;
-    FLOAT_2 ambientOcclusionPixelSize;
+    FLOAT_2 renderImageSizeInv;
+    FLOAT_2 ambientOcclusionImageSizeInv;
     float taaBlendWeight;
     float cullFrustumPlaneXX;
     float cullFrustumPlaneXZ;

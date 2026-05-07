@@ -1,4 +1,4 @@
-# \[WIP\] Renderer
+# Renderer
 
 GPU-driven renderer (Vulkan 1.4).
 
@@ -61,9 +61,9 @@ CSM (C)                   SSAO (C)
   |                    |    |
 Render (C)             |  BlurY (C)
   |                    |    |
-TaaResolve (C)         +----+
-  |
-Fullscreen (G)
+TaaResolve (C)         |  Upsample (C)
+  |                    |    |
+Fullscreen (G)         +----+
 ```
 
 ## Build and run

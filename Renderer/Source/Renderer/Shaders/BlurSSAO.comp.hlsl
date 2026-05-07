@@ -62,6 +62,4 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     }
 
     outImage[dtid.xy] = result / weightSum;
-
-    // TODO: look into upsampling.
 }
