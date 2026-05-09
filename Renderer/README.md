@@ -28,6 +28,7 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 - TAA
 - SSAO
 - stable cascaded shadow maps (CSM) with soft shadows (PCF with adaptive sampling)
+- fog (participating media)
 - very simplified atmospheric scattering
 - bindless textures (descriptor indexing)
 - indirect drawing
@@ -59,11 +60,17 @@ CSM (C)                   SSAO (C)
   |                         |
   +--------------------+  BlurX (C)
   |                    |    |
-Render (C)             |  BlurY (C)
+Fog (C)                |  BlurY (C)
   |                    |    |
-TaaResolve (C)         |  Upsample (C)
+BlurX (C)              |  Upsample (C)
   |                    |    |
-Fullscreen (G)         +----+
+BlurY (C)              +----+
+  |
+Render (C)
+  |
+TaaResolve (C)
+  |
+Fullscreen (G)
 ```
 
 ## Build and run

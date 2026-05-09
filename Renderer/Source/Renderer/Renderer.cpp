@@ -1343,6 +1343,8 @@ void Renderer::CleanupPipelines()
 {
     mDevice.DestroyPipeline(mShadowCullPipeline);
     mDevice.DestroyPipeline(mShadowPipeline);
+    mDevice.DestroyPipeline(mBlurFogPipeline);
+    mDevice.DestroyPipeline(mFogPipeline);
     mDevice.DestroyPipeline(mAmbientOcclusionUpsamplePipeline);
     mDevice.DestroyPipeline(mAmbientOcclusionBlurPipeline);
     mDevice.DestroyPipeline(mAmbientOcclusionPipeline);
@@ -1547,6 +1549,24 @@ bool Renderer::RecompilePipelines()
             .pipeline = mAmbientOcclusionUpsamplePipeline,
             .shaderPath = "UpsampleSSAO.comp.hlsl.spv",
             .debugName = "AmbientOcclusionUpsamplePass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mFogPipeline,
+            .shaderPath = "Fog.comp.hlsl.spv",
+            .debugName = "FogPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
+            .pipeline = mBlurFogPipeline,
+            .shaderPath = "BlurFog.comp.hlsl.spv",
+            .debugName = "BlurFogPass",
         }))
     {
         return false;
@@ -2251,29 +2271,92 @@ void Renderer::ShadowPass(VkCommandBuffer cb)
     }
 }
 
+void Renderer::FogPass(VkCommandBuffer cb)
+{
+    DEBUG_ASSERT(cb);
+
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, mFogPipeline.pipeline);
+
+    Vulkan::CmdPushDescriptors(
+        cb,
+        mFogPipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            mNearestSampler,
+            {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mShadowImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mFogImage.view, VK_IMAGE_LAYOUT_GENERAL},
+        }
+    );
+
+    vkCmdDispatch(
+        cb,
+        GetDispatchSize(mRenderImageExtent.width, RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_X),
+        GetDispatchSize(mRenderImageExtent.height, RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_Y),
+        1
+    );
+}
+
+void Renderer::BlurFogPass(VkCommandBuffer cb, bool horizontal)
+{
+    DEBUG_ASSERT(cb);
+
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, mBlurFogPipeline.pipeline);
+
+    const VkImageLayout inLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    const Vulkan::DescriptorInfo inImage = horizontal
+        ? Vulkan::DescriptorInfo{mFogImage.view, inLayout}
+        : Vulkan::DescriptorInfo{mFogBlurredHorizontalImage.view, inLayout};
+
+    const VkImageLayout outLayout = VK_IMAGE_LAYOUT_GENERAL;
+    const Vulkan::DescriptorInfo outImage = horizontal
+        ? Vulkan::DescriptorInfo{mFogBlurredHorizontalImage.view, outLayout}
+        : Vulkan::DescriptorInfo{mFogBlurredVerticalImage.view, outLayout};
+
+    Vulkan::CmdPushDescriptors(
+        cb,
+        mBlurFogPipeline,
+        {
+            mFrame[mFrameIdx].uniformBuffer.buffer,
+            inImage,
+            outImage,
+        }
+    );
+
+    const PushConstantsFogBlur pushConstants = {.horizontal = horizontal};
+
+    vkCmdPushConstants(
+        cb,
+        mBlurFogPipeline.layout,
+        VK_SHADER_STAGE_ALL,
+        0,
+        sizeof(pushConstants),
+        &pushConstants
+    );
+
+    vkCmdDispatch(
+        cb,
+        GetDispatchSize(mRenderImageExtent.width, RENDERER_FOG_BLUR_WORKGROUP_SIZE_X),
+        GetDispatchSize(mRenderImageExtent.height, RENDERER_FOG_BLUR_WORKGROUP_SIZE_Y),
+        1
+    );
+}
+
 void Renderer::AmbientOcclusionBlurPass(VkCommandBuffer cb, bool horizontal)
 {
     DEBUG_ASSERT(cb);
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, mAmbientOcclusionBlurPipeline.pipeline);
 
-    // clang-format off
-    const Vulkan::DescriptorInfo inImage = horizontal ?
-        Vulkan::DescriptorInfo{
-            mAmbientOcclusionImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        } :
-        Vulkan::DescriptorInfo{
-            mAmbientOcclusionBlurredHorizontalImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        };
+    const VkImageLayout inLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    const Vulkan::DescriptorInfo inImage = horizontal
+        ? Vulkan::DescriptorInfo{mAmbientOcclusionImage.view, inLayout}
+        : Vulkan::DescriptorInfo{mAmbientOcclusionBlurredHorizontalImage.view, inLayout};
 
-    const Vulkan::DescriptorInfo outImage = horizontal ?
-        Vulkan::DescriptorInfo{
-            mAmbientOcclusionBlurredHorizontalImage.view, VK_IMAGE_LAYOUT_GENERAL
-        } :
-        Vulkan::DescriptorInfo{
-            mAmbientOcclusionBlurredVerticalImage.view, VK_IMAGE_LAYOUT_GENERAL
-        };
-    // clang-format on
+    const VkImageLayout outLayout = VK_IMAGE_LAYOUT_GENERAL;
+    const Vulkan::DescriptorInfo outImage = horizontal
+        ? Vulkan::DescriptorInfo{mAmbientOcclusionBlurredHorizontalImage.view, outLayout}
+        : Vulkan::DescriptorInfo{mAmbientOcclusionBlurredVerticalImage.view, outLayout};
 
     Vulkan::CmdPushDescriptors(
         cb,
@@ -2356,11 +2439,13 @@ void Renderer::RenderPass(VkCommandBuffer cb)
             mIndexBuffer.buffer,
             mVertexBuffer.buffer,
             mMaterialBuffer.buffer,
+            mLinearSampler,
             mTextureSampler,
             mShadowSampler,
             mShadowPcfJitterSampler,
             {mShadowImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mShadowPcfJitterImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mFogBlurredVerticalImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mAmbientOcclusionUpsampledImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mVelocityImage.view, VK_IMAGE_LAYOUT_GENERAL},
@@ -3389,14 +3474,91 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
                 mShadowImage.image,
                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                 VK_IMAGE_ASPECT_DEPTH_BIT,
                 VK_REMAINING_MIP_LEVELS,
                 RENDERER_SHADOW_MAP_CASCADE_COUNT
+            ),
+            Vulkan::ImageMemoryBarrier(
+                mFogImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
+        }
+    );
+
+    FogPass(cbEnd);
+
+    Vulkan::CmdImageMemoryBarrier(
+        cbEnd,
+        {
+            Vulkan::ImageMemoryBarrier(
+                mFogImage.image,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            ),
+            Vulkan::ImageMemoryBarrier(
+                mFogBlurredHorizontalImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
+        }
+    );
+
+    BlurFogPass(cbEnd, true);
+
+    Vulkan::CmdImageMemoryBarrier(
+        cbEnd,
+        {
+            Vulkan::ImageMemoryBarrier(
+                mFogBlurredHorizontalImage.image,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            ),
+            Vulkan::ImageMemoryBarrier(
+                mFogBlurredVerticalImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
+        }
+    );
+
+    BlurFogPass(cbEnd, false);
+
+    Vulkan::CmdImageMemoryBarrier(
+        cbEnd,
+        {
+            Vulkan::ImageMemoryBarrier(
+                mFogBlurredVerticalImage.image,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
             ),
         }
     );
@@ -4181,6 +4343,42 @@ bool Renderer::CreateColorResources()
         return false;
     }
 
+    if (!mDevice.CreateImage({
+            .image = mFogImage,
+            .formats = {VK_FORMAT_R16_SFLOAT},
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mRenderImageExtent.width,
+            .height = mRenderImageExtent.height,
+            .debugName = "FogImage",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateImage({
+            .image = mFogBlurredHorizontalImage,
+            .formats = {mFogImage.format},
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mRenderImageExtent.width,
+            .height = mRenderImageExtent.height,
+            .debugName = "FogBlurredHorizontalImage",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateImage({
+            .image = mFogBlurredVerticalImage,
+            .formats = {mFogImage.format},
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = mRenderImageExtent.width,
+            .height = mRenderImageExtent.height,
+            .debugName = "FogBlurredVerticalImage",
+        }))
+    {
+        return false;
+    }
+
     for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
     {
         if (!mDevice.CreateImage({
@@ -4219,6 +4417,9 @@ void Renderer::CleanupColorResources()
     {
         mDevice.DestroyImage(mFrame[i].resolvedRenderImage);
     }
+    mDevice.DestroyImage(mFogBlurredVerticalImage);
+    mDevice.DestroyImage(mFogBlurredHorizontalImage);
+    mDevice.DestroyImage(mFogImage);
     mDevice.DestroyImage(mAmbientOcclusionUpsampledImage);
     mDevice.DestroyImage(mAmbientOcclusionBlurredVerticalImage);
     mDevice.DestroyImage(mAmbientOcclusionBlurredHorizontalImage);

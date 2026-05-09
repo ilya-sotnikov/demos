@@ -15,13 +15,13 @@ PushConstantsSsaoBlur pushConstants;
 // Sigma = 3.0;
 static float GAUSS_WEIGHTS[] =
 {
-    0.106595f,
-    0.140367f,
-    0.165569f,
-    0.174938f,
-    0.165569f,
-    0.140367f,
-    0.106595f
+    0.106289,
+    0.140321,
+    0.165770,
+    0.175240,
+    0.165770,
+    0.140321,
+    0.106289,
 };
 
 // Bilateral depth-aware filter with 2 passes (vertical and horizontal).

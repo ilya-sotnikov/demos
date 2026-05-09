@@ -14,12 +14,14 @@ StructuredBuffer<DrawData> drawDataBuffer;
 StructuredBuffer<uint32_t> indexBuffer;
 StructuredBuffer<Vertex> vertexBuffer;
 StructuredBuffer<Material> materialBuffer;
+SamplerState linearSampler;
 SamplerState textureSampler;
 SamplerComparisonState shadowSampler;
 SamplerState shadowPcfJitterSampler;
 
 Texture2DArray<float> shadowImage;
 Texture3D shadowPcfJitterImage;
+Texture2D<float> fogImage;
 Texture2D<uint2> visibilityImage;
 Texture2D<float> ambientOcclusionImage;
 [[vk::image_format("rg16f")]]
@@ -80,7 +82,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const bool isCullLate = rawDrawIdx & 0x80000000;
     rawDrawIdx &= 0x7fffffff;
 
-    float2 pixelNdc = ((dtid.xy + 0.5) / renderImageSize) * 2.0 - 1.0;
+    float2 pixelNdc = ((dtid.xy + 0.5) * uniformBuffer.renderImageSizeInv) * 2.0 - 1.0;
     pixelNdc.y *= -1.0;
 
     if (rawDrawIdx == 0)
@@ -155,14 +157,14 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         posClip1,
         posClip2,
         pixelNdc,
-        2.0 / renderImageSize
+        2.0 * uniformBuffer.renderImageSizeInv
     );
 
     // TODO: will break on anything other than infinite reversed Z.
     const float pixelDepth = RENDERER_NEAR_PLANE * baryData.interpInvW;
 
-    const float4 pixelClip = mul(uniformBuffer.clipToWorld, float4(pixelNdc, pixelDepth, 1.0));
-    const float3 pixelWorld = pixelClip.xyz / pixelClip.w;
+    const float4 pixelWorldHomo = mul(uniformBuffer.clipToWorld, float4(pixelNdc, pixelDepth, 1.0));
+    const float3 pixelWorld = pixelWorldHomo.xyz / pixelWorldHomo.w;
 
     const float2 uv0 = float2(v0.u, v0.v);
     const float2 uv1 = float2(v1.u, v1.v);
@@ -295,7 +297,14 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float3 sunColor =
         CalcSky(-uniformBuffer.sunDirectionWorld, uniformBuffer.sunDirectionWorld);
 
-    float3 color = (ambient * (-uniformBuffer.sunDirectionWorld.y) + radianceOut * shadow) * sunColor;
+    const float fogFactor =
+        fogImage.SampleLevel(linearSampler, (dtid.xy + 0.5) * uniformBuffer.renderImageSizeInv, 0);
+
+    float3 color = (
+        ambient * (-uniformBuffer.sunDirectionWorld.y) +
+        radianceOut * shadow +
+        fogFactor
+    ) * sunColor;
 
     switch (uniformBuffer.renderMode)
     {

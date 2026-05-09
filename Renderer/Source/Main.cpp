@@ -280,6 +280,10 @@ int main()
 
     DirToYawPitchDeg(sunYaw, sunPitch, renderer.mUniformData.sunDirectionWorld);
 
+    // TODO: hardcoded initial value (not from gltf) to showcase fog.
+    sunYaw = 185.4f;
+    sunPitch = 57.38f;
+
     renderer.mEnableUI = true;
     renderer.mUniformData.taaEnable = 1;
     renderer.ChangeRenderMode(sRenderMode);

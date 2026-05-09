@@ -28,6 +28,7 @@ struct Renderer
     static_assert(sizeof(PushConstantsDepthReduce) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
     static_assert(sizeof(PushConstantsShadow) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
     static_assert(sizeof(PushConstantsSsaoBlur) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
+    static_assert(sizeof(PushConstantsFogBlur) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
 
     struct Frame
     {
@@ -57,6 +58,9 @@ struct Renderer
     Vulkan::Image mAmbientOcclusionUpsampledImage;
     Vulkan::Image mShadowImage;
     Vulkan::Image mShadowPcfJitterImage;
+    Vulkan::Image mFogImage;
+    Vulkan::Image mFogBlurredHorizontalImage;
+    Vulkan::Image mFogBlurredVerticalImage;
     VkImageView mShadowImageViewCascade[RENDERER_SHADOW_MAP_CASCADE_COUNT];
     VkExtent2D mRenderImageExtent;
     VkExtent2D mAmbientOcclusionImageExtent;
@@ -71,6 +75,8 @@ struct Renderer
     Vulkan::Pipeline mAmbientOcclusionPipeline;
     Vulkan::Pipeline mAmbientOcclusionBlurPipeline;
     Vulkan::Pipeline mAmbientOcclusionUpsamplePipeline;
+    Vulkan::Pipeline mFogPipeline;
+    Vulkan::Pipeline mBlurFogPipeline;
     Vulkan::Pipeline mShadowCullPipeline;
     Vulkan::Pipeline mShadowPipeline;
     Vulkan::Pipeline mVisibilityRenderPipeline;
@@ -156,6 +162,9 @@ private:
 
     void ShadowCullPass(VkCommandBuffer cb);
     void ShadowPass(VkCommandBuffer cb);
+
+    void FogPass(VkCommandBuffer cb);
+    void BlurFogPass(VkCommandBuffer cb, bool horizontal);
 
     void RenderPass(VkCommandBuffer cb);
     void TaaResolvePass(VkCommandBuffer cb);

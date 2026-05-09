@@ -162,6 +162,11 @@ struct PushConstantsSsaoBlur
     int32_t pixelOffsetY;
 };
 
+struct PushConstantsFogBlur
+{
+    uint32_t horizontal;
+};
+
 enum RenderPassFlagBits
 {
     RENDER_PASS_OPAQUE_BIT      = (1U << 0),
