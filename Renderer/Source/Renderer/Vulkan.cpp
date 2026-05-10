@@ -687,9 +687,7 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
 
     const char* const requiredDeviceExtensions[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_KHR_RAY_QUERY_EXTENSION_NAME,
-        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+        VK_EXT_MESH_SHADER_EXTENSION_NAME,
     };
 
     // Physical device.
@@ -792,8 +790,12 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
             }
 
             // Required features.
+            VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+            };
             VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+                .pNext = &meshShaderFeatures,
             };
             VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -849,11 +851,7 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
             supportsRequiredFeatures &= physicalDeviceFeatures.features.textureCompressionBC;
             supportsRequiredFeatures &= physicalDeviceFeatures.features.shaderInt16;
             supportsRequiredFeatures &= physicalDeviceFeatures.features.depthClamp;
-
-            // TODO: remove, use mesh shaders instead. Performance pitfalls of SV_PrimitiveID:
-            // Variable Rate Shading with Visibility Buffer Rendering, John Hable
-            // https://advances.realtimerendering.com/s2024/#hable
-            supportsRequiredFeatures &= physicalDeviceFeatures.features.geometryShader;
+            supportsRequiredFeatures &= meshShaderFeatures.meshShader;
 
             bool deviceOk = true;
             deviceOk &= supportsVulkan13;
@@ -892,8 +890,13 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
         Vulkan::QueueInfo computeQueueInfo
             = GetQueue(mPhysicalDevice, VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
 
+        VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+            .meshShader = VK_TRUE,
+        };
         VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+            .pNext = &meshShaderFeatures,
             .pushDescriptor = VK_TRUE,
         };
         VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
@@ -934,11 +937,6 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
             .pNext = &vulkanFeatures11,
             .features = {
-                // TODO: remove, use mesh shaders instead. Performance pitfalls of SV_PrimitiveID:
-                // Variable Rate Shading with Visibility Buffer Rendering, John Hable
-                // https://advances.realtimerendering.com/s2024/#hable
-                .geometryShader = VK_TRUE,
-
                 .sampleRateShading = VK_TRUE,
                 .multiDrawIndirect = VK_TRUE,
                 .depthClamp = VK_TRUE,

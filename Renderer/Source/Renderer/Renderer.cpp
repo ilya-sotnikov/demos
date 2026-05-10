@@ -633,8 +633,7 @@ bool Renderer::Init()
         if (!mDevice.CreateBuffer({
                 .buffer = mVertexBuffer,
                 .size = VEC_SIZE_BYTES(vertices),
-                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-                    | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
                     | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 .debugName = "VertexBuffer",
@@ -648,8 +647,7 @@ bool Renderer::Init()
         if (!mDevice.CreateBuffer({
                 .buffer = mIndexBuffer,
                 .size = VEC_SIZE_BYTES(indices),
-                .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-                    | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
                     | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 .debugName = "IndexBuffer",

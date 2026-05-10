@@ -119,6 +119,9 @@ static void LoadGeometry(
     std::vector<Vertex> primVertices;
     std::vector<u32> primIndices;
     std::vector<Vec3> primPositions;
+    std::vector<meshopt_Meshlet> primMeshlets;
+    std::vector<u32> primMeshletVertices;
+    std::vector<u8> primMeshletTriangles;
     std::vector<u32> remap;
 
     for (cgltf_size mi = 0; mi < cgltfData->meshes_count; ++mi)
@@ -272,6 +275,54 @@ static void LoadGeometry(
                 primVertices.data(),
                 VEC_SIZE_BYTES(primVertices)
             );
+
+            const size_t MESHLET_MAX_VERTICES = 64;
+            const size_t MESHLET_MAX_TRIANGLES = 126;
+
+            const size_t maxMeshlets = meshopt_buildMeshletsBound(
+                primIndexCount,
+                MESHLET_MAX_VERTICES,
+                MESHLET_MAX_TRIANGLES
+            );
+
+            primMeshlets.resize(maxMeshlets);
+            primMeshletVertices.resize(maxMeshlets * MESHLET_MAX_VERTICES);
+            primMeshletTriangles.resize(maxMeshlets * MESHLET_MAX_TRIANGLES * 3);
+
+            const size_t meshletCount = meshopt_buildMeshlets(
+                primMeshlets.data(),
+                primMeshletVertices.data(),
+                primMeshletTriangles.data(),
+                primIndices.data(),
+                primIndices.size(),
+                reinterpret_cast<f32*>(primPositions.data()),
+                primPositions.size(),
+                sizeof(primPositions[0]),
+                MESHLET_MAX_VERTICES,
+                MESHLET_MAX_TRIANGLES,
+                0.0f
+            );
+
+            const meshopt_Meshlet& primLastMeshlet = primMeshlets[meshletCount - 1];
+
+            for (size_t i = 0; i < meshletCount; ++i)
+            {
+                const meshopt_Meshlet& m = primMeshlets[i];
+                meshopt_optimizeMeshlet(
+                    &primMeshletVertices[m.vertex_offset],
+                    &primMeshletTriangles[m.triangle_offset],
+                    m.triangle_count,
+                    m.vertex_count
+                );
+            }
+
+            primMeshletVertices.resize(
+                primLastMeshlet.vertex_offset + primLastMeshlet.vertex_count
+            );
+            primMeshletTriangles.resize(
+                primLastMeshlet.triangle_offset + primLastMeshlet.triangle_count
+            );
+            primMeshlets.resize(meshletCount);
 
             const VkDrawIndexedIndirectCommand drawCmd = {
                 .indexCount = u32(primIndexCount),

@@ -213,7 +213,7 @@ foreach(shader ${SHADER_SOURCE_FILES})
             -E Main
             -fspv-target-env=vulkan1.3
             -fspv-preserve-bindings
-            #-fspv-extension=SPV_EXT_mesh_shader
+            -fspv-extension=SPV_EXT_mesh_shader
             -fspv-extension=SPV_EXT_descriptor_indexing
             -Fo ${SPIRV} ${shader}
         DEPENDS ${shader} ${SHADER_INCLUDE_FILES}

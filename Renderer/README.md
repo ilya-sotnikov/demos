@@ -37,6 +37,7 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 ## Frame overview (passes)
 
 - (G) is graphics (vert/frag)
+- (M) is mesh (mesh/frag)
 - (C) is compute (comp)
 - branches represent async compute
 - debug passes are not shown
@@ -44,13 +45,13 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 ```
 CullEarly (C)
   |
-VisBufEarly (G)
+VisBufEarly (M)
   |
 DepthReduce (C)
   |
 CullLate (C)
   |
-VisBufLate (G)
+VisBufLate (M)
   |
   +-------------------------+
   |                         |
