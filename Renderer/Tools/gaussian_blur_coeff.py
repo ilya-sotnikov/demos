@@ -3,7 +3,7 @@ import math
 # For a separable filter (horizontal/vertical).
 
 SIGMA = 3.0
-KERNEL_SIZE = 3
+KERNEL_RADIUS = 3
 
 assert SIGMA >= 1.0, "The error is probably too big for small sigmas, don't recommend using it."
 # TODO: this should be better for SIGMA < 1.0:
@@ -11,7 +11,7 @@ assert SIGMA >= 1.0, "The error is probably too big for small sigmas, don't reco
 
 coeffs = []
 coeff_sum = 0.0
-for i in range(-KERNEL_SIZE, KERNEL_SIZE + 1):
+for i in range(-KERNEL_RADIUS, KERNEL_RADIUS + 1):
     c = math.exp(-i * i / (2.0 * SIGMA * SIGMA))
     coeffs.append(c)
     coeff_sum += c

@@ -146,8 +146,9 @@ set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/SSAO.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/BlurSSAO.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/UpsampleSSAO.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/ShadowEsm.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/BlurShadowEsm.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Fog.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/BlurFog.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityRender.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/ForwardRender.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/ForwardRender.frag.hlsl
@@ -205,7 +206,7 @@ foreach(shader ${SHADER_SOURCE_FILES})
         OUTPUT ${SPIRV}
         COMMAND ${DXC_EXECUTABLE}
             -spirv
-            -O3 #-Zi -fspv-debug=vulkan-with-source
+            -O3 -Zi -fspv-debug=vulkan-with-source
             -T ${SHADER_TYPE}_6_6
             -fvk-use-scalar-layout
             -enable-16bit-types

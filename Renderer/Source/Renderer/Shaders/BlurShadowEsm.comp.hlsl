@@ -1,0 +1,65 @@
+#include "Common.hlsli"
+
+Texture2D<float> inImage;
+RWTexture2D<float> outImage;
+
+[[vk::push_constant]]
+PushConstantsShadowEsmBlur pushConstants;
+
+// Sigma = 4.0;
+static float GAUSS_WEIGHTS[] =
+{
+    0.054884,
+    0.072709,
+    0.090488,
+    0.105791,
+    0.116189,
+    0.119877,
+    0.116189,
+    0.105791,
+    0.090488,
+    0.072709,
+    0.054884,
+};
+
+// static float GAUSS_WEIGHTS[] =
+// {
+//     0.106289,
+//     0.140321,
+//     0.165770,
+//     0.175240,
+//     0.165770,
+//     0.140321,
+//     0.106289,
+// };
+
+// Gaussian blur with 2 passes (vertical and horizontal).
+[numthreads(RENDERER_SHADOW_ESM_BLUR_WORKGROUP_SIZE_X, RENDERER_SHADOW_ESM_BLUR_WORKGROUP_SIZE_Y, 1)]
+void Main(uint3 dtid : SV_DispatchThreadID)
+{
+    const uint size = RENDERER_SHADOW_MAP_DIMENSIONS / 4;
+
+    if (dtid.x >= size || dtid.y >= size)
+    {
+        return;
+    }
+
+    float result = 0.0;
+    float weightSum = 0.0;
+
+    const int KERNEL_SIZE = 5;
+
+    // 11 samples in horizontal and vertical direction (separate passes).
+    for (int i = -KERNEL_SIZE; i <= KERNEL_SIZE; ++i)
+    {
+        int2 sampleCoord = dtid.xy + select(pushConstants.horizontal == 1, int2(i, 0),  int2(0, i));
+        sampleCoord = clamp(sampleCoord, int2(0, 0), size - 1);
+
+        const float weight = GAUSS_WEIGHTS[KERNEL_SIZE + i];
+
+        result += weight * inImage[sampleCoord];
+        weightSum += weight;
+    }
+
+    outImage[dtid.xy] = result / weightSum;
+}

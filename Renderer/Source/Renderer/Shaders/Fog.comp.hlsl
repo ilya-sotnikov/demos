@@ -2,10 +2,11 @@
 #include "Math.hlsli"
 
 ConstantBuffer<UniformData> uniformBuffer;
-
 SamplerState nearestSampler;
+SamplerState linearSampler;
+
 Texture2D<float> depthImage;
-Texture2DArray<float> shadowImage;
+Texture2D<float> shadowImage;
 [[vk::image_format("r16f")]]
 RWTexture2D<float> outImage;
 
@@ -47,11 +48,9 @@ float CalcShadow(float3 posWorld)
 
     if ((minShadowCoord >= 0.0) && (maxShadowCoord <= 1.0))
     {
-        shadow = shadowImage.SampleLevel(
-            nearestSampler,
-            float3(posShadow.xy, RENDERER_SHADOW_MAP_CASCADE_COUNT - 1),
-            0
-        ) < posShadow.z ? 1.0 : 0.0;
+        const float receiver = exp(-posShadow.z * RENDERER_ESM_EXPONENT);
+        const float occluder = shadowImage.SampleLevel(linearSampler, posShadow.xy, 0);
+        shadow = saturate(1.0 - occluder * receiver);
     }
 
     return shadow;

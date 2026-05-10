@@ -1343,8 +1343,9 @@ void Renderer::CleanupPipelines()
 {
     mDevice.DestroyPipeline(mShadowCullPipeline);
     mDevice.DestroyPipeline(mShadowPipeline);
-    mDevice.DestroyPipeline(mBlurFogPipeline);
     mDevice.DestroyPipeline(mFogPipeline);
+    mDevice.DestroyPipeline(mBlurShadowEsmPipeline);
+    mDevice.DestroyPipeline(mShadowEsmPipeline);
     mDevice.DestroyPipeline(mAmbientOcclusionUpsamplePipeline);
     mDevice.DestroyPipeline(mAmbientOcclusionBlurPipeline);
     mDevice.DestroyPipeline(mAmbientOcclusionPipeline);
@@ -1555,6 +1556,15 @@ bool Renderer::RecompilePipelines()
     }
 
     if (!mDevice.CreateComputePipeline({
+            .pipeline = mShadowEsmPipeline,
+            .shaderPath = "ShadowEsm.comp.hlsl.spv",
+            .debugName = "ShadowEsmPass",
+        }))
+    {
+        return false;
+    }
+
+    if (!mDevice.CreateComputePipeline({
             .pipeline = mFogPipeline,
             .shaderPath = "Fog.comp.hlsl.spv",
             .debugName = "FogPass",
@@ -1564,9 +1574,9 @@ bool Renderer::RecompilePipelines()
     }
 
     if (!mDevice.CreateComputePipeline({
-            .pipeline = mBlurFogPipeline,
-            .shaderPath = "BlurFog.comp.hlsl.spv",
-            .debugName = "BlurFogPass",
+            .pipeline = mBlurShadowEsmPipeline,
+            .shaderPath = "BlurShadowEsm.comp.hlsl.spv",
+            .debugName = "BlurShadowEsmPass",
         }))
     {
         return false;
@@ -2271,6 +2281,80 @@ void Renderer::ShadowPass(VkCommandBuffer cb)
     }
 }
 
+void Renderer::ShadowEsmPass(VkCommandBuffer cb)
+{
+    DEBUG_ASSERT(cb);
+
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, mShadowEsmPipeline.pipeline);
+
+    Vulkan::CmdPushDescriptors(
+        cb,
+        mShadowEsmPipeline,
+        {
+            mNearestSampler,
+            {mShadowImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mShadowEsmImage.view, VK_IMAGE_LAYOUT_GENERAL},
+        }
+    );
+
+    vkCmdDispatch(
+        cb,
+        GetDispatchSize(RENDERER_SHADOW_MAP_DIMENSIONS, RENDERER_SHADOW_ESM_WORKGROUP_SIZE_X),
+        GetDispatchSize(RENDERER_SHADOW_MAP_DIMENSIONS, RENDERER_SHADOW_ESM_WORKGROUP_SIZE_Y),
+        1
+    );
+}
+
+void Renderer::BlurShadowEsmPass(VkCommandBuffer cb, bool horizontal)
+{
+    DEBUG_ASSERT(cb);
+
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, mBlurShadowEsmPipeline.pipeline);
+
+    const VkImageLayout inLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    const Vulkan::DescriptorInfo inImage = horizontal
+        ? Vulkan::DescriptorInfo{mShadowEsmImage.view, inLayout}
+        : Vulkan::DescriptorInfo{mShadowEsmBlurredHorizontalImage.view, inLayout};
+
+    const VkImageLayout outLayout = VK_IMAGE_LAYOUT_GENERAL;
+    const Vulkan::DescriptorInfo outImage = horizontal
+        ? Vulkan::DescriptorInfo{mShadowEsmBlurredHorizontalImage.view, outLayout}
+        : Vulkan::DescriptorInfo{mShadowEsmBlurredVerticalImage.view, outLayout};
+
+    Vulkan::CmdPushDescriptors(
+        cb,
+        mBlurShadowEsmPipeline,
+        {
+            inImage,
+            outImage,
+        }
+    );
+
+    const PushConstantsShadowEsmBlur pushConstants = {.horizontal = horizontal};
+
+    vkCmdPushConstants(
+        cb,
+        mBlurShadowEsmPipeline.layout,
+        VK_SHADER_STAGE_ALL,
+        0,
+        sizeof(pushConstants),
+        &pushConstants
+    );
+
+    vkCmdDispatch(
+        cb,
+        GetDispatchSize(
+            RENDERER_SHADOW_MAP_DIMENSIONS / 4,
+            RENDERER_SHADOW_ESM_BLUR_WORKGROUP_SIZE_X
+        ),
+        GetDispatchSize(
+            RENDERER_SHADOW_MAP_DIMENSIONS / 4,
+            RENDERER_SHADOW_ESM_BLUR_WORKGROUP_SIZE_Y
+        ),
+        1
+    );
+}
+
 void Renderer::FogPass(VkCommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
@@ -2283,61 +2367,17 @@ void Renderer::FogPass(VkCommandBuffer cb)
         {
             mFrame[mFrameIdx].uniformBuffer.buffer,
             mNearestSampler,
+            mLinearSampler,
             {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mShadowImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mShadowEsmBlurredVerticalImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mFogImage.view, VK_IMAGE_LAYOUT_GENERAL},
         }
     );
 
     vkCmdDispatch(
         cb,
-        GetDispatchSize(mRenderImageExtent.width, RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_X),
-        GetDispatchSize(mRenderImageExtent.height, RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_Y),
-        1
-    );
-}
-
-void Renderer::BlurFogPass(VkCommandBuffer cb, bool horizontal)
-{
-    DEBUG_ASSERT(cb);
-
-    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, mBlurFogPipeline.pipeline);
-
-    const VkImageLayout inLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    const Vulkan::DescriptorInfo inImage = horizontal
-        ? Vulkan::DescriptorInfo{mFogImage.view, inLayout}
-        : Vulkan::DescriptorInfo{mFogBlurredHorizontalImage.view, inLayout};
-
-    const VkImageLayout outLayout = VK_IMAGE_LAYOUT_GENERAL;
-    const Vulkan::DescriptorInfo outImage = horizontal
-        ? Vulkan::DescriptorInfo{mFogBlurredHorizontalImage.view, outLayout}
-        : Vulkan::DescriptorInfo{mFogBlurredVerticalImage.view, outLayout};
-
-    Vulkan::CmdPushDescriptors(
-        cb,
-        mBlurFogPipeline,
-        {
-            mFrame[mFrameIdx].uniformBuffer.buffer,
-            inImage,
-            outImage,
-        }
-    );
-
-    const PushConstantsFogBlur pushConstants = {.horizontal = horizontal};
-
-    vkCmdPushConstants(
-        cb,
-        mBlurFogPipeline.layout,
-        VK_SHADER_STAGE_ALL,
-        0,
-        sizeof(pushConstants),
-        &pushConstants
-    );
-
-    vkCmdDispatch(
-        cb,
-        GetDispatchSize(mRenderImageExtent.width, RENDERER_FOG_BLUR_WORKGROUP_SIZE_X),
-        GetDispatchSize(mRenderImageExtent.height, RENDERER_FOG_BLUR_WORKGROUP_SIZE_Y),
+        GetDispatchSize(mRenderImageExtent.width, RENDERER_FOG_WORKGROUP_SIZE_X),
+        GetDispatchSize(mRenderImageExtent.height, RENDERER_FOG_WORKGROUP_SIZE_Y),
         1
     );
 }
@@ -2445,7 +2485,7 @@ void Renderer::RenderPass(VkCommandBuffer cb)
             mShadowPcfJitterSampler,
             {mShadowImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mShadowPcfJitterImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mFogBlurredVerticalImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {mFogImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mAmbientOcclusionUpsampledImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {mVelocityImage.view, VK_IMAGE_LAYOUT_GENERAL},
@@ -3491,6 +3531,93 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
             ),
+            Vulkan::ImageMemoryBarrier(
+                mShadowEsmImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
+        }
+    );
+
+    ShadowEsmPass(cbEnd);
+
+    Vulkan::CmdImageMemoryBarrier(
+        cbEnd,
+        {
+            Vulkan::ImageMemoryBarrier(
+                mShadowEsmImage.image,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            ),
+            Vulkan::ImageMemoryBarrier(
+                mShadowEsmBlurredHorizontalImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
+        }
+    );
+
+    BlurShadowEsmPass(cbEnd, true);
+
+    Vulkan::CmdImageMemoryBarrier(
+        cbEnd,
+        {
+            Vulkan::ImageMemoryBarrier(
+                mShadowEsmBlurredHorizontalImage.image,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            ),
+            Vulkan::ImageMemoryBarrier(
+                mShadowEsmBlurredVerticalImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
+        }
+    );
+
+    BlurShadowEsmPass(cbEnd, false);
+
+    Vulkan::CmdImageMemoryBarrier(
+        cbEnd,
+        {
+            Vulkan::ImageMemoryBarrier(
+                mShadowEsmBlurredVerticalImage.image,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            ),
+            Vulkan::ImageMemoryBarrier(
+                mFogImage.image,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            ),
         }
     );
 
@@ -3501,58 +3628,6 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
         {
             Vulkan::ImageMemoryBarrier(
                 mFogImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mFogBlurredHorizontalImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
-    );
-
-    BlurFogPass(cbEnd, true);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cbEnd,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mFogBlurredHorizontalImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mFogBlurredVerticalImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
-    );
-
-    BlurFogPass(cbEnd, false);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cbEnd,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mFogBlurredVerticalImage.image,
                 VK_IMAGE_LAYOUT_GENERAL,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -4343,6 +4418,20 @@ bool Renderer::CreateColorResources()
         return false;
     }
 
+    const int SHADOW_ESM_DIMENSIONS = RENDERER_SHADOW_MAP_DIMENSIONS / 4;
+
+    if (!mDevice.CreateImage({
+            .image = mShadowEsmImage,
+            .formats = {VK_FORMAT_R32_SFLOAT},
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .width = SHADOW_ESM_DIMENSIONS,
+            .height = SHADOW_ESM_DIMENSIONS,
+            .debugName = "ShadowEsmImage",
+        }))
+    {
+        return false;
+    }
+
     if (!mDevice.CreateImage({
             .image = mFogImage,
             .formats = {VK_FORMAT_R16_SFLOAT},
@@ -4356,24 +4445,24 @@ bool Renderer::CreateColorResources()
     }
 
     if (!mDevice.CreateImage({
-            .image = mFogBlurredHorizontalImage,
-            .formats = {mFogImage.format},
+            .image = mShadowEsmBlurredHorizontalImage,
+            .formats = {mShadowEsmImage.format},
             .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            .width = mRenderImageExtent.width,
-            .height = mRenderImageExtent.height,
-            .debugName = "FogBlurredHorizontalImage",
+            .width = SHADOW_ESM_DIMENSIONS,
+            .height = SHADOW_ESM_DIMENSIONS,
+            .debugName = "ShadowEsmBlurredHorizontalImage",
         }))
     {
         return false;
     }
 
     if (!mDevice.CreateImage({
-            .image = mFogBlurredVerticalImage,
-            .formats = {mFogImage.format},
+            .image = mShadowEsmBlurredVerticalImage,
+            .formats = {mShadowEsmImage.format},
             .usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            .width = mRenderImageExtent.width,
-            .height = mRenderImageExtent.height,
-            .debugName = "FogBlurredVerticalImage",
+            .width = SHADOW_ESM_DIMENSIONS,
+            .height = SHADOW_ESM_DIMENSIONS,
+            .debugName = "ShadowEsmBlurredVerticalImage",
         }))
     {
         return false;
@@ -4417,9 +4506,10 @@ void Renderer::CleanupColorResources()
     {
         mDevice.DestroyImage(mFrame[i].resolvedRenderImage);
     }
-    mDevice.DestroyImage(mFogBlurredVerticalImage);
-    mDevice.DestroyImage(mFogBlurredHorizontalImage);
+    mDevice.DestroyImage(mShadowEsmBlurredVerticalImage);
+    mDevice.DestroyImage(mShadowEsmBlurredHorizontalImage);
     mDevice.DestroyImage(mFogImage);
+    mDevice.DestroyImage(mShadowEsmImage);
     mDevice.DestroyImage(mAmbientOcclusionUpsampledImage);
     mDevice.DestroyImage(mAmbientOcclusionBlurredVerticalImage);
     mDevice.DestroyImage(mAmbientOcclusionBlurredHorizontalImage);

@@ -162,7 +162,7 @@ struct PushConstantsSsaoBlur
     int32_t pixelOffsetY;
 };
 
-struct PushConstantsFogBlur
+struct PushConstantsShadowEsmBlur
 {
     uint32_t horizontal;
 };
