@@ -17,7 +17,7 @@ struct Renderer
     static constexpr int MAX_DRAW_CALLS = 4096;
     static constexpr u32 MAX_DESCRIPTOR_COUNT = 16384;
     static constexpr int UNIFORM_BUFFER_MAX_SIZE_BYTES = 16384;
-    static constexpr int PUSH_CONSTANTS_MAX_SIZE_BYTES = 16384;
+    static constexpr int PUSH_CONSTANTS_MAX_SIZE_BYTES = 128;
     // NOTE: can set to 2 to torture my GPU since it's powerful but my monitor is 1080p.
     // TODO: UI toggle?
     static constexpr int RENDER_SCALE = 1;
