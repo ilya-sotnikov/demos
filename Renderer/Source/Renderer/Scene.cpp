@@ -276,6 +276,7 @@ static void LoadGeometry(
                 VEC_SIZE_BYTES(primVertices)
             );
 
+            // TODO: measure average count, maybe 64/96 is better or something.
             const size_t MESHLET_MAX_VERTICES = 64;
             const size_t MESHLET_MAX_TRIANGLES = 126;
 

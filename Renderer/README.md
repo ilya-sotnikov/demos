@@ -36,9 +36,9 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 
 ## Frame overview (passes)
 
-- (G) is graphics (vert/frag)
-- (M) is mesh (mesh/frag)
-- (C) is compute (comp)
+- (V) is vert + frag
+- (M) is mesh + frag
+- (C) is comp
 - branches represent async compute
 - debug passes are not shown
 
@@ -57,7 +57,7 @@ VisBufLate (M)
   |                         |
 CsmCull (C)               DepthViewQuarterRes (C)
   |                         |
-CSM (C)                   SSAO (C)
+CSM (M)                   SSAO (C)
   |                         |
   +--------------------+  BlurX (C)
   |                    |    |
@@ -71,7 +71,7 @@ Render (C)
   |
 TaaResolve (C)
   |
-Fullscreen (G)
+Fullscreen (V)
 ```
 
 ## Build and run
