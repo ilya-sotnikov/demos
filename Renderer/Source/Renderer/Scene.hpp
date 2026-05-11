@@ -28,6 +28,9 @@ struct MeshPrimitive
 
 bool LoadScene(
     std::vector<Vertex>& vertices,
+    std::vector<u32>& indices,
+    std::vector<MeshPrimitive>& meshPrimitives,
+    std::vector<VkDrawIndexedIndirectCommand>& drawCmds,
     std::vector<DrawData>& drawData,
     std::vector<Material>& materials,
     std::vector<std::string>& texturePaths,

@@ -101,14 +101,22 @@ struct Vertex
     HALF u, v;
 };
 
+// NOTE: it seems that dxc doesn't even support uint8_t natively (also a HLSL spec issue):
+// https://github.com/microsoft/DirectXShaderCompiler/issues/4637
+// https://github.com/microsoft/hlsl-specs/issues/337
+// https://github.com/microsoft/hlsl-specs/pull/538
 struct Meshlet
 {
     uint32_t vertexOffset;
     uint32_t triangleOffset;
-    uint8_t vertexCount;
-    uint8_t triangleCount;
-    uint8_t padding0;
-    uint8_t padding1;
+    uint16_t vertexCount;
+    uint16_t triangleCount;
+};
+
+struct MeshTaskCommand
+{
+    uint32_t taskOffset;
+    uint32_t taskCount;
 };
 
 struct Material

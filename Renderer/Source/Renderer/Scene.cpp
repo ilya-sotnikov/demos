@@ -104,6 +104,7 @@ static void LoadGeometry(
     std::vector<u32>& meshletVertices,
     std::vector<u8>& meshletTriangles,
     std::vector<Meshlet>& meshlets,
+    std::vector<MeshTaskCommand>& meshTaskCommands,
     const cgltf_data* cgltfData
 )
 {
@@ -111,6 +112,7 @@ static void LoadGeometry(
     DEBUG_ASSERT(meshletVertices.empty());
     DEBUG_ASSERT(meshletTriangles.empty());
     DEBUG_ASSERT(meshlets.empty());
+    DEBUG_ASSERT(meshTaskCommands.empty());
     DEBUG_ASSERT(cgltfData);
 
     std::vector<f32> tmp;
@@ -125,8 +127,6 @@ static void LoadGeometry(
     for (cgltf_size mi = 0; mi < cgltfData->meshes_count; ++mi)
     {
         const cgltf_mesh& mesh = cgltfData->meshes[mi];
-
-        // meshes.push_back({drawCmds.size(), mesh.primitives_count});
 
         for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
         {
@@ -319,11 +319,25 @@ static void LoadGeometry(
             );
             primMeshlets.resize(primMeshletCount);
 
-            const size_t meshletCount = meshlets.size();
-            meshlets.resize(meshletCount + primMeshletCount);
-
             const size_t meshletVerticesCount = meshletVertices.size();
             const size_t meshletTrianglesCount = meshletTriangles.size();
+
+            meshletVertices.resize(meshletVerticesCount + primMeshletVertices.size());
+            memcpy(
+                meshletVertices.data() + meshletVerticesCount,
+                primMeshletVertices.data(),
+                VEC_SIZE_BYTES(primMeshletVertices)
+            );
+
+            meshletTriangles.resize(meshletTrianglesCount + primMeshletTriangles.size());
+            memcpy(
+                meshletTriangles.data() + meshletTrianglesCount,
+                primMeshletTriangles.data(),
+                VEC_SIZE_BYTES(primMeshletTriangles)
+            );
+
+            const size_t meshletCount = meshlets.size();
+            meshlets.resize(meshletCount + primMeshletCount);
 
             for (size_t i = 0; i < primMeshletCount; ++i)
             {
@@ -336,52 +350,85 @@ static void LoadGeometry(
                     .triangleCount = u8(m.triangle_count),
                 };
             }
+
+            const MeshTaskCommand cmd = {
+                .taskOffset = u32(meshletCount),
+                .taskCount = u32(primMeshletCount),
+            };
+            meshTaskCommands.push_back(cmd);
         }
     }
 
-    for (size_t mi = 0; mi < meshlets.size(); ++mi)
-    { }
-
-    for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
+    for (size_t ti = 0; ti < meshTaskCommands.size(); ++ti)
     {
+        const MeshTaskCommand cmd = meshTaskCommands[ti];
+
         Vec3 sphereCenter{};
+        u32 vertexCount = 0;
 
-        const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
-
-        for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
+        for (size_t mi = 0; mi < cmd.taskCount; ++mi)
         {
-            // TODO: implement a better algorithm.
-            sphereCenter += Vec3{
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].py),
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].pz)
-            };
+            const Meshlet& m = meshlets[cmd.taskOffset + mi];
+
+            for (size_t vi = 0; vi < m.vertexCount; ++vi)
+            {
+                const u32 vertexIdx = meshletVertices[m.vertexOffset + vi];
+
+                sphereCenter += Vec3{
+                    meshopt_dequantizeHalf(vertices[vertexIdx].px),
+                    meshopt_dequantizeHalf(vertices[vertexIdx].py),
+                    meshopt_dequantizeHalf(vertices[vertexIdx].pz)
+                };
+            }
+
+            vertexCount += m.vertexCount;
         }
 
-        sphereCenter /= float(meshPrimitives[pi].vertexCount);
+        sphereCenter /= f32(vertexCount);
 
-        meshPrimitives[pi].sphereCenter = sphereCenter;
+        Print(sphereCenter);
     }
 
-    for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
-    {
-        f32 sphereRadius = 0.0f;
-
-        const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
-
-        for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
-        {
-            // TODO: implement a better algorithm.
-            const Vec3 v = Vec3{
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].py),
-                meshopt_dequantizeHalf(vertices[vertexOffset + vi].pz)
-            };
-            sphereRadius = Max(sphereRadius, Magnitude(meshPrimitives[pi].sphereCenter - v));
-        }
-
-        meshPrimitives[pi].sphereRadius = sphereRadius;
-    }
+    // for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
+    // {
+    //     Vec3 sphereCenter{};
+    //
+    //     const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
+    //
+    //     for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
+    //     {
+    //         // TODO: implement a better algorithm.
+    //         sphereCenter += Vec3{
+    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
+    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].py),
+    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].pz)
+    //         };
+    //     }
+    //
+    //     sphereCenter /= float(meshPrimitives[pi].vertexCount);
+    //
+    //     meshPrimitives[pi].sphereCenter = sphereCenter;
+    // }
+    //
+    // for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
+    // {
+    //     f32 sphereRadius = 0.0f;
+    //
+    //     const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
+    //
+    //     for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
+    //     {
+    //         // TODO: implement a better algorithm.
+    //         const Vec3 v = Vec3{
+    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
+    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].py),
+    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].pz)
+    //         };
+    //         sphereRadius = Max(sphereRadius, Magnitude(meshPrimitives[pi].sphereCenter - v));
+    //     }
+    //
+    //     meshPrimitives[pi].sphereRadius = sphereRadius;
+    // }
 }
 
 static void LoadMaterials(
@@ -585,8 +632,19 @@ bool LoadScene(
     }
 
     std::vector<Mesh> meshes;
+    std::vector<u32> meshletVertices;
+    std::vector<u8> meshletTriangles;
+    std::vector<Meshlet> meshlets;
+    std::vector<MeshTaskCommand> meshTaskCommands;
 
-    LoadGeometry(vertices, indices, meshes, meshPrimitives, drawCmds, cgltfData);
+    LoadGeometry(
+        vertices,
+        meshletVertices,
+        meshletTriangles,
+        meshlets,
+        meshTaskCommands,
+        cgltfData
+    );
 
     DEBUG_ASSERT(meshPrimitives.size() == drawCmds.size());
 
@@ -595,6 +653,8 @@ bool LoadScene(
     LoadTexturePaths(texturePaths, gltfPath, cgltfData);
 
     // TODO: scene cache.
+
+    exit(1);
 
     return true;
 }
