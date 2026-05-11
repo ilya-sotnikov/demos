@@ -101,6 +101,16 @@ struct Vertex
     HALF u, v;
 };
 
+struct Meshlet
+{
+    uint32_t vertexOffset;
+    uint32_t triangleOffset;
+    uint8_t vertexCount;
+    uint8_t triangleCount;
+    uint8_t padding0;
+    uint8_t padding1;
+};
+
 struct Material
 {
     uint32_t albedoTexIdx;

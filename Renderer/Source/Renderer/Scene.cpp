@@ -101,18 +101,16 @@ static void DecomposeTransform(
 
 static void LoadGeometry(
     std::vector<Vertex>& vertices,
-    std::vector<u32>& indices,
-    std::vector<Mesh>& meshes,
-    std::vector<MeshPrimitive>& meshPrimitives,
-    std::vector<VkDrawIndexedIndirectCommand>& drawCmds,
+    std::vector<u32>& meshletVertices,
+    std::vector<u8>& meshletTriangles,
+    std::vector<Meshlet>& meshlets,
     const cgltf_data* cgltfData
 )
 {
     DEBUG_ASSERT(vertices.empty());
-    DEBUG_ASSERT(indices.empty());
-    DEBUG_ASSERT(meshes.empty());
-    DEBUG_ASSERT(meshPrimitives.empty());
-    DEBUG_ASSERT(drawCmds.empty());
+    DEBUG_ASSERT(meshletVertices.empty());
+    DEBUG_ASSERT(meshletTriangles.empty());
+    DEBUG_ASSERT(meshlets.empty());
     DEBUG_ASSERT(cgltfData);
 
     std::vector<f32> tmp;
@@ -128,7 +126,7 @@ static void LoadGeometry(
     {
         const cgltf_mesh& mesh = cgltfData->meshes[mi];
 
-        meshes.push_back({drawCmds.size(), mesh.primitives_count});
+        // meshes.push_back({drawCmds.size(), mesh.primitives_count});
 
         for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
         {
@@ -213,7 +211,6 @@ static void LoadGeometry(
                 }
             }
 
-            const size_t indexCount = indices.size();
             const size_t primIndexCount = prim.indices->count;
 
             primIndices.resize(primIndexCount);
@@ -266,9 +263,6 @@ static void LoadGeometry(
                 sizeof(primVertices[0])
             );
 
-            indices.resize(indexCount + primIndexCount);
-            memcpy(indices.data() + indexCount, primIndices.data(), VEC_SIZE_BYTES(primIndices));
-
             vertices.resize(vertexCount + uniqueVertexCount);
             memcpy(
                 vertices.data() + vertexCount,
@@ -290,7 +284,7 @@ static void LoadGeometry(
             primMeshletVertices.resize(maxMeshlets * MESHLET_MAX_VERTICES);
             primMeshletTriangles.resize(maxMeshlets * MESHLET_MAX_TRIANGLES * 3);
 
-            const size_t meshletCount = meshopt_buildMeshlets(
+            const size_t primMeshletCount = meshopt_buildMeshlets(
                 primMeshlets.data(),
                 primMeshletVertices.data(),
                 primMeshletTriangles.data(),
@@ -304,9 +298,9 @@ static void LoadGeometry(
                 0.0f
             );
 
-            const meshopt_Meshlet& primLastMeshlet = primMeshlets[meshletCount - 1];
+            const meshopt_Meshlet& primLastMeshlet = primMeshlets[primMeshletCount - 1];
 
-            for (size_t i = 0; i < meshletCount; ++i)
+            for (size_t i = 0; i < primMeshletCount; ++i)
             {
                 const meshopt_Meshlet& m = primMeshlets[i];
                 meshopt_optimizeMeshlet(
@@ -323,26 +317,30 @@ static void LoadGeometry(
             primMeshletTriangles.resize(
                 primLastMeshlet.triangle_offset + primLastMeshlet.triangle_count
             );
-            primMeshlets.resize(meshletCount);
+            primMeshlets.resize(primMeshletCount);
 
-            const VkDrawIndexedIndirectCommand drawCmd = {
-                .indexCount = u32(primIndexCount),
-                .instanceCount = 1,
-                .firstIndex = u32(indexCount),
-                .vertexOffset = i32(vertexCount),
-                .firstInstance = 0,
-            };
-            drawCmds.push_back(drawCmd);
+            const size_t meshletCount = meshlets.size();
+            meshlets.resize(meshletCount + primMeshletCount);
 
-            const MeshPrimitive meshPrimitive = {
-                .vertexCount = uniqueVertexCount,
-                .meshIdx = mi,
-                .material = prim.material,
-            };
+            const size_t meshletVerticesCount = meshletVertices.size();
+            const size_t meshletTrianglesCount = meshletTriangles.size();
 
-            meshPrimitives.push_back(meshPrimitive);
+            for (size_t i = 0; i < primMeshletCount; ++i)
+            {
+                const meshopt_Meshlet& m = primMeshlets[i];
+
+                meshlets[meshletCount + i] = {
+                    .vertexOffset = u32(m.vertex_offset + meshletVerticesCount),
+                    .triangleOffset = u32(m.triangle_offset + meshletTrianglesCount),
+                    .vertexCount = u8(m.vertex_count),
+                    .triangleCount = u8(m.triangle_count),
+                };
+            }
         }
     }
+
+    for (size_t mi = 0; mi < meshlets.size(); ++mi)
+    { }
 
     for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
     {

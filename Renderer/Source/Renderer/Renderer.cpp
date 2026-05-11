@@ -948,6 +948,8 @@ bool Renderer::StartNewFrame()
 {
     DEBUG_ASSERT(!mNewFrameStarted);
 
+    // TODO: should probably handle mRenderingPaused.
+
     Frame& frame = mFrame[mFrameIdx];
 
     VK_CHECK(vkWaitForFences(mDevice.mDevice, 1, &frame.fenceQueueSubmit, VK_TRUE, 1'000'000'000));
