@@ -290,7 +290,7 @@ static void LoadGeometry(
                 primMeshletTriangles.data(),
                 primIndices.data(),
                 primIndices.size(),
-                reinterpret_cast<f32*>(primPositions.data()),
+                reinterpret_cast<f32*>(primPositions.data()), // TODO: probably UB.
                 primPositions.size(),
                 sizeof(primPositions[0]),
                 MESHLET_MAX_VERTICES,
@@ -299,6 +299,14 @@ static void LoadGeometry(
             );
 
             const meshopt_Meshlet& primLastMeshlet = primMeshlets[primMeshletCount - 1];
+
+            primMeshletVertices.resize(
+                primLastMeshlet.vertex_offset + primLastMeshlet.vertex_count
+            );
+            primMeshletTriangles.resize(
+                primLastMeshlet.triangle_offset + primLastMeshlet.triangle_count * 3
+            );
+            primMeshlets.resize(primMeshletCount);
 
             for (size_t i = 0; i < primMeshletCount; ++i)
             {
@@ -311,27 +319,24 @@ static void LoadGeometry(
                 );
             }
 
-            primMeshletVertices.resize(
-                primLastMeshlet.vertex_offset + primLastMeshlet.vertex_count
-            );
-            primMeshletTriangles.resize(
-                primLastMeshlet.triangle_offset + primLastMeshlet.triangle_count
-            );
-            primMeshlets.resize(primMeshletCount);
+            const size_t meshletVertexCount = meshletVertices.size();
+            const size_t meshletTriangleCount = meshletTriangles.size();
 
-            const size_t meshletVerticesCount = meshletVertices.size();
-            const size_t meshletTrianglesCount = meshletTriangles.size();
+            meshletVertices.resize(meshletVertexCount + primMeshletVertices.size());
+            // TODO: honestly all this offsetting seem like a bad idea, it could work in
+            // a production renderer if you can afford to load all geometry for a level at once,
+            // but generally geometry streaming is required, rebuilding big buffers is not an
+            // option, it seems that it's best to use a general purpose allocator (i.e. VMA)
+            // and use GPU pointers to fetch data, that way, we can just allocate new buffers
+            // as needed and pass pointers to the GPU.
+            for (size_t i = 0; i < primMeshletVertices.size(); ++i)
+            {
+                meshletVertices[meshletVertexCount + i] = vertexCount + primMeshletVertices[i];
+            }
 
-            meshletVertices.resize(meshletVerticesCount + primMeshletVertices.size());
+            meshletTriangles.resize(meshletTriangleCount + primMeshletTriangles.size());
             memcpy(
-                meshletVertices.data() + meshletVerticesCount,
-                primMeshletVertices.data(),
-                VEC_SIZE_BYTES(primMeshletVertices)
-            );
-
-            meshletTriangles.resize(meshletTrianglesCount + primMeshletTriangles.size());
-            memcpy(
-                meshletTriangles.data() + meshletTrianglesCount,
+                meshletTriangles.data() + meshletTriangleCount,
                 primMeshletTriangles.data(),
                 VEC_SIZE_BYTES(primMeshletTriangles)
             );
@@ -344,8 +349,8 @@ static void LoadGeometry(
                 const meshopt_Meshlet& m = primMeshlets[i];
 
                 meshlets[meshletCount + i] = {
-                    .vertexOffset = u32(m.vertex_offset + meshletVerticesCount),
-                    .triangleOffset = u32(m.triangle_offset + meshletTrianglesCount),
+                    .vertexOffset = u32(m.vertex_offset + meshletVertexCount),
+                    .triangleOffset = u32(m.triangle_offset + meshletTriangleCount),
                     .vertexCount = u8(m.vertex_count),
                     .triangleCount = u8(m.triangle_count),
                 };
@@ -387,6 +392,8 @@ static void LoadGeometry(
         sphereCenter /= f32(vertexCount);
 
         Print(sphereCenter);
+
+        // exit(2);
     }
 
     // for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
@@ -653,8 +660,6 @@ bool LoadScene(
     LoadTexturePaths(texturePaths, gltfPath, cgltfData);
 
     // TODO: scene cache.
-
-    exit(1);
 
     return true;
 }
