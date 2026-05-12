@@ -10,6 +10,18 @@
 
 // TODO: more error handling.
 
+struct Mesh
+{
+    size_t primitiveIdx;
+    size_t primitiveCount;
+};
+
+struct MeshPrimitiveData
+{
+    size_t meshIdx;
+    cgltf_material* material;
+};
+
 static const char* cgltf_result_to_string(cgltf_result result)
 {
     switch (result)
@@ -106,6 +118,8 @@ static void LoadGeometry(
     std::vector<Meshlet>& meshlets,
     std::vector<MeshTaskCommand>& meshTaskCommands,
     std::vector<DrawData>& drawData,
+    std::vector<MeshPrimitiveData>& meshPrimitiveData,
+    std::vector<Mesh>& meshes,
     const cgltf_data* cgltfData
 )
 {
@@ -115,6 +129,8 @@ static void LoadGeometry(
     DEBUG_ASSERT(meshlets.empty());
     DEBUG_ASSERT(meshTaskCommands.empty());
     DEBUG_ASSERT(drawData.empty());
+    DEBUG_ASSERT(meshPrimitiveData.empty());
+    DEBUG_ASSERT(meshes.empty());
     DEBUG_ASSERT(cgltfData);
 
     std::vector<f32> tmp;
@@ -129,6 +145,11 @@ static void LoadGeometry(
     for (cgltf_size mi = 0; mi < cgltfData->meshes_count; ++mi)
     {
         const cgltf_mesh& mesh = cgltfData->meshes[mi];
+
+        meshes.push_back({
+            .primitiveIdx = meshPrimitiveData.size(),
+            .primitiveCount = mesh.primitives_count,
+        });
 
         for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
         {
@@ -358,11 +379,15 @@ static void LoadGeometry(
                 };
             }
 
-            const MeshTaskCommand cmd = {
-                .taskOffset = u32(meshletCount),
-                .taskCount = u32(primMeshletCount),
-            };
-            meshTaskCommands.push_back(cmd);
+            meshTaskCommands.push_back({
+                .meshletOffset = u32(meshletCount),
+                .meshletCount = u32(primMeshletCount),
+            });
+
+            meshPrimitiveData.push_back({
+                .meshIdx = mi,
+                .material = prim.material,
+            });
         }
     }
 
@@ -375,9 +400,9 @@ static void LoadGeometry(
         Vec3 sphereCenter{};
         u32 vertexCount = 0;
 
-        for (size_t mi = 0; mi < cmd.taskCount; ++mi)
+        for (size_t mi = 0; mi < cmd.meshletCount; ++mi)
         {
-            const Meshlet& m = meshlets[cmd.taskOffset + mi];
+            const Meshlet& m = meshlets[cmd.meshletOffset + mi];
 
             for (size_t vi = 0; vi < m.vertexCount; ++vi)
             {
@@ -404,9 +429,9 @@ static void LoadGeometry(
 
         f32 sphereRadius{};
 
-        for (size_t mi = 0; mi < cmd.taskCount; ++mi)
+        for (size_t mi = 0; mi < cmd.meshletCount; ++mi)
         {
-            const Meshlet& m = meshlets[cmd.taskOffset + mi];
+            const Meshlet& m = meshlets[cmd.meshletOffset + mi];
 
             for (size_t vi = 0; vi < m.vertexCount; ++vi)
             {
@@ -430,15 +455,15 @@ static void LoadMaterials(
     std::vector<DrawData>& drawData,
     std::vector<Material>& materials,
     Vec3& sunDirectionWorld,
+    const std::vector<MeshPrimitiveData>& meshPrimitiveData,
     const std::vector<Mesh>& meshes,
-    const std::vector<MeshPrimitive>& meshPrimitives,
     const cgltf_data* cgltfData
 )
 {
-    DEBUG_ASSERT(drawData.empty());
+    DEBUG_ASSERT(!drawData.empty());
     DEBUG_ASSERT(materials.empty());
+    DEBUG_ASSERT(!meshPrimitiveData.empty());
     DEBUG_ASSERT(!meshes.empty());
-    DEBUG_ASSERT(!meshPrimitives.empty());
     DEBUG_ASSERT(cgltfData);
 
     const u32 materialOffset = 1;
@@ -456,9 +481,9 @@ static void LoadMaterials(
 
             for (size_t pi = 0; pi < mesh.primitiveCount; ++pi)
             {
-                const cgltf_material* const material
-                    = meshPrimitives[mesh.primitiveIdx + pi].material;
-                DrawData d{};
+                const MeshPrimitiveData mpData = meshPrimitiveData[mesh.primitiveIdx + pi];
+
+                DrawData& d = drawData[mesh.primitiveIdx + pi];
 
                 f32 scale[3]{};
                 DecomposeTransform(d.position.val, d.orientation.val, scale, localToWorld);
@@ -467,16 +492,14 @@ static void LoadMaterials(
                 ASSERT(scale[0] > 0.0f);
                 d.scale = Max(scale[0], Max(scale[1], scale[2]));
 
-                if (material)
+                if (mpData.material)
                 {
-                    d.materialIdx = materialOffset + u32(cgltf_material_index(cgltfData, material));
-                    d.renderPassFlags = material->alpha_mode == cgltf_alpha_mode_opaque
+                    d.materialIdx
+                        = materialOffset + u32(cgltf_material_index(cgltfData, mpData.material));
+                    d.renderPassFlags = mpData.material->alpha_mode == cgltf_alpha_mode_opaque
                         ? RENDER_PASS_OPAQUE_BIT
                         : RENDER_PASS_TRANSLUCENT_BIT;
                 }
-                d.sphereCenter = meshPrimitives[mesh.primitiveIdx + pi].sphereCenter;
-                d.sphereRadius = meshPrimitives[mesh.primitiveIdx + pi].sphereRadius;
-                drawData.push_back(d);
             }
         }
 
@@ -584,7 +607,6 @@ static void LoadTexturePaths(
 bool LoadScene(
     std::vector<Vertex>& vertices,
     std::vector<u32>& indices,
-    std::vector<MeshPrimitive>& meshPrimitives,
     std::vector<VkDrawIndexedIndirectCommand>& drawCmds,
     std::vector<DrawData>& drawData,
     std::vector<Material>& materials,
@@ -595,7 +617,6 @@ bool LoadScene(
 {
     DEBUG_ASSERT(vertices.empty());
     DEBUG_ASSERT(indices.empty());
-    DEBUG_ASSERT(meshPrimitives.empty());
     DEBUG_ASSERT(drawCmds.empty());
     DEBUG_ASSERT(drawData.empty());
     DEBUG_ASSERT(materials.empty());
@@ -626,11 +647,12 @@ bool LoadScene(
         return false;
     }
 
-    std::vector<Mesh> meshes;
     std::vector<u32> meshletVertices;
     std::vector<u8> meshletTriangles;
     std::vector<Meshlet> meshlets;
     std::vector<MeshTaskCommand> meshTaskCommands;
+    std::vector<MeshPrimitiveData> meshPrimitiveData;
+    std::vector<Mesh> meshes;
 
     LoadGeometry(
         vertices,
@@ -639,12 +661,12 @@ bool LoadScene(
         meshlets,
         meshTaskCommands,
         drawData,
+        meshPrimitiveData,
+        meshes,
         cgltfData
     );
 
-    DEBUG_ASSERT(meshPrimitives.size() == drawCmds.size());
-
-    LoadMaterials(drawData, materials, sunDirectionWorld, meshes, meshPrimitives, cgltfData);
+    LoadMaterials(drawData, materials, sunDirectionWorld, meshPrimitiveData, meshes, cgltfData);
 
     LoadTexturePaths(texturePaths, gltfPath, cgltfData);
 

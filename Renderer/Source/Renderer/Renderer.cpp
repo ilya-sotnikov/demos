@@ -600,7 +600,6 @@ bool Renderer::Init()
 
         std::vector<Vertex> vertices;
         std::vector<u32> indices;
-        std::vector<MeshPrimitive> meshPrimitives;
         std::vector<VkDrawIndexedIndirectCommand> drawCmds;
         std::vector<DrawData> drawData;
         std::vector<Material> materials;
@@ -609,7 +608,6 @@ bool Renderer::Init()
         if (!LoadScene(
                 vertices,
                 indices,
-                meshPrimitives,
                 drawCmds,
                 drawData,
                 materials,

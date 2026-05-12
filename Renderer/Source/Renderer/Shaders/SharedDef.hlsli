@@ -115,8 +115,8 @@ struct Meshlet
 
 struct MeshTaskCommand
 {
-    uint32_t taskOffset;
-    uint32_t taskCount;
+    uint32_t meshletOffset;
+    uint32_t meshletCount;
 };
 
 struct Material
