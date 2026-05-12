@@ -229,7 +229,7 @@ static void ProcessInput(SDL_Window* window, f32 deltaTime, Renderer& renderer)
     if (sKeys[SDL_SCANCODE_2])
     {
         sKeys[SDL_SCANCODE_2] = 0;
-        sRenderMode = RENDER_MODE_FORWARD;
+        sRenderMode = RENDER_MODE_MESHLETS;
     }
 
     if (sKeys[SDL_SCANCODE_3])
@@ -434,7 +434,7 @@ int main()
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             int renderMode = static_cast<int>(sRenderMode);
-            const char* renderModes[] = {"Visibility", "Forward", "Grad error", "AO"};
+            const char* renderModes[] = {"Visibility", "Meshlets", "Grad error", "AO"};
             ImGui::ListBox("Render mode", &renderMode, renderModes, ARRAY_SIZE(renderModes));
             sRenderMode = static_cast<RenderMode>(renderMode);
             static_assert(ARRAY_SIZE(renderModes) == RENDER_MODE_COUNT);

@@ -80,7 +80,6 @@ struct Renderer
     Vulkan::Pipeline mShadowCullPipeline;
     Vulkan::Pipeline mShadowPipeline;
     Vulkan::Pipeline mVisibilityRenderPipeline;
-    Vulkan::Pipeline mForwardRenderPipeline;
     Vulkan::Pipeline mFullscreenPipeline;
     Vulkan::Pipeline mCullEarlyPipeline;
     Vulkan::Pipeline mCullLatePipeline;
@@ -90,17 +89,16 @@ struct Renderer
     Vulkan::Pipeline mDebugDrawRectPipeline;
     Vulkan::Pipeline mDebugDrawFillCmdPipeline;
     Vulkan::Buffer mVertexBuffer;
-    Vulkan::Buffer mIndexBuffer;
-    Vulkan::Buffer mDrawCmdBuffer1;
-    Vulkan::Buffer mDrawCmdEarlyBuffer2;
-    Vulkan::Buffer mDrawCmdLateBuffer2;
-    Vulkan::Buffer mDrawCmdShadowBuffer;
-    Vulkan::Buffer mDrawIndicesEarlyBuffer;
-    Vulkan::Buffer mDrawIndicesLateBuffer;
-    Vulkan::Buffer mDrawIndicesShadowBuffer;
+    Vulkan::Buffer mTaskCmdCountBuffer;
+    Vulkan::Buffer mTaskCmdBuffer1;
+    Vulkan::Buffer mTaskCmdEarlyBuffer2;
+    Vulkan::Buffer mTaskCmdLateBuffer2;
+    Vulkan::Buffer mTaskCmdShadowBuffer;
+    Vulkan::Buffer mTaskIndicesEarlyBuffer;
+    Vulkan::Buffer mTaskIndicesLateBuffer;
+    Vulkan::Buffer mTaskIndicesShadowBuffer;
     Vulkan::Buffer mMaterialBuffer;
     Vulkan::Buffer mDrawDataBuffer;
-    Vulkan::Buffer mDrawCountBuffer;
     Vulkan::Buffer mMeshPrimitiveVisibleBuffer;
     Vulkan::Buffer mDebugDrawCountBuffer;
     Vulkan::Buffer mDebugDrawRectBuffer;
@@ -151,7 +149,6 @@ private:
     void UpdateShadowCascades();
 
     void VisibilityBufferPass(VkCommandBuffer cb, bool cullLate);
-    void ForwardPass(VkCommandBuffer cb, bool cullLate);
     void CullPass(VkCommandBuffer cb, bool late);
     void DepthReducePass(VkCommandBuffer cb);
 
@@ -175,11 +172,6 @@ private:
 
     bool RecordCommandBufferDebugGradError(u32 imageIdx);
     bool RecordCommandBufferVisibility(u32 imageIdx);
-    // NOTE: forward renderer is implemented as a reference, to help with
-    // debugging visibility buffer, I won't implement every feature here
-    // though, sice the main brittle points are attribute interpolation
-    // and analytic derivatives.
-    bool RecordCommandBufferForward(u32 imageIdx);
     bool CreateSwapchain();
     void CleanupSwapchain();
     bool CreateColorResources();

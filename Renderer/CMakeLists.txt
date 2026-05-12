@@ -134,7 +134,7 @@ set(SHADER_SOURCE_DIRECTORY ${CMAKE_SOURCE_DIR}/Source/Renderer/Shaders/)
 set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Cull.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/ShadowCull.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/DebugGradError.vert.hlsl
+    # ${SHADER_SOURCE_DIRECTORY}/DebugGradError.mesh.hlsl
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.frag.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Shadow.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/Shadow.frag.hlsl
@@ -149,8 +149,6 @@ set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Fog.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/BlurFog.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityRender.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/ForwardRender.vert.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/ForwardRender.frag.hlsl
     ${SHADER_SOURCE_DIRECTORY}/TaaResolve.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.frag.hlsl
@@ -163,7 +161,6 @@ set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Common.hlsli
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Shadow.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/ForwardRender.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Fullscreen.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Imgui.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Math.hlsli

@@ -606,20 +606,24 @@ static void LoadTexturePaths(
 // https://github.com/zeux/niagara
 bool LoadScene(
     std::vector<Vertex>& vertices,
-    std::vector<u32>& indices,
-    std::vector<VkDrawIndexedIndirectCommand>& drawCmds,
     std::vector<DrawData>& drawData,
     std::vector<Material>& materials,
+    std::vector<u32>& meshletVertices,
+    std::vector<u8>& meshletTriangles,
+    std::vector<Meshlet>& meshlets,
+    std::vector<MeshTaskCommand>& meshTaskCommands,
     std::vector<std::string>& texturePaths,
     Vec3& sunDirectionWorld,
     const std::string& gltfPath
 )
 {
     DEBUG_ASSERT(vertices.empty());
-    DEBUG_ASSERT(indices.empty());
-    DEBUG_ASSERT(drawCmds.empty());
     DEBUG_ASSERT(drawData.empty());
     DEBUG_ASSERT(materials.empty());
+    DEBUG_ASSERT(meshletVertices.empty());
+    DEBUG_ASSERT(meshletTriangles.empty());
+    DEBUG_ASSERT(meshlets.empty());
+    DEBUG_ASSERT(meshTaskCommands.empty());
     DEBUG_ASSERT(texturePaths.empty());
     DEBUG_ASSERT(!gltfPath.empty());
 
@@ -647,10 +651,6 @@ bool LoadScene(
         return false;
     }
 
-    std::vector<u32> meshletVertices;
-    std::vector<u8> meshletTriangles;
-    std::vector<Meshlet> meshlets;
-    std::vector<MeshTaskCommand> meshTaskCommands;
     std::vector<MeshPrimitiveData> meshPrimitiveData;
     std::vector<Mesh> meshes;
 

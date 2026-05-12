@@ -152,11 +152,10 @@ bool Renderer::Init()
         }
 
         if (!mDevice.CreateBuffer({
-                .buffer = mDrawCountBuffer,
+                .buffer = mTaskCmdCountBuffer,
                 .size = sizeof(u32),
-                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
-                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                .debugName = "DrawCountBuffer",
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .debugName = "TaskCmdCountBuffer",
             }))
         {
             return false;
@@ -599,18 +598,22 @@ bool Renderer::Init()
         const std::string gltfPath = "../Assets/main_sponza/NewSponza_Main_glTF_003.gltf";
 
         std::vector<Vertex> vertices;
-        std::vector<u32> indices;
-        std::vector<VkDrawIndexedIndirectCommand> drawCmds;
         std::vector<DrawData> drawData;
         std::vector<Material> materials;
         std::vector<std::string> texturePaths;
+        std::vector<u32> meshletVertices;
+        std::vector<u8> meshletTriangles;
+        std::vector<Meshlet> meshlets;
+        std::vector<MeshTaskCommand> meshTaskCommands;
 
         if (!LoadScene(
                 vertices,
-                indices,
-                drawCmds,
                 drawData,
                 materials,
+                meshletVertices,
+                meshletTriangles,
+                meshlets,
+                meshTaskCommands,
                 texturePaths,
                 mUniformData.sunDirectionWorld,
                 gltfPath
@@ -620,7 +623,7 @@ bool Renderer::Init()
             return false;
         }
 
-        mUniformData.drawCount = u32(drawCmds.size());
+        mUniformData.drawCount = u32(meshTaskCommands.size()); // TODO?
 
         if (!UploadTextures(texturePaths))
         {
@@ -643,63 +646,49 @@ bool Renderer::Init()
         mDevice.UnmapBuffer(mVertexBuffer);
 
         if (!mDevice.CreateBuffer({
-                .buffer = mIndexBuffer,
-                .size = VEC_SIZE_BYTES(indices),
-                .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-                    | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                .debugName = "IndexBuffer",
-            }))
-        {
-            return false;
-        }
-        memcpy(mIndexBuffer.mapped, indices.data(), VEC_SIZE_BYTES(indices));
-        mDevice.UnmapBuffer(mIndexBuffer);
-
-        if (!mDevice.CreateBuffer({
-                .buffer = mDrawCmdBuffer1,
+                .buffer = mTaskCmdBuffer1,
                 .size = sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
                 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
                 .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
                     | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                .debugName = "DrawCmdBuffer1",
+                .debugName = "TaskCmdBuffer1",
             }))
         {
             return false;
         }
 
         if (!mDevice.CreateBuffer({
-                .buffer = mDrawCmdEarlyBuffer2,
+                .buffer = mTaskCmdEarlyBuffer2,
                 .size = sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
                 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-                .debugName = "DrawCmdEarlyBuffer2",
+                .debugName = "TaskCmdEarlyBuffer2",
             }))
         {
             return false;
         }
 
         if (!mDevice.CreateBuffer({
-                .buffer = mDrawCmdLateBuffer2,
+                .buffer = mTaskCmdLateBuffer2,
                 .size = sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
                 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-                .debugName = "DrawCmdLateBuffer2",
+                .debugName = "TaskCmdLateBuffer2",
             }))
         {
             return false;
         }
 
         if (!mDevice.CreateBuffer({
-                .buffer = mDrawCmdShadowBuffer,
+                .buffer = mTaskCmdShadowBuffer,
                 .size = sizeof(VkDrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
                 .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-                .debugName = "DrawCmdShadowBuffer",
+                .debugName = "TaskCmdShadowBuffer",
             }))
         {
             return false;
         }
 
         if (!mDevice.CreateBuffer({
-                .buffer = mDrawIndicesEarlyBuffer,
+                .buffer = mTaskIndicesEarlyBuffer,
                 .size = sizeof(u32) * MAX_DRAW_CALLS,
                 .debugName = "DrawIndicesEarlyBuffer",
             }))
@@ -708,7 +697,7 @@ bool Renderer::Init()
         }
 
         if (!mDevice.CreateBuffer({
-                .buffer = mDrawIndicesLateBuffer,
+                .buffer = mTaskIndicesLateBuffer,
                 .size = sizeof(u32) * MAX_DRAW_CALLS,
                 .debugName = "DrawIndicesLateBuffer",
             }))
@@ -717,7 +706,7 @@ bool Renderer::Init()
         }
 
         if (!mDevice.CreateBuffer({
-                .buffer = mDrawIndicesShadowBuffer,
+                .buffer = mTaskIndicesShadowBuffer,
                 .size = sizeof(u32) * MAX_DRAW_CALLS,
                 .debugName = "DrawIndicesShadowBuffer",
             }))
@@ -748,7 +737,7 @@ bool Renderer::Init()
             return false;
         }
 
-        memcpy(mDrawCmdBuffer1.mapped, drawCmds.data(), VEC_SIZE_BYTES(drawCmds));
+        memcpy(mTaskCmdBuffer1.mapped, drawCmds.data(), VEC_SIZE_BYTES(drawCmds));
 
         memcpy(mMaterialBuffer.mapped, materials.data(), VEC_SIZE_BYTES(materials));
 
@@ -903,13 +892,13 @@ void Renderer::Cleanup()
     mDevice.DestroyBuffer(mDrawDataBuffer);
     mDevice.DestroyBuffer(mVertexBuffer);
     mDevice.DestroyBuffer(mIndexBuffer);
-    mDevice.DestroyBuffer(mDrawIndicesShadowBuffer);
-    mDevice.DestroyBuffer(mDrawIndicesEarlyBuffer);
-    mDevice.DestroyBuffer(mDrawIndicesLateBuffer);
-    mDevice.DestroyBuffer(mDrawCmdShadowBuffer);
-    mDevice.DestroyBuffer(mDrawCmdEarlyBuffer2);
-    mDevice.DestroyBuffer(mDrawCmdLateBuffer2);
-    mDevice.DestroyBuffer(mDrawCmdBuffer1);
+    mDevice.DestroyBuffer(mTaskIndicesShadowBuffer);
+    mDevice.DestroyBuffer(mTaskIndicesEarlyBuffer);
+    mDevice.DestroyBuffer(mTaskIndicesLateBuffer);
+    mDevice.DestroyBuffer(mTaskCmdShadowBuffer);
+    mDevice.DestroyBuffer(mTaskCmdEarlyBuffer2);
+    mDevice.DestroyBuffer(mTaskCmdLateBuffer2);
+    mDevice.DestroyBuffer(mTaskCmdBuffer1);
     for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
     {
         mDevice.DestroyBuffer(mFrame[i].uniformBuffer);
@@ -1096,12 +1085,6 @@ bool Renderer::Render(f32 deltaTime)
 
     switch (mUniformData.renderMode)
     {
-    case RENDER_MODE_FORWARD:
-        if (!RecordCommandBufferForward(imageIdx))
-        {
-            return false;
-        }
-        break;
     case RENDER_MODE_GRAD_ERROR:
         if (!RecordCommandBufferDebugGradError(imageIdx))
         {
@@ -1116,8 +1099,7 @@ bool Renderer::Render(f32 deltaTime)
         break;
     }
 
-    if (mUniformData.renderMode == RENDER_MODE_FORWARD
-        || mUniformData.renderMode == RENDER_MODE_GRAD_ERROR)
+    if (mUniformData.renderMode == RENDER_MODE_GRAD_ERROR)
     {
         if (!mDevice.QueueSubmit({
                 .queueInfo = mDevice.mGraphicsQueueInfo,
@@ -1356,7 +1338,6 @@ void Renderer::CleanupPipelines()
     mDevice.DestroyPipeline(mCullEarlyPipeline);
     mDevice.DestroyPipeline(mFullscreenPipeline);
     mDevice.DestroyPipeline(mVisibilityRenderPipeline);
-    mDevice.DestroyPipeline(mForwardRenderPipeline);
     mDevice.DestroyPipeline(mVisibilityPipeline);
 }
 
@@ -1378,26 +1359,6 @@ bool Renderer::RecompilePipelines()
             .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
             .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
             .debugName = "VisibilityBufferPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateGraphicsPipeline({
-            .pipeline = mForwardRenderPipeline,
-            .shaderPaths = {"ForwardRender.vert.hlsl.spv", "ForwardRender.frag.hlsl.spv"},
-            .cullMode = VK_CULL_MODE_BACK_BIT,
-            .depthFormat = mDepthImage.format,
-            .depthTestEnable = VK_TRUE,
-            .depthWriteEnable = VK_TRUE,
-            .colorAttachmentFormats = {mRenderImage.format, mVelocityImage.format},
-            .colorBlendAttachments = {
-                {.colorWriteMask = Vulkan::ColorComponentAllBits},
-                {.colorWriteMask = Vulkan::ColorComponentAllBits},
-            },
-            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
-            .extraDescriptorSetLayout = mTextureDescriptorSetLayout,
-            .debugName = "ForwardRenderPass",
         }))
     {
         return false;
@@ -1814,7 +1775,7 @@ void Renderer::VisibilityBufferPass(VkCommandBuffer cb, bool cullLate)
         mVisibilityPipeline,
         {
             mFrame[mFrameIdx].uniformBuffer.buffer,
-            cullLate ? mDrawIndicesLateBuffer.buffer : mDrawIndicesEarlyBuffer.buffer,
+            cullLate ? mTaskIndicesLateBuffer.buffer : mTaskIndicesEarlyBuffer.buffer,
             mDrawDataBuffer.buffer,
             mVertexBuffer.buffer,
         }
@@ -1878,104 +1839,7 @@ void Renderer::VisibilityBufferPass(VkCommandBuffer cb, bool cullLate)
 
     vkCmdDrawIndexedIndirectCount(
         cb,
-        cullLate ? mDrawCmdLateBuffer2.buffer : mDrawCmdEarlyBuffer2.buffer,
-        0,
-        mDrawCountBuffer.buffer,
-        0,
-        mUniformData.drawCount,
-        sizeof(VkDrawIndexedIndirectCommand)
-    );
-
-    vkCmdEndRendering(cb);
-}
-
-void Renderer::ForwardPass(VkCommandBuffer cb, bool cullLate)
-{
-    DEBUG_ASSERT(cb);
-
-    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, mForwardRenderPipeline.pipeline);
-
-    Vulkan::CmdPushDescriptors(
-        cb,
-        mForwardRenderPipeline,
-        {
-            mFrame[mFrameIdx].uniformBuffer.buffer,
-            cullLate ? mDrawIndicesLateBuffer.buffer : mDrawIndicesEarlyBuffer.buffer,
-            mDrawDataBuffer.buffer,
-            mVertexBuffer.buffer,
-            mMaterialBuffer.buffer,
-            mTextureSampler,
-        }
-    );
-
-    vkCmdBindDescriptorSets(
-        cb,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        mForwardRenderPipeline.layout,
-        1,
-        1,
-        &mTextureDescriptorSet,
-        0,
-        nullptr
-    );
-
-    const VkViewport viewport = {
-        .y = f32(mRenderImageExtent.height),
-        .width = f32(mRenderImageExtent.width),
-        .height = -f32(mRenderImageExtent.height),
-        .maxDepth = 1.0f,
-    };
-    vkCmdSetViewport(cb, 0, 1, &viewport);
-
-    const VkRect2D scissor = {
-        .extent = mRenderImageExtent,
-    };
-    vkCmdSetScissor(cb, 0, 1, &scissor);
-
-    const Vec3 clearColor = Utils::SrgbToLinear({0.7f, 0.8f, 0.9f});
-
-    const VkRenderingAttachmentInfo renderingAttachmentInfos[] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = mRenderImage.view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = {.color = {{clearColor.R(), clearColor.G(), clearColor.B()}}},
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = mVelocityImage.view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        },
-    };
-
-    const VkRenderingAttachmentInfo depthAttachmentInfo = {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = mDepthImage.view,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-    };
-
-    const VkRenderingInfo renderingInfo = {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = {.extent = mRenderImageExtent},
-        .layerCount = 1,
-        .colorAttachmentCount = ARRAY_SIZE(renderingAttachmentInfos),
-        .pColorAttachments = renderingAttachmentInfos,
-        .pDepthAttachment = &depthAttachmentInfo,
-    };
-
-    vkCmdBeginRendering(cb, &renderingInfo);
-
-    vkCmdBindIndexBuffer(cb, mIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-    vkCmdDrawIndexedIndirectCount(
-        cb,
-        cullLate ? mDrawCmdLateBuffer2.buffer : mDrawCmdEarlyBuffer2.buffer,
+        cullLate ? mTaskCmdLateBuffer2.buffer : mTaskCmdEarlyBuffer2.buffer,
         0,
         mDrawCountBuffer.buffer,
         0,
@@ -2003,8 +1867,8 @@ void Renderer::CullPass(VkCommandBuffer cb, bool late)
             mFrame[mFrameIdx].uniformBuffer.buffer,
             mDrawDataBuffer.buffer,
             mDrawCountBuffer.buffer,
-            mDrawCmdBuffer1.buffer,
-            late ? mDrawCmdLateBuffer2.buffer : mDrawCmdEarlyBuffer2.buffer,
+            mTaskCmdBuffer1.buffer,
+            late ? mTaskCmdLateBuffer2.buffer : mTaskCmdEarlyBuffer2.buffer,
             late ? mDrawIndicesLateBuffer.buffer : mDrawIndicesEarlyBuffer.buffer,
             mMeshPrimitiveVisibleBuffer.buffer,
             mMinSampler,
@@ -2128,8 +1992,8 @@ void Renderer::AmbientOcclusionPass(VkCommandBuffer cb)
             mFrame[mFrameIdx].uniformBuffer.buffer,
             mDrawIndicesEarlyBuffer.buffer,
             mDrawIndicesLateBuffer.buffer,
-            mDrawCmdEarlyBuffer2.buffer,
-            mDrawCmdLateBuffer2.buffer,
+            mTaskCmdEarlyBuffer2.buffer,
+            mTaskCmdLateBuffer2.buffer,
             mDrawDataBuffer.buffer,
             mIndexBuffer.buffer,
             mVertexBuffer.buffer,
@@ -2174,8 +2038,8 @@ void Renderer::ShadowCullPass(VkCommandBuffer cb)
             mFrame[mFrameIdx].uniformBuffer.buffer,
             mDrawDataBuffer.buffer,
             mDrawCountBuffer.buffer,
-            mDrawCmdBuffer1.buffer,
-            mDrawCmdShadowBuffer.buffer,
+            mTaskCmdBuffer1.buffer,
+            mTaskCmdShadowBuffer.buffer,
             mDrawIndicesShadowBuffer.buffer,
         }
     );
@@ -2194,7 +2058,7 @@ void Renderer::ShadowPass(VkCommandBuffer cb)
         mShadowPipeline,
         {
             mFrame[mFrameIdx].uniformBuffer.buffer,
-            mDrawIndicesShadowBuffer.buffer,
+            mTaskIndicesShadowBuffer.buffer,
             mDrawDataBuffer.buffer,
             mVertexBuffer.buffer,
         }
@@ -2257,7 +2121,7 @@ void Renderer::ShadowPass(VkCommandBuffer cb)
 
         vkCmdDrawIndexedIndirectCount(
             cb,
-            mDrawCmdShadowBuffer.buffer,
+            mTaskCmdShadowBuffer.buffer,
             0,
             mDrawCountBuffer.buffer,
             0,
@@ -2431,8 +2295,8 @@ void Renderer::RenderPass(VkCommandBuffer cb)
             mFrame[mFrameIdx].uniformBuffer.buffer,
             mDrawIndicesEarlyBuffer.buffer,
             mDrawIndicesLateBuffer.buffer,
-            mDrawCmdEarlyBuffer2.buffer,
-            mDrawCmdLateBuffer2.buffer,
+            mTaskCmdEarlyBuffer2.buffer,
+            mTaskCmdLateBuffer2.buffer,
             mDrawDataBuffer.buffer,
             mIndexBuffer.buffer,
             mVertexBuffer.buffer,
@@ -2642,7 +2506,7 @@ void Renderer::DebugDrawGradErrorPass(VkCommandBuffer cb, bool cullLate, u32 ima
         {
             mFrame[mFrameIdx].uniformBuffer.buffer,
             cullLate ? mDrawIndicesLateBuffer.buffer : mDrawIndicesEarlyBuffer.buffer,
-            cullLate ? mDrawCmdLateBuffer2.buffer : mDrawCmdEarlyBuffer2.buffer,
+            cullLate ? mTaskCmdLateBuffer2.buffer : mTaskCmdEarlyBuffer2.buffer,
             mDrawDataBuffer.buffer,
             mIndexBuffer.buffer,
             mVertexBuffer.buffer,
@@ -2695,7 +2559,7 @@ void Renderer::DebugDrawGradErrorPass(VkCommandBuffer cb, bool cullLate, u32 ima
 
     vkCmdDrawIndexedIndirectCount(
         cb,
-        cullLate ? mDrawCmdLateBuffer2.buffer : mDrawCmdEarlyBuffer2.buffer,
+        cullLate ? mTaskCmdLateBuffer2.buffer : mTaskCmdEarlyBuffer2.buffer,
         0,
         mDrawCountBuffer.buffer,
         0,
@@ -3691,339 +3555,6 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
     );
 
     VK_CHECK(vkEndCommandBuffer(cbEnd));
-
-    return true;
-}
-
-bool Renderer::RecordCommandBufferForward(u32 imageIdx)
-{
-    Frame& frame = mFrame[mFrameIdx];
-
-    const VkCommandBuffer cb = frame.commandBufferStart;
-
-    VK_CHECK(vkResetCommandBuffer(cb, 0));
-
-    const VkCommandBufferBeginInfo cmdBeginInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    };
-    VK_CHECK(vkBeginCommandBuffer(cb, &cmdBeginInfo));
-
-    Vulkan::CmdMemoryBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                VK_ACCESS_2_NONE
-            ),
-        }
-    );
-
-    vkCmdFillBuffer(cb, mDrawCountBuffer.buffer, 0, sizeof(u32), 0);
-    vkCmdFillBuffer(cb, mDebugDrawCountBuffer.buffer, 0, sizeof(u32), 0);
-
-    Vulkan::CmdMemoryBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
-    );
-
-    CullPass(cb, false);
-
-    Vulkan::CmdBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mRenderImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mVelocityImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
-        }
-    );
-
-    ForwardPass(cb, false);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthPyramidImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
-    );
-
-    if (!mCullCameraFrozen)
-    {
-        DepthReducePass(cb);
-    }
-
-    Vulkan::CmdMemoryBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                VK_ACCESS_2_NONE
-            ),
-        }
-    );
-
-    vkCmdFillBuffer(cb, mDrawCountBuffer.buffer, 0, sizeof(u32), 0);
-
-    Vulkan::CmdBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthPyramidImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
-    );
-
-    CullPass(cb, true);
-
-    Vulkan::CmdBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-        }
-    );
-
-    ForwardPass(cb, true);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mRenderImage.image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                frame.resolvedRenderImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mVelocityImage.image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
-    );
-
-    TaaResolvePass(cb);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                frame.resolvedRenderImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mSwapchain.images[imageIdx].image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
-        }
-    );
-
-    DebugDrawPass(cb);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                frame.resolvedRenderImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
-    );
-
-    FullscreenPass(cb, imageIdx);
-
-    if (!mImguiRenderer.UpdateVertexIndexBuffers(static_cast<u32>(mFrameIdx)))
-    {
-        return false;
-    }
-
-    if (mEnableUI)
-    {
-        const VkRenderingAttachmentInfo renderingAttachmentInfo = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = mSwapchain.images[imageIdx].view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        };
-
-        const VkRenderingInfo renderingInfo = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = {.extent = mSwapchain.extent},
-            .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &renderingAttachmentInfo,
-        };
-
-        vkCmdBeginRendering(cb, &renderingInfo);
-
-        if (!mImguiRenderer.Render(cb, u32(mFrameIdx)))
-        {
-            return false;
-        }
-
-        vkCmdEndRendering(cb);
-    }
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mSwapchain.images[imageIdx].image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE
-            ),
-        }
-    );
-
-    VK_CHECK(vkEndCommandBuffer(cb));
 
     return true;
 }
