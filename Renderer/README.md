@@ -12,6 +12,12 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 - use mesh shaders to generate triangle ids for a visibility buffer
 - meshlet frustum, backface, occlusion (Hi-Z) culling
 
+Also, task shaders are very slow on RDNA 3 (and probably others), see the comment from the [Alan Wake 2 presentation by Erik Jansson](https://youtu.be/EtX7WnFhxtQ):
+
+> One of the reasons we didn't use amplification shaders was due to them not performing great across all GPU hardware. Culling in compute shaders followed by ExecuteIndirect into mesh shaders seemed to perform optimally across all of the hardware platforms we were targeting. There was a great stream by Arseny Kapoulkine just two weeks ago about this actually: "niagara: Meshlets unchained" here on YouTube, where he shows why amplification/task shaders perform poorly on AMD RDNA 3 at least. He then implemented something similar to what we show in this presentation and got a massive performance boost, the frame time went from 9.26ms with amplification shader to just 1.44ms with compute shader and ExecuteIndirect approach!
+
+[Link to the Arseny Kapoulkine's stream](https://www.youtube.com/live/zROUBE5pLuI).
+
 ## Preview
 
 ![](./Preview/Sponza.png)
@@ -56,7 +62,7 @@ VisBufLate (G)
   |                         |
 CsmCull (C)               DepthViewQuarterRes (C)
   |                         |
-CSM (C)                   SSAO (C)
+CSM (G)                   SSAO (C)
   |                         |
   +--------------------+  BlurX (C)
   |                    |    |
