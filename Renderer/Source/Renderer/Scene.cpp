@@ -105,6 +105,7 @@ static void LoadGeometry(
     std::vector<u8>& meshletTriangles,
     std::vector<Meshlet>& meshlets,
     std::vector<MeshTaskCommand>& meshTaskCommands,
+    std::vector<DrawData>& drawData,
     const cgltf_data* cgltfData
 )
 {
@@ -113,6 +114,7 @@ static void LoadGeometry(
     DEBUG_ASSERT(meshletTriangles.empty());
     DEBUG_ASSERT(meshlets.empty());
     DEBUG_ASSERT(meshTaskCommands.empty());
+    DEBUG_ASSERT(drawData.empty());
     DEBUG_ASSERT(cgltfData);
 
     std::vector<f32> tmp;
@@ -331,7 +333,7 @@ static void LoadGeometry(
             // as needed and pass pointers to the GPU.
             for (size_t i = 0; i < primMeshletVertices.size(); ++i)
             {
-                meshletVertices[meshletVertexCount + i] = vertexCount + primMeshletVertices[i];
+                meshletVertices[meshletVertexCount + i] = u32(vertexCount) + primMeshletVertices[i];
             }
 
             meshletTriangles.resize(meshletTriangleCount + primMeshletTriangles.size());
@@ -364,6 +366,8 @@ static void LoadGeometry(
         }
     }
 
+    drawData.resize(meshTaskCommands.size());
+
     for (size_t ti = 0; ti < meshTaskCommands.size(); ++ti)
     {
         const MeshTaskCommand cmd = meshTaskCommands[ti];
@@ -391,51 +395,35 @@ static void LoadGeometry(
 
         sphereCenter /= f32(vertexCount);
 
-        Print(sphereCenter);
-
-        // exit(2);
+        drawData[ti].sphereCenter = sphereCenter;
     }
 
-    // for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
-    // {
-    //     Vec3 sphereCenter{};
-    //
-    //     const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
-    //
-    //     for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
-    //     {
-    //         // TODO: implement a better algorithm.
-    //         sphereCenter += Vec3{
-    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
-    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].py),
-    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].pz)
-    //         };
-    //     }
-    //
-    //     sphereCenter /= float(meshPrimitives[pi].vertexCount);
-    //
-    //     meshPrimitives[pi].sphereCenter = sphereCenter;
-    // }
-    //
-    // for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
-    // {
-    //     f32 sphereRadius = 0.0f;
-    //
-    //     const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
-    //
-    //     for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
-    //     {
-    //         // TODO: implement a better algorithm.
-    //         const Vec3 v = Vec3{
-    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
-    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].py),
-    //             meshopt_dequantizeHalf(vertices[vertexOffset + vi].pz)
-    //         };
-    //         sphereRadius = Max(sphereRadius, Magnitude(meshPrimitives[pi].sphereCenter - v));
-    //     }
-    //
-    //     meshPrimitives[pi].sphereRadius = sphereRadius;
-    // }
+    for (size_t ti = 0; ti < meshTaskCommands.size(); ++ti)
+    {
+        const MeshTaskCommand cmd = meshTaskCommands[ti];
+
+        f32 sphereRadius{};
+
+        for (size_t mi = 0; mi < cmd.taskCount; ++mi)
+        {
+            const Meshlet& m = meshlets[cmd.taskOffset + mi];
+
+            for (size_t vi = 0; vi < m.vertexCount; ++vi)
+            {
+                const u32 vertexIdx = meshletVertices[m.vertexOffset + vi];
+
+                const Vec3 v = {
+                    meshopt_dequantizeHalf(vertices[vertexIdx].px),
+                    meshopt_dequantizeHalf(vertices[vertexIdx].py),
+                    meshopt_dequantizeHalf(vertices[vertexIdx].pz),
+                };
+
+                sphereRadius = Max(sphereRadius, Magnitude(drawData[ti].sphereCenter - v));
+            }
+        }
+
+        drawData[ti].sphereRadius = sphereRadius;
+    }
 }
 
 static void LoadMaterials(
@@ -650,6 +638,7 @@ bool LoadScene(
         meshletTriangles,
         meshlets,
         meshTaskCommands,
+        drawData,
         cgltfData
     );
 
