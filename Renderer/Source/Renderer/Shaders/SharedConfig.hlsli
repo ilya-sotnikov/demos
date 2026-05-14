@@ -14,6 +14,7 @@ static const int RENDERER_SHADOW_MAP_JITTER_OFFSETS_SIZE = 16;
 static const int RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_U = 8;
 static const int RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_V = 8;
 
+// TODO: remove and use SPIR-V reflection for this.
 static const int RENDERER_CULL_WORKGROUP_SIZE = 64;
 static const int RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_X = 8;
 static const int RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_Y = 8;

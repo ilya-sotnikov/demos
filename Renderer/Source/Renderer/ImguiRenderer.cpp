@@ -122,7 +122,7 @@ bool ImguiRenderer::Init(
                 Vulkan::ImageMemoryBarrier(
                     mFontImage.image,
                     VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_GENERAL,
                     VK_PIPELINE_STAGE_2_HOST_BIT,
                     VK_ACCESS_2_NONE,
                     VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
@@ -145,25 +145,17 @@ bool ImguiRenderer::Init(
             copyCmdBuffer,
             stagingBuffer.buffer,
             mFontImage.image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_GENERAL,
             1,
             &bufferCopyRegion
         );
 
-        Vulkan::CmdImageMemoryBarrier(
+        Vulkan::CmdMemoryBarrier(
             copyCmdBuffer,
-            {
-                Vulkan::ImageMemoryBarrier(
-                    mFontImage.image,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
-                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                    VK_ACCESS_2_SHADER_READ_BIT,
-                    VK_IMAGE_ASPECT_COLOR_BIT
-                ),
-            }
+            VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+            VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+            VK_ACCESS_2_SHADER_READ_BIT
         );
 
         VK_CHECK(vkEndCommandBuffer(copyCmdBuffer));
@@ -400,7 +392,7 @@ bool ImguiRenderer::Render(VkCommandBuffer cb, u32 frameIndex)
         cb,
         mPipeline,
         {
-            {mFontImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            mFontImage.view,
             mFontSampler,
         }
     );

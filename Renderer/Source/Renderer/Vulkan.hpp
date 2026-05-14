@@ -2,6 +2,8 @@
 
 #include "RendererCommon.hpp"
 
+#include "../Arena.hpp"
+
 #include <initializer_list>
 #include <vector>
 
@@ -57,7 +59,7 @@ union DescriptorInfo
 
     DescriptorInfo(
         VkImageView imageView,
-        VkImageLayout imageLayout,
+        VkImageLayout imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         VkSampler sampler = VK_NULL_HANDLE
     )
         : image{sampler, imageView, imageLayout}
@@ -102,35 +104,31 @@ VkImageMemoryBarrier2 ImageMemoryBarrier(
     u32 srcQueueFamilyIdx = VK_QUEUE_FAMILY_IGNORED,
     u32 dstQueueFamilyIdx = VK_QUEUE_FAMILY_IGNORED
 );
-VkBufferMemoryBarrier2 BufferMemoryBarrier(
-    VkBuffer buffer,
-    VkPipelineStageFlags2 srcStageMask,
-    VkAccessFlags2 srcAccessMask,
-    VkPipelineStageFlags2 dstStageMask,
-    VkAccessFlags2 dstAccessMask,
-    VkDeviceSize size = VK_WHOLE_SIZE
-);
-VkMemoryBarrier2 MemoryBarrier(
+void CmdMemoryBarrier(
+    VkCommandBuffer cb,
     VkPipelineStageFlags2 srcStageMask,
     VkAccessFlags2 srcAccessMask,
     VkPipelineStageFlags2 dstStageMask,
     VkAccessFlags2 dstAccessMask
 );
-void CmdMemoryBarrier(VkCommandBuffer cb, std::initializer_list<VkMemoryBarrier2> barriers);
-void CmdBufferMemoryBarrier(
-    VkCommandBuffer cb,
-    std::initializer_list<VkBufferMemoryBarrier2> barriers
-);
+void CmdFullMemoryBarrier(VkCommandBuffer cb);
 void CmdImageMemoryBarrier(
     VkCommandBuffer cb,
     std::initializer_list<VkImageMemoryBarrier2> barriers
 );
-void CmdBarrier(
+// Stole the idea from niagara, invalidate (undefined -> general) images in
+// the beginning of the frame.
+void CmdInvalidateBarrier(
     VkCommandBuffer cb,
-    std::initializer_list<VkMemoryBarrier2> memoryBarriers,
-    std::initializer_list<VkBufferMemoryBarrier2> bufferMemoryBarriers,
-    std::initializer_list<VkImageMemoryBarrier2> imageMemoryBarriers
+    VkPipelineStageFlags2 srcStageMask,
+    VkAccessFlags2 srcAccessMask,
+    VkPipelineStageFlags2 dstStageMask,
+    VkAccessFlags2 dstAccessMask,
+    Arena scratchArena,
+    std::initializer_list<VkImage> colorImages,
+    std::initializer_list<VkImage> depthImages
 );
+
 bool FindMemoryType(
     u32& memoryTypeIdx,
     VkPhysicalDevice physicalDevice,

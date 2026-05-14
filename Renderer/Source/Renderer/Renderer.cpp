@@ -77,6 +77,8 @@ static std::vector<i8> CreateShadowJitterOffsets(size_t size, size_t samplesU, s
 
 bool Renderer::Init()
 {
+    mScratchArena.Init(16'000'000);
+
     // SDL.
     {
 #ifdef __linux__
@@ -472,7 +474,7 @@ bool Renderer::Init()
                     Vulkan::ImageMemoryBarrier(
                         mShadowPcfJitterImage.image,
                         VK_IMAGE_LAYOUT_UNDEFINED,
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_IMAGE_LAYOUT_GENERAL,
                         VK_PIPELINE_STAGE_2_HOST_BIT,
                         VK_ACCESS_2_NONE,
                         VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
@@ -499,24 +501,17 @@ bool Renderer::Init()
                 cb,
                 stagingBuffer.buffer,
                 mShadowPcfJitterImage.image,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_GENERAL,
                 1,
                 &bufferCopyRegion
             );
 
-            Vulkan::CmdImageMemoryBarrier(
+            Vulkan::CmdMemoryBarrier(
                 cb,
-                {
-                    Vulkan::ImageMemoryBarrier(
-                        mShadowPcfJitterImage.image,
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
-                        VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                        VK_ACCESS_2_SHADER_READ_BIT
-                    ),
-                }
+                VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                VK_ACCESS_2_SHADER_READ_BIT
             );
 
             VK_CHECK(vkEndCommandBuffer(cb));
@@ -790,7 +785,7 @@ bool Renderer::Init()
         {
             const VkDescriptorImageInfo imageInfo = {
                 .imageView = mTextures[i].view,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             };
 
             const VkWriteDescriptorSet writeSet = {
@@ -810,7 +805,7 @@ bool Renderer::Init()
     if (!mImguiRenderer
              .Init(mWindow, mDevice, mCommandPoolGraphics, mSwapchain.surfaceFormat.format))
     {
-        fprintf(stderr, "Failed to initialize ImGui renderer\n");
+        fprintf(stderr, "failed to initialize ImGui renderer\n");
         return false;
     }
 
@@ -950,6 +945,8 @@ bool Renderer::StartNewFrame()
 {
     DEBUG_ASSERT(!mNewFrameStarted);
 
+    // TODO: handle mRenderingPaused.
+
     Frame& frame = mFrame[mFrameIdx];
 
     VK_CHECK(vkWaitForFences(mDevice.mDevice, 1, &frame.fenceQueueSubmit, VK_TRUE, 1'000'000'000));
@@ -1002,14 +999,10 @@ bool Renderer::Render(f32 deltaTime)
 
         Vulkan::CmdMemoryBarrier(
             cb,
-            {
-                Vulkan::MemoryBarrier(
-                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                    VK_ACCESS_2_MEMORY_WRITE_BIT,
-                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                    VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT
-                ),
-            }
+            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            VK_ACCESS_2_MEMORY_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT
         );
 
         VK_CHECK(vkEndCommandBuffer(cb));
@@ -1098,12 +1091,6 @@ bool Renderer::Render(f32 deltaTime)
 
     switch (mUniformData.renderMode)
     {
-    case RENDER_MODE_FORWARD:
-        if (!RecordCommandBufferForward(imageIdx))
-        {
-            return false;
-        }
-        break;
     case RENDER_MODE_GRAD_ERROR:
         if (!RecordCommandBufferDebugGradError(imageIdx))
         {
@@ -1118,8 +1105,7 @@ bool Renderer::Render(f32 deltaTime)
         break;
     }
 
-    if (mUniformData.renderMode == RENDER_MODE_FORWARD
-        || mUniformData.renderMode == RENDER_MODE_GRAD_ERROR)
+    if (mUniformData.renderMode == RENDER_MODE_GRAD_ERROR)
     {
         if (!mDevice.QueueSubmit({
                 .queueInfo = mDevice.mGraphicsQueueInfo,
@@ -1358,7 +1344,6 @@ void Renderer::CleanupPipelines()
     mDevice.DestroyPipeline(mCullEarlyPipeline);
     mDevice.DestroyPipeline(mFullscreenPipeline);
     mDevice.DestroyPipeline(mVisibilityRenderPipeline);
-    mDevice.DestroyPipeline(mForwardRenderPipeline);
     mDevice.DestroyPipeline(mVisibilityPipeline);
 }
 
@@ -1380,26 +1365,6 @@ bool Renderer::RecompilePipelines()
             .colorBlendAttachments = {{.colorWriteMask = Vulkan::ColorComponentAllBits}},
             .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
             .debugName = "VisibilityBufferPass",
-        }))
-    {
-        return false;
-    }
-
-    if (!mDevice.CreateGraphicsPipeline({
-            .pipeline = mForwardRenderPipeline,
-            .shaderPaths = {"ForwardRender.vert.hlsl.spv", "ForwardRender.frag.hlsl.spv"},
-            .cullMode = VK_CULL_MODE_BACK_BIT,
-            .depthFormat = mDepthImage.format,
-            .depthTestEnable = VK_TRUE,
-            .depthWriteEnable = VK_TRUE,
-            .colorAttachmentFormats = {mRenderImage.format, mVelocityImage.format},
-            .colorBlendAttachments = {
-                {.colorWriteMask = Vulkan::ColorComponentAllBits},
-                {.colorWriteMask = Vulkan::ColorComponentAllBits},
-            },
-            .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
-            .extraDescriptorSetLayout = mTextureDescriptorSetLayout,
-            .debugName = "ForwardRenderPass",
         }))
     {
         return false;
@@ -1702,7 +1667,7 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
                 Vulkan::ImageMemoryBarrier(
                     mTextures[i].image,
                     VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_GENERAL,
                     VK_PIPELINE_STAGE_2_NONE,
                     VK_ACCESS_2_NONE,
                     VK_PIPELINE_STAGE_2_TRANSFER_BIT,
@@ -1717,26 +1682,9 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
             cb,
             stagingBuffer.buffer,
             mTextures[i].image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_GENERAL,
             u32(copyRegions.size()),
             copyRegions.data()
-        );
-
-        Vulkan::CmdImageMemoryBarrier(
-            cb,
-            {
-                Vulkan::ImageMemoryBarrier(
-                    mTextures[i].image,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    VK_PIPELINE_STAGE_2_NONE,
-                    VK_ACCESS_2_NONE,
-                    VK_IMAGE_ASPECT_COLOR_BIT,
-                    mipLevels
-                ),
-            }
         );
 
         VK_CHECK(vkEndCommandBuffer(cb));
@@ -1851,7 +1799,7 @@ void Renderer::VisibilityBufferPass(VkCommandBuffer cb, bool cullLate)
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .imageView = mVisibilityImage.view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         },
@@ -1860,104 +1808,7 @@ void Renderer::VisibilityBufferPass(VkCommandBuffer cb, bool cullLate)
     const VkRenderingAttachmentInfo depthAttachmentInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = mDepthImage.view,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-    };
-
-    const VkRenderingInfo renderingInfo = {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = {.extent = mRenderImageExtent},
-        .layerCount = 1,
-        .colorAttachmentCount = ARRAY_SIZE(renderingAttachmentInfos),
-        .pColorAttachments = renderingAttachmentInfos,
-        .pDepthAttachment = &depthAttachmentInfo,
-    };
-
-    vkCmdBeginRendering(cb, &renderingInfo);
-
-    vkCmdBindIndexBuffer(cb, mIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-    vkCmdDrawIndexedIndirectCount(
-        cb,
-        cullLate ? mDrawCmdLateBuffer2.buffer : mDrawCmdEarlyBuffer2.buffer,
-        0,
-        mDrawCountBuffer.buffer,
-        0,
-        mUniformData.drawCount,
-        sizeof(VkDrawIndexedIndirectCommand)
-    );
-
-    vkCmdEndRendering(cb);
-}
-
-void Renderer::ForwardPass(VkCommandBuffer cb, bool cullLate)
-{
-    DEBUG_ASSERT(cb);
-
-    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, mForwardRenderPipeline.pipeline);
-
-    Vulkan::CmdPushDescriptors(
-        cb,
-        mForwardRenderPipeline,
-        {
-            mFrame[mFrameIdx].uniformBuffer.buffer,
-            cullLate ? mDrawIndicesLateBuffer.buffer : mDrawIndicesEarlyBuffer.buffer,
-            mDrawDataBuffer.buffer,
-            mVertexBuffer.buffer,
-            mMaterialBuffer.buffer,
-            mTextureSampler,
-        }
-    );
-
-    vkCmdBindDescriptorSets(
-        cb,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        mForwardRenderPipeline.layout,
-        1,
-        1,
-        &mTextureDescriptorSet,
-        0,
-        nullptr
-    );
-
-    const VkViewport viewport = {
-        .y = f32(mRenderImageExtent.height),
-        .width = f32(mRenderImageExtent.width),
-        .height = -f32(mRenderImageExtent.height),
-        .maxDepth = 1.0f,
-    };
-    vkCmdSetViewport(cb, 0, 1, &viewport);
-
-    const VkRect2D scissor = {
-        .extent = mRenderImageExtent,
-    };
-    vkCmdSetScissor(cb, 0, 1, &scissor);
-
-    const Vec3 clearColor = Utils::SrgbToLinear({0.7f, 0.8f, 0.9f});
-
-    const VkRenderingAttachmentInfo renderingAttachmentInfos[] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = mRenderImage.view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = {.color = {{clearColor.R(), clearColor.G(), clearColor.B()}}},
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = mVelocityImage.view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        },
-    };
-
-    const VkRenderingAttachmentInfo depthAttachmentInfo = {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = mDepthImage.view,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
     };
@@ -2014,10 +1865,7 @@ void Renderer::CullPass(VkCommandBuffer cb, bool late)
             // early/late pipelines are created with different specialization constants,
             // but this binding exists in both and must be filled correctly, for now
             // just using a dummy image for the early pass.
-            {
-                late ? mDepthPyramidImage.view : mTextures[0].view,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            },
+            late ? mDepthPyramidImage.view : mTextures[0].view,
             mDebugDrawCountBuffer.buffer,
             mDebugDrawRectBuffer.buffer,
         }
@@ -2036,8 +1884,8 @@ void Renderer::DepthReducePass(VkCommandBuffer cb)
 
     // In, out.
     Vulkan::DescriptorInfo descInfos[] = {
-        {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-        {mDepthPyramidMipImageViews[0], VK_IMAGE_LAYOUT_GENERAL},
+        {mDepthImage.view},
+        {mDepthPyramidMipImageViews[0]},
         mMinSampler,
     };
 
@@ -2078,14 +1926,10 @@ void Renderer::DepthReducePass(VkCommandBuffer cb)
 
         Vulkan::CmdMemoryBarrier(
             cb,
-            {
-                Vulkan::MemoryBarrier(
-                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-                ),
-            }
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
         );
 
         descInfos[0].image.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -2104,8 +1948,8 @@ void Renderer::DepthViewQuarterResPass(VkCommandBuffer cb)
         mDepthViewQuarterResPipeline,
         {
             mFrame[mFrameIdx].uniformBuffer.buffer,
-            {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mDepthViewQuarterResImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            mDepthImage.view,
+            mDepthViewQuarterResImage.view,
         }
     );
 
@@ -2136,9 +1980,9 @@ void Renderer::AmbientOcclusionPass(VkCommandBuffer cb)
             mIndexBuffer.buffer,
             mVertexBuffer.buffer,
             mNearestSampler,
-            {mDepthViewQuarterResImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mAmbientOcclusionImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            mDepthViewQuarterResImage.view,
+            mVisibilityImage.view,
+            mAmbientOcclusionImage.view,
         }
     );
 
@@ -2205,7 +2049,7 @@ void Renderer::ShadowPass(VkCommandBuffer cb)
     VkRenderingAttachmentInfo depthAttachmentInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = mShadowImageViewCascade[0],
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = {{{0.0f, 0}}},
@@ -2283,9 +2127,9 @@ void Renderer::FogPass(VkCommandBuffer cb)
         {
             mFrame[mFrameIdx].uniformBuffer.buffer,
             mNearestSampler,
-            {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mShadowImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mFogImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            mDepthImage.view,
+            mShadowImage.view,
+            mFogImage.view,
         }
     );
 
@@ -2303,15 +2147,13 @@ void Renderer::BlurFogPass(VkCommandBuffer cb, bool horizontal)
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, mBlurFogPipeline.pipeline);
 
-    const VkImageLayout inLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     const Vulkan::DescriptorInfo inImage = horizontal
-        ? Vulkan::DescriptorInfo{mFogImage.view, inLayout}
-        : Vulkan::DescriptorInfo{mFogBlurredHorizontalImage.view, inLayout};
+        ? Vulkan::DescriptorInfo{mFogImage.view}
+        : Vulkan::DescriptorInfo{mFogBlurredHorizontalImage.view};
 
-    const VkImageLayout outLayout = VK_IMAGE_LAYOUT_GENERAL;
     const Vulkan::DescriptorInfo outImage = horizontal
-        ? Vulkan::DescriptorInfo{mFogBlurredHorizontalImage.view, outLayout}
-        : Vulkan::DescriptorInfo{mFogBlurredVerticalImage.view, outLayout};
+        ? Vulkan::DescriptorInfo{mFogBlurredHorizontalImage.view}
+        : Vulkan::DescriptorInfo{mFogBlurredVerticalImage.view};
 
     Vulkan::CmdPushDescriptors(
         cb,
@@ -2348,22 +2190,20 @@ void Renderer::AmbientOcclusionBlurPass(VkCommandBuffer cb, bool horizontal)
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, mAmbientOcclusionBlurPipeline.pipeline);
 
-    const VkImageLayout inLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     const Vulkan::DescriptorInfo inImage = horizontal
-        ? Vulkan::DescriptorInfo{mAmbientOcclusionImage.view, inLayout}
-        : Vulkan::DescriptorInfo{mAmbientOcclusionBlurredHorizontalImage.view, inLayout};
+        ? Vulkan::DescriptorInfo{mAmbientOcclusionImage.view}
+        : Vulkan::DescriptorInfo{mAmbientOcclusionBlurredHorizontalImage.view};
 
-    const VkImageLayout outLayout = VK_IMAGE_LAYOUT_GENERAL;
     const Vulkan::DescriptorInfo outImage = horizontal
-        ? Vulkan::DescriptorInfo{mAmbientOcclusionBlurredHorizontalImage.view, outLayout}
-        : Vulkan::DescriptorInfo{mAmbientOcclusionBlurredVerticalImage.view, outLayout};
+        ? Vulkan::DescriptorInfo{mAmbientOcclusionBlurredHorizontalImage.view}
+        : Vulkan::DescriptorInfo{mAmbientOcclusionBlurredVerticalImage.view};
 
     Vulkan::CmdPushDescriptors(
         cb,
         mAmbientOcclusionBlurPipeline,
         {
             mFrame[mFrameIdx].uniformBuffer.buffer,
-            {mDepthViewQuarterResImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            mDepthViewQuarterResImage.view,
             inImage,
             outImage,
         }
@@ -2405,10 +2245,10 @@ void Renderer::AmbientOcclusionUpsamplePass(VkCommandBuffer cb)
         {
             mFrame[mFrameIdx].uniformBuffer.buffer,
             mNearestSampler,
-            {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mDepthViewQuarterResImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mAmbientOcclusionBlurredVerticalImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mAmbientOcclusionUpsampledImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            mDepthImage.view,
+            mDepthViewQuarterResImage.view,
+            mAmbientOcclusionBlurredVerticalImage.view,
+            mAmbientOcclusionUpsampledImage.view,
         }
     );
 
@@ -2443,13 +2283,13 @@ void Renderer::RenderPass(VkCommandBuffer cb)
             mTextureSampler,
             mShadowSampler,
             mShadowPcfJitterSampler,
-            {mShadowImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mShadowPcfJitterImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mFogBlurredVerticalImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mVisibilityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mAmbientOcclusionUpsampledImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mVelocityImage.view, VK_IMAGE_LAYOUT_GENERAL},
-            {mRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            mShadowImage.view,
+            mShadowPcfJitterImage.view,
+            mFogBlurredVerticalImage.view,
+            mVisibilityImage.view,
+            mAmbientOcclusionUpsampledImage.view,
+            mVelocityImage.view,
+            mRenderImage.view,
         }
     );
 
@@ -2483,16 +2323,13 @@ void Renderer::TaaResolvePass(VkCommandBuffer cb)
         mTaaResolvePipeline,
         {
             mFrame[mFrameIdx].uniformBuffer.buffer,
-            {mRenderImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mDepthImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {mVelocityImage.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-            {
-                mSwapchainRecreated || mRenderModeChanged
-                    ? mFrame[mFrameIdx].resolvedRenderImage.view
-                    : mFrame[mPrevFrameIdx].resolvedRenderImage.view,
-                VK_IMAGE_LAYOUT_GENERAL,
-            },
-            {mFrame[mFrameIdx].resolvedRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            mRenderImage.view,
+            mDepthImage.view,
+            mVelocityImage.view,
+            mSwapchainRecreated || mRenderModeChanged
+                ? mFrame[mFrameIdx].resolvedRenderImage.view
+                : mFrame[mPrevFrameIdx].resolvedRenderImage.view,
+            mFrame[mFrameIdx].resolvedRenderImage.view,
             mLinearSampler,
         }
     );
@@ -2524,14 +2361,10 @@ void Renderer::DebugDrawPass(VkCommandBuffer cb)
 
     Vulkan::CmdMemoryBarrier(
         cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+        VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
     );
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, mDebugDrawRectPipeline.pipeline);
@@ -2591,7 +2424,7 @@ void Renderer::FullscreenPass(VkCommandBuffer cb, u32 imageIdx)
         cb,
         mFullscreenPipeline,
         {
-            {mFrame[mFrameIdx].resolvedRenderImage.view, VK_IMAGE_LAYOUT_GENERAL},
+            mFrame[mFrameIdx].resolvedRenderImage.view,
             mLinearSampler,
         }
     );
@@ -2612,8 +2445,8 @@ void Renderer::FullscreenPass(VkCommandBuffer cb, u32 imageIdx)
     const VkRenderingAttachmentInfo renderingAttachmentInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = mSwapchain.images[imageIdx].view,
-        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
     };
 
@@ -2668,7 +2501,7 @@ void Renderer::DebugDrawGradErrorPass(VkCommandBuffer cb, bool cullLate, u32 ima
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .imageView = mSwapchain.images[imageIdx].view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         },
@@ -2677,7 +2510,7 @@ void Renderer::DebugDrawGradErrorPass(VkCommandBuffer cb, bool cullLate, u32 ima
     const VkRenderingAttachmentInfo depthAttachmentInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = mDepthImage.view,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         .loadOp = cullLate ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
     };
@@ -2721,97 +2554,62 @@ bool Renderer::RecordCommandBufferDebugGradError(u32 imageIdx)
     };
     VK_CHECK(vkBeginCommandBuffer(cb, &cmdBeginInfo));
 
+    Vulkan::CmdInvalidateBarrier(
+        cb,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT
+            | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+        VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+            | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        mScratchArena,
+        {
+            mVisibilityImage.image,
+            mDepthPyramidImage.image,
+            mSwapchain.images[imageIdx].image,
+        },
+        {mDepthImage.image}
+    );
+
     Vulkan::CmdMemoryBarrier(
         cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                VK_ACCESS_2_NONE
-            ),
-        }
+        VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+        VK_ACCESS_2_NONE,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        VK_ACCESS_2_NONE
     );
 
     vkCmdFillBuffer(cb, mDrawCountBuffer.buffer, 0, sizeof(u32), 0);
 
     Vulkan::CmdMemoryBarrier(
         cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
     );
 
     CullPass(cb, false);
 
-    Vulkan::CmdBarrier(
+    Vulkan::CmdMemoryBarrier(
         cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mSwapchain.images[imageIdx].image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
     );
 
     DebugDrawGradErrorPass(cb, false, imageIdx);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthPyramidImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+        VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     if (!mCullCameraFrozen)
@@ -2821,71 +2619,35 @@ bool Renderer::RecordCommandBufferDebugGradError(u32 imageIdx)
 
     Vulkan::CmdMemoryBarrier(
         cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                VK_ACCESS_2_NONE
-            ),
-        }
+        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+        VK_ACCESS_2_NONE,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        VK_ACCESS_2_NONE
     );
 
     vkCmdFillBuffer(cb, mDrawCountBuffer.buffer, 0, sizeof(u32), 0);
 
-    Vulkan::CmdBarrier(
+    Vulkan::CmdMemoryBarrier(
         cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthPyramidImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
     );
 
     CullPass(cb, true);
 
-    Vulkan::CmdBarrier(
+    Vulkan::CmdMemoryBarrier(
         cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+        VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+            | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
     );
 
     DebugDrawGradErrorPass(cb, true, imageIdx);
@@ -2901,7 +2663,7 @@ bool Renderer::RecordCommandBufferDebugGradError(u32 imageIdx)
         const VkRenderingAttachmentInfo renderingAttachmentInfo = {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .imageView = mSwapchain.images[imageIdx].view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         };
@@ -2929,7 +2691,7 @@ bool Renderer::RecordCommandBufferDebugGradError(u32 imageIdx)
         {
             Vulkan::ImageMemoryBarrier(
                 mSwapchain.images[imageIdx].image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                VK_IMAGE_LAYOUT_GENERAL,
                 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                 VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -2964,83 +2726,63 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
     };
     VK_CHECK(vkBeginCommandBuffer(cbStart, &cmdBeginInfo));
 
+    Vulkan::CmdInvalidateBarrier(
+        cbStart,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_ACCESS_2_NONE,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT
+            | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+            | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        mScratchArena,
+        {
+            mVisibilityImage.image,
+            mDepthPyramidImage.image,
+            mAmbientOcclusionImage.image,
+            mDepthViewQuarterResImage.image,
+            mAmbientOcclusionBlurredHorizontalImage.image,
+            mAmbientOcclusionBlurredVerticalImage.image,
+            mAmbientOcclusionUpsampledImage.image,
+            mRenderImage.image,
+            mVelocityImage.image,
+            mFogImage.image,
+            mFogBlurredHorizontalImage.image,
+            mFogBlurredVerticalImage.image,
+            frame.resolvedRenderImage.image,
+            mSwapchain.images[imageIdx].image,
+        },
+        {mDepthImage.image, mShadowImage.image}
+    );
+
     vkCmdFillBuffer(cbStart, mDrawCountBuffer.buffer, 0, sizeof(u32), 0);
     vkCmdFillBuffer(cbStart, mDebugDrawCountBuffer.buffer, 0, sizeof(u32), 0);
 
     Vulkan::CmdMemoryBarrier(
         cbStart,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
     );
 
     CullPass(cbStart, false);
 
-    Vulkan::CmdBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbStart,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
-                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mVisibilityImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
+        VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
     );
 
     VisibilityBufferPass(cbStart, false);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbStart,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthPyramidImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+        VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     if (!mCullCameraFrozen)
@@ -3050,308 +2792,83 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
 
     Vulkan::CmdMemoryBarrier(
         cbStart,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                VK_ACCESS_2_NONE
-            ),
-        }
+        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+        VK_ACCESS_2_NONE,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        VK_ACCESS_2_NONE
     );
 
     vkCmdFillBuffer(cbStart, mDrawCountBuffer.buffer, 0, sizeof(u32), 0);
 
-    Vulkan::CmdBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbStart,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthPyramidImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+            | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
     );
 
     CullPass(cbStart, true);
 
-    Vulkan::CmdBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbStart,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+            | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+        VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+            | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
     );
 
     VisibilityBufferPass(cbStart, true);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cbStart,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mVisibilityImage.image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_IMAGE_ASPECT_COLOR_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mGraphicsQueueInfo.familyIdx,
-                mDevice.mComputeQueueInfo.familyIdx
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_IMAGE_ASPECT_DEPTH_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mGraphicsQueueInfo.familyIdx,
-                mDevice.mComputeQueueInfo.familyIdx
-            ),
-        }
-    );
 
     VK_CHECK(vkEndCommandBuffer(cbStart));
 
     VK_CHECK(vkBeginCommandBuffer(cbSSAO, &cmdBeginInfo));
 
-    Vulkan::CmdImageMemoryBarrier(
-        cbSSAO,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mVisibilityImage.image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_COLOR_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mGraphicsQueueInfo.familyIdx,
-                mDevice.mComputeQueueInfo.familyIdx
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mGraphicsQueueInfo.familyIdx,
-                mDevice.mComputeQueueInfo.familyIdx
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthViewQuarterResImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
-    );
-
     DepthViewQuarterResPass(cbSSAO);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbSSAO,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthViewQuarterResImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     AmbientOcclusionPass(cbSSAO);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbSSAO,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionBlurredHorizontalImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     AmbientOcclusionBlurPass(cbSSAO, true);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbSSAO,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionBlurredHorizontalImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionBlurredVerticalImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     AmbientOcclusionBlurPass(cbSSAO, false);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbSSAO,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionBlurredVerticalImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionUpsampledImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     AmbientOcclusionUpsamplePass(cbSSAO);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cbSSAO,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mVisibilityImage.image,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_IMAGE_ASPECT_COLOR_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mComputeQueueInfo.familyIdx,
-                mDevice.mGraphicsQueueInfo.familyIdx
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_IMAGE_ASPECT_DEPTH_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mComputeQueueInfo.familyIdx,
-                mDevice.mGraphicsQueueInfo.familyIdx
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionUpsampledImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_IMAGE_ASPECT_COLOR_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mComputeQueueInfo.familyIdx,
-                mDevice.mGraphicsQueueInfo.familyIdx
-            ),
-        }
-    );
 
     VK_CHECK(vkEndCommandBuffer(cbSSAO));
 
@@ -3361,44 +2878,20 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
 
     Vulkan::CmdMemoryBarrier(
         cbShadow,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
     );
 
     ShadowCullPass(cbShadow);
 
-    Vulkan::CmdBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbShadow,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mShadowImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                RENDERER_SHADOW_MAP_CASCADE_COUNT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
     );
 
     ShadowPass(cbShadow);
@@ -3407,239 +2900,64 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
 
     VK_CHECK(vkBeginCommandBuffer(cbEnd, &cmdBeginInfo));
 
-    Vulkan::CmdImageMemoryBarrier(
-        cbEnd,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mVisibilityImage.image,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_IMAGE_ASPECT_COLOR_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mComputeQueueInfo.familyIdx,
-                mDevice.mGraphicsQueueInfo.familyIdx
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_IMAGE_ASPECT_DEPTH_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mComputeQueueInfo.familyIdx,
-                mDevice.mGraphicsQueueInfo.familyIdx
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mAmbientOcclusionUpsampledImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_COLOR_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                VK_REMAINING_ARRAY_LAYERS,
-                mDevice.mComputeQueueInfo.familyIdx,
-                mDevice.mGraphicsQueueInfo.familyIdx
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mRenderImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mVelocityImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mShadowImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT,
-                VK_REMAINING_MIP_LEVELS,
-                RENDERER_SHADOW_MAP_CASCADE_COUNT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mFogImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
-    );
-
     FogPass(cbEnd);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbEnd,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mFogImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mFogBlurredHorizontalImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     BlurFogPass(cbEnd, true);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbEnd,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mFogBlurredHorizontalImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mFogBlurredVerticalImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     BlurFogPass(cbEnd, false);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbEnd,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mFogBlurredVerticalImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     RenderPass(cbEnd);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbEnd,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mRenderImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                frame.resolvedRenderImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mVelocityImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     TaaResolvePass(cbEnd);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbEnd,
-        {
-            Vulkan::ImageMemoryBarrier(
-                frame.resolvedRenderImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mSwapchain.images[imageIdx].image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
     );
 
     DebugDrawPass(cbEnd);
 
-    Vulkan::CmdImageMemoryBarrier(
+    Vulkan::CmdMemoryBarrier(
         cbEnd,
-        {
-            Vulkan::ImageMemoryBarrier(
-                frame.resolvedRenderImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
     );
 
     FullscreenPass(cbEnd, imageIdx);
@@ -3654,7 +2972,7 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
         const VkRenderingAttachmentInfo renderingAttachmentInfo = {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .imageView = mSwapchain.images[imageIdx].view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         };
@@ -3682,7 +3000,7 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
         {
             Vulkan::ImageMemoryBarrier(
                 mSwapchain.images[imageIdx].image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                VK_IMAGE_LAYOUT_GENERAL,
                 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                 VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -3693,339 +3011,6 @@ bool Renderer::RecordCommandBufferVisibility(u32 imageIdx)
     );
 
     VK_CHECK(vkEndCommandBuffer(cbEnd));
-
-    return true;
-}
-
-bool Renderer::RecordCommandBufferForward(u32 imageIdx)
-{
-    Frame& frame = mFrame[mFrameIdx];
-
-    const VkCommandBuffer cb = frame.commandBufferStart;
-
-    VK_CHECK(vkResetCommandBuffer(cb, 0));
-
-    const VkCommandBufferBeginInfo cmdBeginInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    };
-    VK_CHECK(vkBeginCommandBuffer(cb, &cmdBeginInfo));
-
-    Vulkan::CmdMemoryBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                VK_ACCESS_2_NONE
-            ),
-        }
-    );
-
-    vkCmdFillBuffer(cb, mDrawCountBuffer.buffer, 0, sizeof(u32), 0);
-    vkCmdFillBuffer(cb, mDebugDrawCountBuffer.buffer, 0, sizeof(u32), 0);
-
-    Vulkan::CmdMemoryBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
-    );
-
-    CullPass(cb, false);
-
-    Vulkan::CmdBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mRenderImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mVelocityImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
-        }
-    );
-
-    ForwardPass(cb, false);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthPyramidImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        }
-    );
-
-    if (!mCullCameraFrozen)
-    {
-        DepthReducePass(cb);
-    }
-
-    Vulkan::CmdMemoryBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                VK_ACCESS_2_NONE
-            ),
-        }
-    );
-
-    vkCmdFillBuffer(cb, mDrawCountBuffer.buffer, 0, sizeof(u32), 0);
-
-    Vulkan::CmdBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_TRANSFER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthPyramidImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
-    );
-
-    CullPass(cb, true);
-
-    Vulkan::CmdBarrier(
-        cb,
-        {
-            Vulkan::MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-            ),
-        },
-        {},
-        {
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_NONE,
-                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                    | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-        }
-    );
-
-    ForwardPass(cb, true);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mRenderImage.image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mDepthImage.image,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                VK_IMAGE_ASPECT_DEPTH_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                frame.resolvedRenderImage.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mVelocityImage.image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
-    );
-
-    TaaResolvePass(cb);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                frame.resolvedRenderImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
-                    | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
-            ),
-            Vulkan::ImageMemoryBarrier(
-                mSwapchain.images[imageIdx].image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-            ),
-        }
-    );
-
-    DebugDrawPass(cb);
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                frame.resolvedRenderImage.image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-            ),
-        }
-    );
-
-    FullscreenPass(cb, imageIdx);
-
-    if (!mImguiRenderer.UpdateVertexIndexBuffers(static_cast<u32>(mFrameIdx)))
-    {
-        return false;
-    }
-
-    if (mEnableUI)
-    {
-        const VkRenderingAttachmentInfo renderingAttachmentInfo = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = mSwapchain.images[imageIdx].view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        };
-
-        const VkRenderingInfo renderingInfo = {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-            .renderArea = {.extent = mSwapchain.extent},
-            .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &renderingAttachmentInfo,
-        };
-
-        vkCmdBeginRendering(cb, &renderingInfo);
-
-        if (!mImguiRenderer.Render(cb, u32(mFrameIdx)))
-        {
-            return false;
-        }
-
-        vkCmdEndRendering(cb);
-    }
-
-    Vulkan::CmdImageMemoryBarrier(
-        cb,
-        {
-            Vulkan::ImageMemoryBarrier(
-                mSwapchain.images[imageIdx].image,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE
-            ),
-        }
-    );
-
-    VK_CHECK(vkEndCommandBuffer(cb));
 
     return true;
 }

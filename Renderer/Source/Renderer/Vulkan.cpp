@@ -378,49 +378,6 @@ bool Vulkan::ExtensionIsAvailable(const char* name, Slice<VkExtensionProperties>
     return false;
 }
 
-VkMemoryBarrier2 Vulkan::MemoryBarrier(
-    VkPipelineStageFlags2 srcStageMask,
-    VkAccessFlags2 srcAccessMask,
-    VkPipelineStageFlags2 dstStageMask,
-    VkAccessFlags2 dstAccessMask
-)
-{
-    const VkMemoryBarrier2 barrier = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
-        .srcStageMask = srcStageMask,
-        .srcAccessMask = srcAccessMask,
-        .dstStageMask = dstStageMask,
-        .dstAccessMask = dstAccessMask,
-    };
-
-    return barrier;
-}
-
-VkBufferMemoryBarrier2 Vulkan::BufferMemoryBarrier(
-    VkBuffer buffer,
-    VkPipelineStageFlags2 srcStageMask,
-    VkAccessFlags2 srcAccessMask,
-    VkPipelineStageFlags2 dstStageMask,
-    VkAccessFlags2 dstAccessMask,
-    VkDeviceSize size
-)
-{
-    DEBUG_ASSERT(buffer);
-    DEBUG_ASSERT(size > 0);
-
-    const VkBufferMemoryBarrier2 barrier = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-        .srcStageMask = srcStageMask,
-        .srcAccessMask = srcAccessMask,
-        .dstStageMask = dstStageMask,
-        .dstAccessMask = dstAccessMask,
-        .buffer = buffer,
-        .size = size,
-    };
-
-    return barrier;
-}
-
 VkImageMemoryBarrier2 Vulkan::ImageMemoryBarrier(
     VkImage image,
     VkImageLayout oldLayout,
@@ -459,31 +416,48 @@ VkImageMemoryBarrier2 Vulkan::ImageMemoryBarrier(
     return barrier;
 }
 
-void Vulkan::CmdMemoryBarrier(VkCommandBuffer cb, std::initializer_list<VkMemoryBarrier2> barriers)
+void Vulkan::CmdMemoryBarrier(
+    VkCommandBuffer cb,
+    VkPipelineStageFlags2 srcStageMask,
+    VkAccessFlags2 srcAccessMask,
+    VkPipelineStageFlags2 dstStageMask,
+    VkAccessFlags2 dstAccessMask
+)
 {
     DEBUG_ASSERT(cb);
-    DEBUG_ASSERT(barriers.size() > 0);
+
+    const VkMemoryBarrier2 barrier = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+        .srcStageMask = srcStageMask,
+        .srcAccessMask = srcAccessMask,
+        .dstStageMask = dstStageMask,
+        .dstAccessMask = dstAccessMask,
+    };
 
     const VkDependencyInfo dependencyInfo = {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .memoryBarrierCount = u32(barriers.size()),
-        .pMemoryBarriers = barriers.begin(),
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers = &barrier,
     };
     vkCmdPipelineBarrier2(cb, &dependencyInfo);
 }
 
-void Vulkan::CmdBufferMemoryBarrier(
-    VkCommandBuffer cb,
-    std::initializer_list<VkBufferMemoryBarrier2> barriers
-)
+void Vulkan::CmdFullMemoryBarrier(VkCommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
-    DEBUG_ASSERT(barriers.size() > 0);
+
+    const VkMemoryBarrier2 barrier = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+        .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+        .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+    };
 
     const VkDependencyInfo dependencyInfo = {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .bufferMemoryBarrierCount = u32(barriers.size()),
-        .pBufferMemoryBarriers = barriers.begin(),
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers = &barrier,
     };
     vkCmdPipelineBarrier2(cb, &dependencyInfo);
 }
@@ -504,27 +478,56 @@ void Vulkan::CmdImageMemoryBarrier(
     vkCmdPipelineBarrier2(cb, &dependencyInfo);
 }
 
-void Vulkan::CmdBarrier(
+void Vulkan::CmdInvalidateBarrier(
     VkCommandBuffer cb,
-    std::initializer_list<VkMemoryBarrier2> memoryBarriers,
-    std::initializer_list<VkBufferMemoryBarrier2> bufferMemoryBarriers,
-    std::initializer_list<VkImageMemoryBarrier2> imageMemoryBarriers
+    VkPipelineStageFlags2 srcStageMask,
+    VkAccessFlags2 srcAccessMask,
+    VkPipelineStageFlags2 dstStageMask,
+    VkAccessFlags2 dstAccessMask,
+    Arena scratchArena,
+    std::initializer_list<VkImage> colorImages,
+    std::initializer_list<VkImage> depthImages
 )
 {
     DEBUG_ASSERT(cb);
-    DEBUG_ASSERT(
-        (memoryBarriers.size() > 0) || (bufferMemoryBarriers.size() > 0)
-        || (imageMemoryBarriers.size() > 0)
-    );
+    DEBUG_ASSERT(colorImages.size() > 0 || depthImages.size() > 0);
+
+    VkImageMemoryBarrier2* const barriers
+        = scratchArena.AllocOrDie<VkImageMemoryBarrier2>(colorImages.size() + depthImages.size());
+
+    u32 barrierCount = 0;
+
+    for (VkImage image : colorImages)
+    {
+        barriers[barrierCount++] = Vulkan::ImageMemoryBarrier(
+            image,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_GENERAL,
+            srcStageMask,
+            srcAccessMask,
+            dstStageMask,
+            dstAccessMask
+        );
+    }
+
+    for (VkImage image : depthImages)
+    {
+        barriers[barrierCount++] = Vulkan::ImageMemoryBarrier(
+            image,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_GENERAL,
+            srcStageMask,
+            srcAccessMask,
+            dstStageMask,
+            dstAccessMask,
+            VK_IMAGE_ASPECT_DEPTH_BIT
+        );
+    }
 
     const VkDependencyInfo dependencyInfo = {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .memoryBarrierCount = u32(memoryBarriers.size()),
-        .pMemoryBarriers = memoryBarriers.begin(),
-        .bufferMemoryBarrierCount = u32(bufferMemoryBarriers.size()),
-        .pBufferMemoryBarriers = bufferMemoryBarriers.begin(),
-        .imageMemoryBarrierCount = u32(imageMemoryBarriers.size()),
-        .pImageMemoryBarriers = imageMemoryBarriers.begin(),
+        .imageMemoryBarrierCount = barrierCount,
+        .pImageMemoryBarriers = barriers,
     };
     vkCmdPipelineBarrier2(cb, &dependencyInfo);
 }
@@ -792,8 +795,12 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
             }
 
             // Required features.
+            VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR unifiedImageLayoutFeatures = {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFIED_IMAGE_LAYOUTS_FEATURES_KHR,
+            };
             VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+                .pNext = &unifiedImageLayoutFeatures,
             };
             VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -855,6 +862,15 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
             // https://advances.realtimerendering.com/s2024/#hable
             supportsRequiredFeatures &= physicalDeviceFeatures.features.geometryShader;
 
+            if (!unifiedImageLayoutFeatures.unifiedImageLayouts)
+            {
+                fprintf(
+                    stderr,
+                    "vulkan: %s extension is not supported, performance may be suboptimal\n",
+                    VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME
+                );
+            }
+
             bool deviceOk = true;
             deviceOk &= supportsVulkan13;
             deviceOk &= supportsGraphicsAndPresentation;
@@ -892,8 +908,15 @@ bool Vulkan::Device::Create(VkSurfaceKHR& surface, SDL_Window* window)
         Vulkan::QueueInfo computeQueueInfo
             = GetQueue(mPhysicalDevice, VK_QUEUE_COMPUTE_BIT, VK_QUEUE_GRAPHICS_BIT);
 
+        // NOTE: did not find any info if I should enable it or just checking it's availability
+        // should be enough (which is probably the case), but did it anyway.
+        VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR unifiedImageLayoutFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFIED_IMAGE_LAYOUTS_FEATURES_KHR,
+            .unifiedImageLayouts = VK_TRUE,
+        };
         VkPhysicalDeviceVulkan14Features vulkanFeatures14 = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+            .pNext = &unifiedImageLayoutFeatures,
             .pushDescriptor = VK_TRUE,
         };
         VkPhysicalDeviceVulkan13Features vulkanFeatures13 = {
@@ -1030,11 +1053,15 @@ bool Vulkan::Device::CreateBuffer(const BufferDesc&& desc) const
 
     const VkBufferUsageFlags usage = desc.usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
+    const u32 queueFamilyIndices[] = {mGraphicsQueueInfo.familyIdx, mComputeQueueInfo.familyIdx};
+
     const VkBufferCreateInfo bufferInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = desc.size,
         .usage = usage,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .sharingMode = VK_SHARING_MODE_CONCURRENT,
+        .queueFamilyIndexCount = u32(ARRAY_SIZE(queueFamilyIndices)),
+        .pQueueFamilyIndices = queueFamilyIndices,
     };
 
     const VmaAllocationCreateInfo allocationInfo = {
@@ -1140,6 +1167,8 @@ bool Vulkan::Device::CreateImage(const ImageDesc&& desc) const
         return false;
     }
 
+    const u32 queueFamilyIndices[] = {mGraphicsQueueInfo.familyIdx, mComputeQueueInfo.familyIdx};
+
     const VkImageCreateInfo imageInfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = imageType,
@@ -1154,7 +1183,9 @@ bool Vulkan::Device::CreateImage(const ImageDesc&& desc) const
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = desc.usage,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .sharingMode = VK_SHARING_MODE_CONCURRENT,
+        .queueFamilyIndexCount = u32(ARRAY_SIZE(queueFamilyIndices)),
+        .pQueueFamilyIndices = queueFamilyIndices,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
 
