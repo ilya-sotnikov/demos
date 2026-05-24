@@ -4,7 +4,7 @@
 
 static float SampleShadow(float3 positionShadow, uint cascadeIdx)
 {
-    return shadowImage.SampleCmpLevel(
+    return shadowTexture.SampleCmpLevel(
         shadowSampler,
         float3(positionShadow.xy, cascadeIdx), positionShadow.z,
         0
@@ -41,7 +41,7 @@ static float CalcShadow(
         for (int i = 0; i < 4; ++i)
         {
             const float4 offset =
-                shadowPcfJitterImage.SampleLevel(shadowPcfJitterSampler, jitterCoord, 0);
+                shadowPcfJitterTexture.SampleLevel(shadowPcfJitterSampler, jitterCoord, 0);
             jitterCoord.z += 1.0f / (PCF_SAMPLES_COUNT / 2.0);
 
             shadowCoord.xy = offset.xy * offsetScale + positionShadow.xy;
@@ -61,7 +61,7 @@ static float CalcShadow(
             for (int i = 0; i < PCF_SAMPLES_COUNT / 2 - 4; ++i)
             {
                 const float4 offset =
-                    shadowPcfJitterImage.SampleLevel(shadowPcfJitterSampler, jitterCoord, 0);
+                    shadowPcfJitterTexture.SampleLevel(shadowPcfJitterSampler, jitterCoord, 0);
                 jitterCoord.z += 1.0f / (PCF_SAMPLES_COUNT / 2.0);
 
                 shadowCoord.xy = offset.xy * offsetScale + positionShadow.xy;

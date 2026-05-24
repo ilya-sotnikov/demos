@@ -104,7 +104,7 @@ static void LoadGeometry(
     std::vector<u32>& indices,
     std::vector<Mesh>& meshes,
     std::vector<MeshPrimitive>& meshPrimitives,
-    std::vector<VkDrawIndexedIndirectCommand>& drawCmds,
+    std::vector<RHI::DrawIndexedIndirectCommand>& drawCmds,
     const cgltf_data* cgltfData
 )
 {
@@ -273,7 +273,7 @@ static void LoadGeometry(
                 VEC_SIZE_BYTES(primVertices)
             );
 
-            const VkDrawIndexedIndirectCommand drawCmd = {
+            const RHI::DrawIndexedIndirectCommand drawCmd = {
                 .indexCount = u32(primIndexCount),
                 .instanceCount = 1,
                 .firstIndex = u32(indexCount),
@@ -493,7 +493,7 @@ bool LoadScene(
     std::vector<Vertex>& vertices,
     std::vector<u32>& indices,
     std::vector<MeshPrimitive>& meshPrimitives,
-    std::vector<VkDrawIndexedIndirectCommand>& drawCmds,
+    std::vector<RHI::DrawIndexedIndirectCommand>& drawCmds,
     std::vector<DrawData>& drawData,
     std::vector<Material>& materials,
     std::vector<std::string>& texturePaths,

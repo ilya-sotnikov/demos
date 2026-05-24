@@ -4,10 +4,10 @@
 // Robust Screen Space Ambient Occlusion in 1 ms in 1080p on PS4, Wojciech Sterna, GPU Zen.
 
 ConstantBuffer<UniformData> uniformBuffer;
-Texture2D<float> depthViewImage;
-Texture2D<float> inImage;
+Texture2D<float> depthViewTexture;
+Texture2D<float> inTexture;
 [[vk::image_format("r8")]]
-RWTexture2D<float> outImage;
+RWTexture2D<float> outTexture;
 
 [[vk::push_constant]]
 PushConstantsSsaoBlur pushConstants;
@@ -29,17 +29,17 @@ static float GAUSS_WEIGHTS[] =
 [numthreads(RENDERER_SSAO_BLUR_WORKGROUP_SIZE_X, RENDERER_SSAO_BLUR_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    const uint2 imageSize = uint2(
+    const uint2 textureSize = uint2(
         uniformBuffer.ambientOcclusionWidth,
         uniformBuffer.ambientOcclusionHeight
     );
 
-    if (dtid.x >= imageSize.x || dtid.y >= imageSize.y)
+    if (dtid.x >= textureSize.x || dtid.y >= textureSize.y)
     {
         return;
     }
 
-    const float depth = depthViewImage[dtid.xy];
+    const float depth = depthViewTexture[dtid.xy];
 
     float result = 0.0;
     float weightSum = 0.0;
@@ -49,17 +49,17 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     {
         int2 sampleCoord =
             dtid.xy + i * int2(pushConstants.pixelOffsetX, pushConstants.pixelOffsetY);
-        sampleCoord = clamp(sampleCoord, int2(0, 0), imageSize - 1);
-        const float sampleDepth = depthViewImage[sampleCoord];
+        sampleCoord = clamp(sampleCoord, int2(0, 0), textureSize - 1);
+        const float sampleDepth = depthViewTexture[sampleCoord];
 
         float deltaDepth = 0.1 * abs(depth - sampleDepth);
         deltaDepth *= deltaDepth;
 
         const float weight = GAUSS_WEIGHTS[3 + i] / (deltaDepth + 1e-5);
 
-        result += weight * inImage[sampleCoord];
+        result += weight * inTexture[sampleCoord];
         weightSum += weight;
     }
 
-    outImage[dtid.xy] = result / weightSum;
+    outTexture[dtid.xy] = result / weightSum;
 }

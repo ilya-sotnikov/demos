@@ -12,7 +12,7 @@ So far there are some bugs in Slang (such as [this](https://github.com/shader-sl
 - use mesh shaders to generate triangle ids for a visibility buffer
 - meshlet frustum, backface, occlusion (Hi-Z) culling
 
-Also, task shaders are very slow on RDNA 3 (and probably others), see the comment from the [Alan Wake 2 presentation by Erik Jansson](https://youtu.be/EtX7WnFhxtQ):
+Also, task shaders are very slow on RDNA 3 (and probably others, including RDNA 4), see the comment from the [Alan Wake 2 presentation by Erik Jansson](https://youtu.be/EtX7WnFhxtQ):
 
 > One of the reasons we didn't use amplification shaders was due to them not performing great across all GPU hardware. Culling in compute shaders followed by ExecuteIndirect into mesh shaders seemed to perform optimally across all of the hardware platforms we were targeting. There was a great stream by Arseny Kapoulkine just two weeks ago about this actually: "niagara: Meshlets unchained" here on YouTube, where he shows why amplification/task shaders perform poorly on AMD RDNA 3 at least. He then implemented something similar to what we show in this presentation and got a massive performance boost, the frame time went from 9.26ms with amplification shader to just 1.44ms with compute shader and ExecuteIndirect approach!
 
@@ -24,6 +24,8 @@ Also, task shaders are very slow on RDNA 3 (and probably others), see the commen
 
 ## Features
 
+- RHI (Vulkan 1.4 backend)
+- GPU-driven rendering (bindless textures, indirect drawing, GPU culling)
 - visibility buffer -> "forward" rendering
 - async compute
 - GPU frustum culling
@@ -36,9 +38,6 @@ Also, task shaders are very slow on RDNA 3 (and probably others), see the commen
 - stable cascaded shadow maps (CSM) with soft shadows (PCF with adaptive sampling)
 - fog (participating media)
 - very simplified atmospheric scattering
-- bindless textures (descriptor indexing)
-- indirect drawing
-- SPIR-V reflection to manage push descriptors
 
 ## Frame overview (passes)
 

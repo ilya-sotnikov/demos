@@ -9,17 +9,17 @@
 ConstantBuffer<UniformData> uniformBuffer;
 StructuredBuffer<uint32_t> drawIndicesEarlyBuffer;
 StructuredBuffer<uint32_t> drawIndicesLateBuffer;
-StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdEarlyBuffer;
-StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdLateBuffer;
+StructuredBuffer<DrawIndexedIndirectCommand> drawCmdEarlyBuffer;
+StructuredBuffer<DrawIndexedIndirectCommand> drawCmdLateBuffer;
 StructuredBuffer<DrawData> drawDataBuffer;
 StructuredBuffer<uint32_t> indexBuffer;
 StructuredBuffer<Vertex> vertexBuffer;
 
 SamplerState nearestSampler;
-Texture2D<float> depthViewImage;
-Texture2D<uint2> visibilityImage;
+Texture2D<float> depthViewTexture;
+Texture2D<uint2> visibilityTexture;
 [[vk::image_format("r8")]]
-RWTexture2D<float> outImage;
+RWTexture2D<float> outTexture;
 
 static const float MAX_RADIUS_SCREEN = 0.1;
 static const float RADIUS_WORLD = 0.3;
@@ -45,19 +45,19 @@ float3 CalcPosView(float2 uv)
     pos.xy = pos.xy * 2.0 - 1.0;
     pos.y *= -1.0;
     pos.xy *= uniformBuffer.viewToClipInv0011;
-    pos *= -depthViewImage.SampleLevel(nearestSampler, uv, 0);
+    pos *= -depthViewTexture.SampleLevel(nearestSampler, uv, 0);
     return pos;
 }
 
 [numthreads(RENDERER_SSAO_WORKGROUP_SIZE_X, RENDERER_SSAO_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    const uint2 imageSize = uint2(
+    const uint2 textureSize = uint2(
         uniformBuffer.ambientOcclusionWidth,
         uniformBuffer.ambientOcclusionHeight
     );
 
-    if (dtid.x >= imageSize.x || dtid.y >= imageSize.y)
+    if (dtid.x >= textureSize.x || dtid.y >= textureSize.y)
     {
         return;
     }
@@ -67,7 +67,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     // TODO: reconstructing normals from the depth buffer may be faster
     // and usable in forward pipelines:
     // https://turanszkij.wpcomstaging.com/2019/09/improved-normal-reconstruction-from-depth/
-    const uint2 visibilityData = visibilityImage[dtid.xy * 2];
+    const uint2 visibilityData = visibilityTexture[dtid.xy * 2];
     uint rawDrawIdx = visibilityData.y;
 
     const bool isCullLate = rawDrawIdx & 0x80000000;
@@ -75,7 +75,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     if (rawDrawIdx == 0)
     {
-        outImage[dtid.xy] = 0.0;
+        outTexture[dtid.xy] = 0.0;
         return;
     }
 
@@ -93,7 +93,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         drawIdx = drawIndicesEarlyBuffer[rawDrawIdx];
     }
 
-    VkDrawIndexedIndirectCommand drawCmd;
+    DrawIndexedIndirectCommand drawCmd;
     if (isCullLate)
     {
         drawCmd = drawCmdLateBuffer[rawDrawIdx];
@@ -132,9 +132,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float4 posClip1 = mul(uniformBuffer.worldToClip, float4(posWorld1, 1.0));
     const float4 posClip2 = mul(uniformBuffer.worldToClip, float4(posWorld2, 1.0));
 
-    const float2 imageSizeInv = uniformBuffer.ambientOcclusionImageSizeInv;
+    const float2 textureSizeInv = uniformBuffer.ambientOcclusionTextureSizeInv;
 
-    const float2 pixelUV = (dtid.xy + 0.5) * imageSizeInv;
+    const float2 pixelUV = (dtid.xy + 0.5) * textureSizeInv;
     float2 pixelNdc = pixelUV * 2.0 - 1.0;
     pixelNdc.y *= -1.0;
 
@@ -143,7 +143,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         posClip1,
         posClip2,
         pixelNdc,
-        2.0 * imageSizeInv
+        2.0 * textureSizeInv
     );
 
     const float3 posView = CalcPosView(pixelUV);
@@ -183,5 +183,5 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     occlusion = pow(1.0 - saturate(occlusion / SAMPLES_COUNT), 2);
 
-    outImage[dtid.xy] = occlusion;
+    outTexture[dtid.xy] = occlusion;
 }

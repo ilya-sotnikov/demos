@@ -3,5 +3,5 @@
 
 float4 Main(VertexOutput input) : SV_Target
 {
-    return input.color * fontImage.Sample(fontSampler, input.uv);
+    return input.color * fontTexture.Sample(fontSampler, input.uv);
 }

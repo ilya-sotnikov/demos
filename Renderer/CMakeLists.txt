@@ -48,7 +48,8 @@ set(SOURCES
     Source/Math/Utils.cpp
     Source/TimeMeter.cpp
     Source/Camera.cpp
-    Source/Renderer/Vulkan.cpp
+    Source/Renderer/RHI/Vulkan/RHI.cpp
+    Source/Renderer/RHI/Vulkan/TypeConvert.cpp
     Source/Renderer/Renderer.cpp
     Source/Renderer/Scene.cpp
     Source/Renderer/ImguiRenderer.cpp
@@ -132,7 +133,8 @@ endif()
 
 set(SHADER_SOURCE_DIRECTORY ${CMAKE_SOURCE_DIR}/Source/Renderer/Shaders/)
 set(SHADER_SOURCE_FILES
-    ${SHADER_SOURCE_DIRECTORY}/Cull.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/CullEarly.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/CullLate.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/ShadowCull.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.frag.hlsl
@@ -160,6 +162,7 @@ set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/DebugDrawFillCmd.comp.hlsl
 )
 set(SHADER_INCLUDE_FILES
+    ${SHADER_SOURCE_DIRECTORY}/Cull.comp.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Common.hlsli
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Shadow.hlsli

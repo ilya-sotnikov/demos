@@ -8,8 +8,8 @@
 ConstantBuffer<UniformData> uniformBuffer;
 StructuredBuffer<uint32_t> drawIndicesEarlyBuffer;
 StructuredBuffer<uint32_t> drawIndicesLateBuffer;
-StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdEarlyBuffer;
-StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdLateBuffer;
+StructuredBuffer<DrawIndexedIndirectCommand> drawCmdEarlyBuffer;
+StructuredBuffer<DrawIndexedIndirectCommand> drawCmdLateBuffer;
 StructuredBuffer<DrawData> drawDataBuffer;
 StructuredBuffer<uint32_t> indexBuffer;
 StructuredBuffer<Vertex> vertexBuffer;
@@ -19,14 +19,14 @@ SamplerState textureSampler;
 SamplerComparisonState shadowSampler;
 SamplerState shadowPcfJitterSampler;
 
-Texture2DArray<float> shadowImage;
-Texture3D shadowPcfJitterImage;
-Texture2D<float> fogImage;
-Texture2D<uint2> visibilityImage;
-Texture2D<float> ambientOcclusionImage;
+Texture2DArray<float> shadowTexture;
+Texture3D shadowPcfJitterTexture;
+Texture2D<float> fogTexture;
+Texture2D<uint2> visibilityTexture;
+Texture2D<float> ambientOcclusionTexture;
 [[vk::image_format("rg16f")]]
-RWTexture2D<float2> velocityImageRW;
-RWTexture2D<float3> renderImageRW;
+RWTexture2D<float2> velocityTextureRW;
+RWTexture2D<float3> renderTextureRW;
 
 // TODO: very messy.
 #include "CalcShadow.hlsli"
@@ -69,20 +69,20 @@ float4 SampleTex(uint32_t idx, InterpolatedData2D uv)
 [numthreads(RENDERER_RENDER_WORKGROUP_SIZE_X, RENDERER_RENDER_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    const int2 renderImageSize = int2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
+    const int2 renderTextureSize = int2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 
-    if (dtid.x >= renderImageSize.x || dtid.y >= renderImageSize.y)
+    if (dtid.x >= renderTextureSize.x || dtid.y >= renderTextureSize.y)
     {
         return;
     }
 
-    const uint2 visibilityData = visibilityImage[dtid.xy];
+    const uint2 visibilityData = visibilityTexture[dtid.xy];
     uint rawDrawIdx = visibilityData.y;
 
     const bool isCullLate = rawDrawIdx & 0x80000000;
     rawDrawIdx &= 0x7fffffff;
 
-    float2 pixelNdc = ((dtid.xy + 0.5) * uniformBuffer.renderImageSizeInv) * 2.0 - 1.0;
+    float2 pixelNdc = ((dtid.xy + 0.5) * uniformBuffer.renderTextureSizeInv) * 2.0 - 1.0;
     pixelNdc.y *= -1.0;
 
     if (rawDrawIdx == 0)
@@ -93,8 +93,8 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         );
         const float3 viewDirectionWorld = normalize(pos.xyz / pos.w - uniformBuffer.cameraPosition);
 
-        renderImageRW[dtid.xy] = CalcSky(viewDirectionWorld, uniformBuffer.sunDirectionWorld);
-        velocityImageRW[dtid.xy] = float2(0.0, 0.0);
+        renderTextureRW[dtid.xy] = CalcSky(viewDirectionWorld, uniformBuffer.sunDirectionWorld);
+        velocityTextureRW[dtid.xy] = float2(0.0, 0.0);
         return;
     }
 
@@ -112,7 +112,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         drawIdx = drawIndicesEarlyBuffer[rawDrawIdx];
     }
 
-    VkDrawIndexedIndirectCommand drawCmd;
+    DrawIndexedIndirectCommand drawCmd;
     if (isCullLate)
     {
         drawCmd = drawCmdLateBuffer[rawDrawIdx];
@@ -157,7 +157,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         posClip1,
         posClip2,
         pixelNdc,
-        2.0 * uniformBuffer.renderImageSizeInv
+        2.0 * uniformBuffer.renderTextureSizeInv
     );
 
     // TODO: will break on anything other than infinite reversed Z.
@@ -289,7 +289,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
             cascadeIdx
         );
 
-    const float ambientOcclusion = ambientOcclusionImage[dtid.xy];
+    const float ambientOcclusion = ambientOcclusionTexture[dtid.xy];
 
     const float3 ambient = albedo.rgb * uniformBuffer.ambientIntensity * ambientOcclusion;
 
@@ -298,7 +298,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         CalcSky(-uniformBuffer.sunDirectionWorld, uniformBuffer.sunDirectionWorld);
 
     const float fogFactor =
-        fogImage.SampleLevel(linearSampler, (dtid.xy + 0.5) * uniformBuffer.renderImageSizeInv, 0);
+        fogTexture.SampleLevel(linearSampler, (dtid.xy + 0.5) * uniformBuffer.renderTextureSizeInv, 0);
 
     float3 color = (
         ambient * (-uniformBuffer.sunDirectionWorld.y) +
@@ -313,7 +313,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         break;
     }
 
-    renderImageRW[dtid.xy] = color;
+    renderTextureRW[dtid.xy] = color;
 
     // TODO: support movable objects (double-buffered draw data).
     const float3 prevPixelWorld = pixelWorld;
@@ -325,5 +325,5 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     velocity.y *= -1.0;
 
     // TODO: motion vectors only for dynamic objects.
-    velocityImageRW[dtid.xy] = velocity;
+    velocityTextureRW[dtid.xy] = velocity;
 }

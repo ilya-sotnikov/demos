@@ -1,27 +1,20 @@
 #include "ImguiRenderer.hpp"
 
-#include "Vulkan.hpp"
+#include "../Utils.hpp"
 #include "../Math/Utils.hpp"
 
 #include <SDL3/SDL_video.h>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 
+#include <stdio.h>
+
 // Heavily based on Sascha Willems's vulkan examples:
 // https://github.com/SaschaWillems/Vulkan/blob/master/base/VulkanUIOverlay.h
 
-bool ImguiRenderer::Init(
-    SDL_Window* window,
-    Vulkan::Device device,
-    VkCommandPool commandPool,
-    VkFormat colorFormat
-)
+bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
 {
     DEBUG_ASSERT(window);
-    DEBUG_ASSERT(commandPool);
-
-    mDevice = device;
-    mCommandPool = commandPool;
 
     if (!IMGUI_CHECKVERSION())
     {
@@ -46,7 +39,7 @@ bool ImguiRenderer::Init(
     int texWidth = 0;
     int texHeight = 0;
     io.Fonts->GetTexDataAsRGBA32(&fontData, &texWidth, &texHeight);
-    const VkDeviceSize uploadSize = VkDeviceSize(texWidth * texHeight * 4) * sizeof(char);
+    const u64 uploadSize = u64(texWidth * texHeight * 4) * sizeof(char);
 
     ImGui::StyleColorsDark();
 
@@ -67,169 +60,116 @@ bool ImguiRenderer::Init(
     style.ScaleAllSizes(windowScale);
     style.FontScaleDpi = windowScale;
 
-    // Font image.
-    if (!mDevice.CreateImage({
-            .image = mFontImage,
-            .formats = {VK_FORMAT_R8G8B8A8_UNORM},
-            .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-            .width = u32(texWidth),
-            .height = u32(texHeight),
-            .debugName = "FontImage",
-        }))
+    mFontTexture = RHI::CreateTexture({
+        .format = RHI::FORMAT_R8G8B8A8_UNORM,
+        .dimensions = {u32(texWidth), u32(texHeight), 1},
+        .usage = RHI::TEXTURE_USAGE_SAMPLED_BIT | RHI::TEXTURE_USAGE_TRANSFER_DST_BIT,
+        .debugName = "FontTexture",
+    });
+    if (!mFontTexture)
     {
         return false;
     }
 
-    // Uploading buffer data to font image.
+    // Uploading buffer data to font texture.
     {
-        Vulkan::Buffer stagingBuffer{};
-        const bool result = mDevice.CreateBuffer({
-            .buffer = stagingBuffer,
+        RHI::BufferHandle stagingBuffer = RHI::CreateBuffer({
             .size = uploadSize,
-            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            .requiredFlags
-            = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             .debugName = "StagingBuffer",
         });
-        if (!result)
-        {
-            fprintf(stderr, "Vulkan failed to create a staging buffer\n");
-            return false;
-        }
-        DEFER(mDevice.DestroyBuffer(stagingBuffer));
-
-        memcpy(stagingBuffer.mapped, fontData, uploadSize);
-
-        const VkCommandBufferAllocateInfo allocateInfo = {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .commandPool = mCommandPool,
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = 1,
-        };
-
-        VkCommandBuffer copyCmdBuffer{};
-        VK_CHECK(vkAllocateCommandBuffers(mDevice.mDevice, &allocateInfo, &copyCmdBuffer));
-        DEFER(vkFreeCommandBuffers(mDevice.mDevice, mCommandPool, 1, &copyCmdBuffer));
-
-        const VkCommandBufferBeginInfo beginInfo = {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        };
-        VK_CHECK(vkBeginCommandBuffer(copyCmdBuffer, &beginInfo));
-
-        Vulkan::CmdImageMemoryBarrier(
-            copyCmdBuffer,
-            {
-                Vulkan::ImageMemoryBarrier(
-                    mFontImage.image,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_GENERAL,
-                    VK_PIPELINE_STAGE_2_HOST_BIT,
-                    VK_ACCESS_2_NONE,
-                    VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
-                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    VK_IMAGE_ASPECT_COLOR_BIT
-                ),
-            }
-        );
-
-        const VkImageSubresourceLayers imageSubresource = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .layerCount = 1,
-        };
-
-        const VkBufferImageCopy bufferCopyRegion = {
-            .imageSubresource = imageSubresource,
-            .imageExtent = {u32(texWidth), u32(texHeight), 1},
-        };
-        vkCmdCopyBufferToImage(
-            copyCmdBuffer,
-            stagingBuffer.buffer,
-            mFontImage.image,
-            VK_IMAGE_LAYOUT_GENERAL,
-            1,
-            &bufferCopyRegion
-        );
-
-        Vulkan::CmdMemoryBarrier(
-            copyCmdBuffer,
-            VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
-            VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-            VK_ACCESS_2_SHADER_READ_BIT
-        );
-
-        VK_CHECK(vkEndCommandBuffer(copyCmdBuffer));
-
-        if (!mDevice.QueueSubmit({
-                .queueInfo = mDevice.mGraphicsQueueInfo,
-                .commandBuffer = copyCmdBuffer,
-            }))
+        if (!stagingBuffer)
         {
             return false;
         }
-        if (!mDevice.QueueWaitIdle(mDevice.mGraphicsQueueInfo))
+        DEFER(RHI::DestroyBuffer(stagingBuffer));
+
+        memcpy(RHI::GetBufferHostPtr(stagingBuffer), fontData, uploadSize);
+
+        const RHI::CommandBufferHandle cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
+        if (!cb)
         {
             return false;
         }
+        DEFER(RHI::DestroyCommandBuffer(cb));
+
+        if (!RHI::BeginCommandBuffer(cb))
+        {
+            return false;
+        }
+
+        RHI::CmdTextureBarrier(
+            cb,
+            {{
+                mFontTexture,
+                RHI::TEXTURE_LAYOUT_UNDEFINED,
+                RHI::TEXTURE_LAYOUT_GENERAL,
+                RHI::STAGE_HOST_BIT,
+                RHI::ACCESS_NONE,
+                RHI::STAGE_ALL_TRANSFER_BIT,
+                RHI::ACCESS_TRANSFER_WRITE_BIT,
+            }}
+        );
+
+        RHI::CmdCopyBufferToTexture(
+            cb,
+            stagingBuffer,
+            mFontTexture,
+            {{
+                .textureDimensions = {u32(texWidth), u32(texHeight), 1},
+            }}
+        );
+
+        RHI::CmdBarrier(
+            cb,
+            RHI::STAGE_ALL_TRANSFER_BIT,
+            RHI::ACCESS_TRANSFER_WRITE_BIT,
+            RHI::STAGE_FRAGMENT_SHADER_BIT,
+            RHI::ACCESS_SHADER_READ_BIT
+        );
+
+        if (!RHI::EndCommandBuffer(cb))
+        {
+            return false;
+        }
+
+        if (!RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}}))
+        {
+            return false;
+        }
+
+        (void)RHI::QueueWaitIdle(RHI::QUEUE_GRAPHICS);
     }
 
-    // Font texture sampler.
+    mFontSampler = RHI::CreateSampler({});
+    if (!mFontSampler)
     {
-        const VkSamplerCreateInfo samplerInfo = {
-            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .magFilter = VK_FILTER_LINEAR,
-            .minFilter = VK_FILTER_LINEAR,
-            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
-        };
-        VK_CHECK(vkCreateSampler(mDevice.mDevice, &samplerInfo, nullptr, &mFontSampler));
+        return false;
     }
 
     // Pipeline.
     {
-        VkFormat stencilFormat{};
-        if (!Vulkan::FindSupportedImageFormat(
-                stencilFormat,
-                mDevice.mPhysicalDevice,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                {VK_FORMAT_S8_UINT}
-            ))
-        {
-            fprintf(stderr, "vulkan: failed to find a suitable imgui stencil attachment format\n");
-            return false;
-        }
+        Utils::FileData vertData = Utils::FileRead("Imgui.vert.hlsl.spv");
+        DEFER(free(vertData.data));
+        Utils::FileData fragData = Utils::FileRead("Imgui.frag.hlsl.spv");
+        DEFER(free(fragData.data));
 
-        if (!mDevice.CreateGraphicsPipeline({
-                .pipeline = mPipeline,
-                .shaderPaths = {"Imgui.vert.hlsl.spv", "Imgui.frag.hlsl.spv"},
-                .vertexBindingDescriptions = {
-                    {0, sizeof(ImDrawVert), VK_VERTEX_INPUT_RATE_VERTEX},
-                },
-                .vertexAttributeDescriptions = {
-                    {0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ImDrawVert, pos)},
-                    {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(ImDrawVert, uv)},
-                    {2, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(ImDrawVert, col)},
-                },
-                .stencilFormat = stencilFormat,
-                .colorAttachmentFormats = {colorFormat},
-                .colorBlendAttachments = {
-                    {
-                        .blendEnable = VK_TRUE,
-                        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-                        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-                        .colorBlendOp = VK_BLEND_OP_ADD,
-                        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-                        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-                        .alphaBlendOp = VK_BLEND_OP_ADD,
-                        .colorWriteMask = Vulkan::ColorComponentAllBits,
-                    },
-                },
-                .dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR},
-                .debugName = "FullscreenPass",
-            }))
+        mPipeline = RHI::CreateGraphicsPipeline({
+            .bytecodes = {
+                {static_cast<u8*>(vertData.data), vertData.size},
+                {static_cast<u8*>(fragData.data), fragData.size},
+            },
+            .stencilFormat = RHI::FORMAT_S8_UINT,
+            .colorTargets = {{
+                .format = colorFormat,
+                .blendEnable = true,
+                .srcColorFactor = RHI::BLEND_FACTOR_SRC_ALPHA,
+                .dstColorFactor = RHI::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .srcAlphaFactor = RHI::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .dstAlphaFactor = RHI::BLEND_FACTOR_ZERO,
+            }},
+            .debugName = "FullscreenPass",
+        });
+        if (!mPipeline)
         {
             return false;
         }
@@ -240,26 +180,20 @@ bool ImguiRenderer::Init(
 
 void ImguiRenderer::Cleanup()
 {
-    if (!mDevice.mDevice)
-    {
-        return;
-    }
-
-    (void)mDevice.DeviceWaitIdle();
+    (void)RHI::DeviceWaitIdle();
 
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
 
-    for (int i = 0; i < RENDERER_MAX_FRAMES_IN_FLIGHT; ++i)
+    for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
     {
         Frame& frame = mFrame[i];
-        mDevice.DestroyBuffer(frame.vertexBuffer);
-        mDevice.DestroyBuffer(frame.indexBuffer);
+        RHI::DestroyBuffer(frame.vertexBuffer);
+        RHI::DestroyBuffer(frame.indexBuffer);
     }
-    mDevice.DestroyPipeline(mPipeline);
-    vkDestroySampler(mDevice.mDevice, mFontSampler, nullptr);
-    vkDestroyImageView(mDevice.mDevice, mFontImage.view, nullptr);
-    vmaDestroyImage(mDevice.mVmaAllocator, mFontImage.image, mFontImage.allocation);
+    RHI::DestroyPipeline(mPipeline);
+    RHI::DestroySampler(mFontSampler);
+    RHI::DestroyTexture(mFontTexture);
 }
 
 bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
@@ -272,8 +206,8 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
         return true;
     }
 
-    VkDeviceSize vertexBufferSize = VkDeviceSize(drawData->TotalVtxCount) * sizeof(ImDrawVert);
-    VkDeviceSize indexBufferSize = VkDeviceSize(drawData->TotalIdxCount) * sizeof(ImDrawIdx);
+    u64 vertexBufferSize = u64(drawData->TotalVtxCount) * sizeof(ImDrawVert);
+    u64 indexBufferSize = u64(drawData->TotalIdxCount) * sizeof(ImDrawIdx);
 
     if (vertexBufferSize == 0 || indexBufferSize == 0)
     {
@@ -283,23 +217,21 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
     Frame& frame = mFrame[frameIndex];
 
     // Round buffers up with multiple of a chunk size to minimize the need to recreate them.
-    constexpr VkDeviceSize chunkSize = 16384;
+    const u64 chunkSize = 16384;
     vertexBufferSize = ((vertexBufferSize + chunkSize - 1) / chunkSize) * chunkSize;
     indexBufferSize = ((indexBufferSize + chunkSize - 1) / chunkSize) * chunkSize;
 
-    const bool shouldRecreateVertexBuffer = (frame.vertexBuffer.buffer == VK_NULL_HANDLE)
-        || (frame.vertexBufferSize < vertexBufferSize);
+    const bool shouldRecreateVertexBuffer
+        = !frame.vertexBuffer || (frame.vertexBufferSize < vertexBufferSize);
     if (shouldRecreateVertexBuffer)
     {
-        mDevice.DestroyBuffer(frame.vertexBuffer);
+        RHI::DestroyBuffer(frame.vertexBuffer);
 
-        if (!mDevice.CreateBuffer({
-                .buffer = frame.vertexBuffer,
-                .size = vertexBufferSize,
-                .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                .debugName = "ImGuiVertexBuffer",
-            }))
+        frame.vertexBuffer = RHI::CreateBuffer({
+            .size = vertexBufferSize,
+            .debugName = "ImGuiVertexBuffer",
+        });
+        if (!frame.vertexBuffer)
         {
             return false;
         }
@@ -308,18 +240,16 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
     }
 
     const bool shouldRecreateIndexBuffer
-        = (frame.indexBuffer.buffer == VK_NULL_HANDLE) || (frame.indexBufferSize < indexBufferSize);
+        = !frame.indexBuffer || (frame.indexBufferSize < indexBufferSize);
     if (shouldRecreateIndexBuffer)
     {
-        mDevice.DestroyBuffer(frame.indexBuffer);
+        RHI::DestroyBuffer(frame.indexBuffer);
 
-        if (!mDevice.CreateBuffer({
-                .buffer = frame.indexBuffer,
-                .size = indexBufferSize,
-                .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                .debugName = "ImGuiIndexBuffer",
-            }))
+        frame.indexBuffer = RHI::CreateBuffer({
+            .size = indexBufferSize,
+            .debugName = "ImGuiIndexBuffer",
+        });
+        if (!frame.indexBuffer)
         {
             return false;
         }
@@ -328,34 +258,20 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
     }
 
     // Upload data.
-    ImDrawVert* vertexDst = static_cast<ImDrawVert*>(frame.vertexBuffer.mapped);
-    ImDrawIdx* indexDst = static_cast<ImDrawIdx*>(frame.indexBuffer.mapped);
+    ImDrawVert* vertexDst = static_cast<ImDrawVert*>(RHI::GetBufferHostPtr(frame.vertexBuffer));
+    ImDrawIdx* indexDst = static_cast<ImDrawIdx*>(RHI::GetBufferHostPtr(frame.indexBuffer));
     for (int i = 0; i < drawData->CmdListsCount; ++i)
     {
         const ImDrawList* const cmdList = drawData->CmdLists[i];
         memcpy(
             vertexDst,
             cmdList->VtxBuffer.Data,
-            VkDeviceSize(cmdList->VtxBuffer.Size) * sizeof(ImDrawVert)
+            u64(cmdList->VtxBuffer.Size) * sizeof(ImDrawVert)
         );
-        memcpy(
-            indexDst,
-            cmdList->IdxBuffer.Data,
-            VkDeviceSize(cmdList->IdxBuffer.Size) * sizeof(ImDrawIdx)
-        );
+        memcpy(indexDst, cmdList->IdxBuffer.Data, u64(cmdList->IdxBuffer.Size) * sizeof(ImDrawIdx));
         vertexDst += cmdList->VtxBuffer.Size;
         indexDst += cmdList->IdxBuffer.Size;
     }
-
-    const VmaAllocation allocations[]
-        = {frame.vertexBuffer.allocation, frame.indexBuffer.allocation};
-    VK_CHECK(vmaFlushAllocations(
-        mDevice.mVmaAllocator,
-        ARRAY_SIZE(allocations),
-        allocations,
-        nullptr,
-        nullptr
-    ));
 
     return true;
 }
@@ -366,7 +282,7 @@ void ImguiRenderer::StartNewFrame() const
     ImGui::NewFrame();
 }
 
-bool ImguiRenderer::Render(VkCommandBuffer cb, u32 frameIndex)
+bool ImguiRenderer::Render(RHI::CommandBufferHandle cb, u32 frameIndex)
 {
     const ImDrawData* const drawData = ImGui::GetDrawData();
     i32 vertexOffset = 0;
@@ -379,20 +295,21 @@ bool ImguiRenderer::Render(VkCommandBuffer cb, u32 frameIndex)
 
     Frame& frame = mFrame[frameIndex];
 
-    if (!frame.vertexBuffer.buffer || !frame.indexBuffer.buffer)
+    if (!frame.vertexBuffer || !frame.indexBuffer)
     {
         return true;
     }
 
     const ImGuiIO& io = ImGui::GetIO();
 
-    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline.pipeline);
+    RHI::CmdBindPipeline(cb, mPipeline);
 
-    Vulkan::CmdPushDescriptors(
+    RHI::CmdPushDescriptors(
         cb,
         mPipeline,
         {
-            mFontImage.view,
+            frame.vertexBuffer,
+            mFontTexture,
             mFontSampler,
         }
     );
@@ -401,24 +318,15 @@ bool ImguiRenderer::Render(VkCommandBuffer cb, u32 frameIndex)
         .scale = Vec2{2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y},
         .translate = Vec2{-1.0f},
     };
-    vkCmdPushConstants(
-        cb,
-        mPipeline.layout,
-        VK_SHADER_STAGE_ALL,
-        0,
-        sizeof(pushConstants),
-        &pushConstants
-    );
+    RHI::CmdPushConstants(cb, mPipeline, &pushConstants);
 
-    VkDeviceSize offsets[1]{};
-    vkCmdBindVertexBuffers(cb, 0, 1, &frame.vertexBuffer.buffer, offsets);
-    vkCmdBindIndexBuffer(cb, frame.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
+    RHI::CmdBindIndexBuffer(cb, frame.indexBuffer, 0, RHI::INDEX_TYPE_U16);
 
-    const VkViewport viewport = {
+    RHI::CmdSetViewport({
+        .cb = cb,
         .width = io.DisplaySize.x,
         .height = io.DisplaySize.y,
-    };
-    vkCmdSetViewport(cb, 0, 1, &viewport);
+    });
 
     for (int i = 0; i < drawData->CmdListsCount; ++i)
     {
@@ -428,13 +336,13 @@ bool ImguiRenderer::Render(VkCommandBuffer cb, u32 frameIndex)
             const ImDrawCmd& imCmd = cmdList->CmdBuffer[j];
             const ImVec4 rect = imCmd.ClipRect;
 
-            const VkRect2D scissorRect = {
+            RHI::CmdSetScissor({
+                .cb = cb,
                 .offset = {Max(i32(rect.x), 0), Max(i32(rect.y), 0)},
                 .extent = {u32(rect.z - rect.x), u32(rect.w - rect.y)},
-            };
-            vkCmdSetScissor(cb, 0, 1, &scissorRect);
+            });
 
-            vkCmdDrawIndexed(cb, imCmd.ElemCount, 1, indexOffset, vertexOffset, 0);
+            RHI::CmdDrawIndexed(cb, imCmd.ElemCount, 1, indexOffset, vertexOffset, 0);
             indexOffset += imCmd.ElemCount;
         }
         vertexOffset += cmdList->VtxBuffer.Size;

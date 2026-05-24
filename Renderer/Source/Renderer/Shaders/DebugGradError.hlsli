@@ -14,7 +14,7 @@ ConstantBuffer<UniformData> uniformBuffer;
 [[vk::binding(1)]]
 StructuredBuffer<uint32_t> drawIndicesBuffer;
 [[vk::binding(2)]]
-StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdBuffer;
+StructuredBuffer<DrawIndexedIndirectCommand> drawCmdBuffer;
 [[vk::binding(3)]]
 StructuredBuffer<DrawData> drawDataBuffer;
 [[vk::binding(4)]]

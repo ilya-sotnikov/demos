@@ -1,24 +1,15 @@
 #include "Common.hlsli"
 #include "Imgui.hlsli"
-
-struct VertexInput
-{
-    float2 position : Position0;
-    float2 uv : TexCoord0;
-    float4 color : Color0;
-};
+#include "Math.hlsli"
 
 [[vk::push_constant]]
 PushConstantsImgui pushConstants;
 
-VertexOutput Main(VertexInput input)
+void Main(uint vertexId : SV_VertexID, out VertexOutput output)
 {
-    VertexOutput output;
-
+    const ImguiVertex vertex = vertexBuffer[vertexId];
     output.position =
-        float4(input.position * pushConstants.scale + pushConstants.translate, 0.0, 1.0);
-    output.uv = input.uv;
-    output.color = input.color;
-
-    return output;
+        float4(vertex.position * pushConstants.scale + pushConstants.translate, 0.0, 1.0);
+    output.uv = vertex.uv;
+    output.color = UnpackRGBA8UnormToFloat4(vertex.color);
 }

@@ -4,8 +4,8 @@
 ConstantBuffer<UniformData> uniformBuffer;
 StructuredBuffer<DrawData> drawDataBuffer;
 RWByteAddressBuffer drawCountBuffer;
-StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdsBuffer1;
-RWStructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdsBuffer2;
+StructuredBuffer<DrawIndexedIndirectCommand> drawCmdsBuffer1;
+RWStructuredBuffer<DrawIndexedIndirectCommand> drawCmdsBuffer2;
 RWStructuredBuffer<uint32_t> drawIndicesBuffer;
 
 [[vk::push_constant]]
@@ -39,9 +39,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     if (visible)
     {
         const uint visibleIdx = baseVisibleIdx + subgroupVisibleIdx;
-        const VkDrawIndexedIndirectCommand drawCmd = drawCmdsBuffer1[drawIdx];
+        const DrawIndexedIndirectCommand drawCmd = drawCmdsBuffer1[drawIdx];
 
-        VkDrawIndexedIndirectCommand writeDrawCmd;
+        DrawIndexedIndirectCommand writeDrawCmd;
         writeDrawCmd.indexCount = drawCmd.indexCount;
         writeDrawCmd.instanceCount = 1;
         writeDrawCmd.firstIndex = drawCmd.firstIndex;

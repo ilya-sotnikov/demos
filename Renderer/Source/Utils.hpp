@@ -9,6 +9,15 @@
 namespace Utils
 {
 
+struct FileData
+{
+    void* data;
+    long size;
+};
+
+// gives ownership, call free()
+FileData FileRead(const char* path);
+
 // Print an error message and exit(1).
 void* xmalloc(size_t size);
 // Print an error message and exit(1).
@@ -112,3 +121,11 @@ Vec3 SrgbToLinear(Vec3 color, f32 gamma = 2.2f);
     } \
     while (0)
 // clang-format on
+
+#define UNREACHABLE() \
+    do \
+    { \
+        fprintf(stderr, "%s:%d unreachable\n", __FILE__, __LINE__); \
+        exit(1); \
+    } \
+    while (0)

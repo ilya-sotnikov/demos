@@ -23,6 +23,36 @@ using ulong = unsigned long;
 using ulonglong = unsigned long long;
 using longlong = long long;
 
+struct U32Vec2
+{
+    u32 x, y;
+};
+
+struct U32Vec3
+{
+    u32 x, y, z;
+
+    U32Vec2 XY() const
+    {
+        return {x, y};
+    }
+};
+
+struct I32Vec2
+{
+    i32 x, y;
+};
+
+struct I32Vec3
+{
+    i32 x, y, z;
+
+    I32Vec2 XY() const
+    {
+        return {x, y};
+    }
+};
+
 // Stole from GNU libc since it's non-standard.
 #ifndef M_Ef
 #define M_Ef 2.7182818284590452354f // e
@@ -132,6 +162,16 @@ struct Slice
     const T* end() const
     {
         return data + count;
+    }
+
+    T& operator[](int i)
+    {
+        return data[i];
+    }
+
+    const T& operator[](int i) const
+    {
+        return data[i];
     }
 };
 

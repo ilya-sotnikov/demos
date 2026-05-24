@@ -2,9 +2,18 @@
 
 #include "Common.hlsli"
 
+struct ImguiVertex
+{
+    float2 position;
+    float2 uv;
+    uint32_t color;
+};
+
 [[vk::binding(0)]]
-Texture2D fontImage;
+StructuredBuffer<ImguiVertex> vertexBuffer;
 [[vk::binding(1)]]
+Texture2D fontTexture;
+[[vk::binding(2)]]
 SamplerState fontSampler;
 
 struct VertexOutput

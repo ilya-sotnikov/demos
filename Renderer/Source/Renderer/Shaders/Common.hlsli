@@ -3,7 +3,7 @@
 #include "SharedConfig.hlsli"
 #include "SharedDef.hlsli"
 
-struct VkDrawIndexedIndirectCommand
+struct DrawIndexedIndirectCommand
 {
     uint32_t    indexCount;
     uint32_t    instanceCount;
@@ -12,7 +12,7 @@ struct VkDrawIndexedIndirectCommand
     uint32_t    firstInstance;
 };
 
-struct VkDrawIndirectCommand
+struct DrawIndirectCommand
 {
     uint32_t    vertexCount;
     uint32_t    instanceCount;

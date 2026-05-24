@@ -1,9 +1,9 @@
 #include "Common.hlsli"
 
 ConstantBuffer<UniformData> uniformBuffer;
-Texture2D<float> inImage;
+Texture2D<float> inTexture;
 [[vk::image_format("r16f")]]
-RWTexture2D<float> outImage;
+RWTexture2D<float> outTexture;
 
 [[vk::push_constant]]
 PushConstantsFogBlur pushConstants;
@@ -24,9 +24,9 @@ static float GAUSS_WEIGHTS[] =
 [numthreads(RENDERER_FOG_BLUR_WORKGROUP_SIZE_X, RENDERER_FOG_BLUR_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    const uint2 imageSize = uint2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
+    const uint2 textureSize = uint2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 
-    if (dtid.x >= imageSize.x || dtid.y >= imageSize.y)
+    if (dtid.x >= textureSize.x || dtid.y >= textureSize.y)
     {
         return;
     }
@@ -38,13 +38,13 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     for (int i = -3; i <= 3; ++i)
     {
         int2 sampleCoord = dtid.xy + select(pushConstants.horizontal == 1, int2(i, 0),  int2(0, i));
-        sampleCoord = clamp(sampleCoord, int2(0, 0), imageSize - 1);
+        sampleCoord = clamp(sampleCoord, int2(0, 0), textureSize - 1);
 
         const float weight = GAUSS_WEIGHTS[3 + i];
 
-        result += weight * inImage[sampleCoord];
+        result += weight * inTexture[sampleCoord];
         weightSum += weight;
     }
 
-    outImage[dtid.xy] = result / weightSum;
+    outTexture[dtid.xy] = result / weightSum;
 }

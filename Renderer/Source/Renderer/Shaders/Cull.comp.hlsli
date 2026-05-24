@@ -8,16 +8,13 @@
 ConstantBuffer<UniformData> uniformBuffer;
 StructuredBuffer<DrawData> drawDataBuffer;
 RWByteAddressBuffer drawCountBuffer;
-StructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdsBuffer1;
-RWStructuredBuffer<VkDrawIndexedIndirectCommand> drawCmdsBuffer2;
+StructuredBuffer<DrawIndexedIndirectCommand> drawCmdsBuffer1;
+RWStructuredBuffer<DrawIndexedIndirectCommand> drawCmdsBuffer2;
 RWStructuredBuffer<uint32_t> drawIndicesBuffer;
 RWStructuredBuffer<uint32_t> meshPrimitiveVisibleBuffer;
 
 SamplerState minSampler;
-Texture2D<float> depthPyramidImage;
-
-[[vk::constant_id(0)]]
-const int32_t CULL_LATE = 0;
+Texture2D<float> depthPyramidTexture;
 
 // 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere, Michael Mara, Morgan McGuire
 // http://jcgt.org/published/0002/02/05/paper.pdf
@@ -120,7 +117,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
             // Min reduction sampler (minimum depth of 2x2 texel quad).
             const float depth =
-                depthPyramidImage.SampleLevel(minSampler, (aabb.xy + aabb.zw) * 0.5, mipLevel);
+                depthPyramidTexture.SampleLevel(minSampler, (aabb.xy + aabb.zw) * 0.5, mipLevel);
             const float depthSphere = RENDERER_NEAR_PLANE / (-sphereCenterView.z - sphereRadius);
 
             visible = visible && depthSphere > depth;
@@ -160,9 +157,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     if (shouldWriteDrawData)
     {
         const uint visibleIdx = baseVisibleIdx + subgroupVisibleIdx;
-        const VkDrawIndexedIndirectCommand drawCmd = drawCmdsBuffer1[drawIdx];
+        const DrawIndexedIndirectCommand drawCmd = drawCmdsBuffer1[drawIdx];
 
-        VkDrawIndexedIndirectCommand writeDrawCmd;
+        DrawIndexedIndirectCommand writeDrawCmd;
         writeDrawCmd.indexCount = drawCmd.indexCount;
         writeDrawCmd.instanceCount = 1;
         writeDrawCmd.firstIndex = drawCmd.firstIndex;

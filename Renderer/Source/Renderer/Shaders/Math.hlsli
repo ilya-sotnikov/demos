@@ -400,7 +400,7 @@ BarycentricData CalcBarycentricData(
     float4 posClip1,
     float4 posClip2,
     float2 pixelNdc,
-    float2 twoOverImageSize
+    float2 twoOverTextureSize
 )
 {
     const float3 invW012 = rcp(float3(posClip0.w, posClip1.w, posClip2.w));
@@ -432,8 +432,8 @@ BarycentricData CalcBarycentricData(
     BarycentricData result;
 
     result.lambda = interpW_mul_invW012 * lambda; // Pre-perspective bary.
-    result.dldx = twoOverImageSize.x * interpW_mul_invW012 * dldx;
-    result.dldy = -twoOverImageSize.y * interpW_mul_invW012 * dldy;
+    result.dldx = twoOverTextureSize.x * interpW_mul_invW012 * dldx;
+    result.dldy = -twoOverTextureSize.y * interpW_mul_invW012 * dldy;
     result.interpInvW = interpInvW;
 
     return result;

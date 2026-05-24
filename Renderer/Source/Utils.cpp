@@ -5,6 +5,65 @@
 #include <string.h>
 #include <stdlib.h>
 
+Utils::FileData Utils::FileRead(const char* path)
+{
+    DEBUG_ASSERT(path);
+
+    FileData result{};
+
+    FILE* const fp = fopen(path, "rb");
+    if (!fp)
+    {
+        fprintf(stderr, "%s: fopen %s failed: %s\n", __func__, path, strerror(errno));
+        return result;
+    }
+    DEFER(fclose(fp));
+
+    if (fseek(fp, 0, SEEK_END))
+    {
+        fprintf(stderr, "%s: fseek SEEK_END %s failed: %s\n", __func__, path, strerror(errno));
+        return result;
+    }
+    const long fileSize = ftell(fp);
+    if (fileSize == -1)
+    {
+        fprintf(stderr, "%s: ftell %s failed: %s\n", __func__, path, strerror(errno));
+        return result;
+    }
+    if (fseek(fp, 0, SEEK_SET))
+    {
+        fprintf(stderr, "%s: fseek SEEK_SET %s failed: %s\n", __func__, path, strerror(errno));
+        return result;
+    }
+
+    void* const res = malloc(size_t((fileSize + 1)) * sizeof(u8));
+    if (!res)
+    {
+        fprintf(stderr, "%s: malloc failed (size %ld): %s\n", __func__, fileSize, strerror(errno));
+        return result;
+    }
+
+    if (fread(res, sizeof(u8), size_t(fileSize), fp) != size_t(fileSize))
+    {
+
+        if (feof(fp))
+        {
+            fprintf(stderr, "%s: fread %s failed: EOF\n", __func__, path);
+        }
+        else if (ferror(fp))
+        {
+            fprintf(stderr, "%s: fread %s failed: %s\n", __func__, path, strerror(errno));
+        }
+        free(res);
+        return result;
+    }
+
+    result.data = res;
+    result.size = fileSize;
+
+    return result;
+}
+
 void* Utils::xmalloc(size_t size)
 {
     void* const ret = malloc(size);

@@ -6,28 +6,28 @@
 ConstantBuffer<UniformData> uniformBuffer;
 SamplerState nearestSampler;
 
-Texture2D<float> depthImage;
-Texture2D<float> depthViewImage;
-Texture2D<float> inImage;
+Texture2D<float> depthTexture;
+Texture2D<float> depthViewTexture;
+Texture2D<float> inTexture;
 [[vk::image_format("r8")]]
-RWTexture2D<float> outImage;
+RWTexture2D<float> outTexture;
 
 // Bilinear depth-aware upsampling.
 [numthreads(RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_X, RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    const uint2 imageSize = uint2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
+    const uint2 textureSize = uint2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 
-    if (dtid.x >= imageSize.x || dtid.y >= imageSize.y)
+    if (dtid.x >= textureSize.x || dtid.y >= textureSize.y)
     {
         return;
     }
 
-    const float depthView = -RENDERER_NEAR_PLANE / (depthImage[dtid.xy] + 1e-5);
+    const float depthView = -RENDERER_NEAR_PLANE / (depthTexture[dtid.xy] + 1e-5);
 
-    const float2 imageSizeInv = uniformBuffer.renderImageSizeInv;
+    const float2 textureSizeInv = uniformBuffer.renderTextureSizeInv;
     const float2 pixelCoord = dtid.xy + 0.5;
-    const float2 pixelUV = pixelCoord * imageSizeInv;
+    const float2 pixelUV = pixelCoord * textureSizeInv;
 
     // NOTE: According to the Vulkan spec:
     // SPIR-V instructions with Gather in the name return a vector derived from 4 texels
@@ -37,10 +37,10 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     // RGBA = 01, 11, 10, 00
     // We'll remap them to:
     // RGBA = 00, 10, 01, 11
-    const float4 depthsView = depthViewImage.GatherRed(nearestSampler, pixelUV).abrg;
+    const float4 depthsView = depthViewTexture.GatherRed(nearestSampler, pixelUV).abrg;
     const float4 depthViewDiffs = abs(depthView.rrrr - depthsView);
 
-    const float4 occlusions = inImage.GatherRed(nearestSampler, pixelUV).abrg;
+    const float4 occlusions = inTexture.GatherRed(nearestSampler, pixelUV).abrg;
 
     // https://en.wikipedia.org/wiki/Bilinear_interpolation#On_the_unit_square
     const float2 fractional = frac(pixelCoord);
@@ -70,5 +70,5 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     result /= weightSum;
 
-    outImage[dtid.xy] = result;
+    outTexture[dtid.xy] = result;
 }

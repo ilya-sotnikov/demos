@@ -1,8 +1,9 @@
 #pragma once
 
-#include "RendererCommon.hpp"
+#include "../Common.hpp"
+#include "../Arena.hpp"
+#include "RHI/RHI.hpp"
 #include "ImguiRenderer.hpp"
-#include "Vulkan.hpp"
 #include "Scene.hpp"
 #include "../Math/Types.hpp"
 #include "../Math/Utils.hpp"
@@ -23,104 +24,95 @@ struct Renderer
     static constexpr int RENDER_SCALE = 1;
 
     static_assert(sizeof(UniformData) <= UNIFORM_BUFFER_MAX_SIZE_BYTES);
-    static_assert(sizeof(PushConstantsImgui) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
-    static_assert(sizeof(PushConstantsVisibilityBuffer) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
-    static_assert(sizeof(PushConstantsDepthReduce) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
-    static_assert(sizeof(PushConstantsShadow) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
-    static_assert(sizeof(PushConstantsSsaoBlur) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
-    static_assert(sizeof(PushConstantsFogBlur) <= PUSH_CONSTANTS_MAX_SIZE_BYTES);
+
+    struct Semaphore
+    {
+        RHI::SemaphoreHandle semaphore;
+        u64 value;
+
+        u64 Inc()
+        {
+            return ++value;
+        }
+    };
 
     struct Frame
     {
-        VkCommandBuffer commandBufferStart;
-        VkCommandBuffer commandBufferShadow;
-        VkCommandBuffer commandBufferEnd;
-        VkCommandBuffer commandBufferSSAO;
-        VkFence fenceQueueSubmit;
-        VkSemaphore semaphoreImageAcquire;
-        Vulkan::TimelineSemaphore semaphoreStart;
-        Vulkan::TimelineSemaphore semaphoreShadow;
-        Vulkan::TimelineSemaphore semaphoreSSAO;
-        Vulkan::Buffer uniformBuffer;
-        Vulkan::Image resolvedRenderImage;
+        Semaphore startSemaphore;
+        Semaphore shadowSemaphore;
+        Semaphore ssaoSemaphore;
+        RHI::CommandBufferHandle startCommandBuffer;
+        RHI::CommandBufferHandle shadowCommandBuffer;
+        RHI::CommandBufferHandle ssaoCommandBuffer;
+        RHI::CommandBufferHandle endCommandBuffer;
+        RHI::BufferHandle uniformBuffer;
+        RHI::TextureHandle resolvedRenderTexture;
     };
 
     Arena mScratchArena;
     SDL_Window* mWindow;
-    Vulkan::Device mDevice;
-    VkSurfaceKHR mSurface;
-    Vulkan::Swapchain mSwapchain;
-    Vulkan::Image mVisibilityImage;
-    Vulkan::Image mRenderImage;
-    Vulkan::Image mVelocityImage;
-    Vulkan::Image mAmbientOcclusionImage;
-    Vulkan::Image mAmbientOcclusionBlurredHorizontalImage;
-    Vulkan::Image mAmbientOcclusionBlurredVerticalImage;
-    Vulkan::Image mAmbientOcclusionUpsampledImage;
-    Vulkan::Image mShadowImage;
-    Vulkan::Image mShadowPcfJitterImage;
-    Vulkan::Image mFogImage;
-    Vulkan::Image mFogBlurredHorizontalImage;
-    Vulkan::Image mFogBlurredVerticalImage;
-    VkImageView mShadowImageViewCascade[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    VkExtent2D mRenderImageExtent;
-    VkExtent2D mAmbientOcclusionImageExtent;
-    VkExtent2D mDepthPyramidImageExtent;
-    Vulkan::Image mDepthImage;
-    Vulkan::Image mDepthViewQuarterResImage;
-    Vulkan::Image mDepthPyramidImage;
-    Vulkan::Image mDebugImage;
-    std::vector<VkImageView> mDepthPyramidMipImageViews;
-    Vulkan::Pipeline mVisibilityPipeline;
-    Vulkan::Pipeline mDepthViewQuarterResPipeline;
-    Vulkan::Pipeline mAmbientOcclusionPipeline;
-    Vulkan::Pipeline mAmbientOcclusionBlurPipeline;
-    Vulkan::Pipeline mAmbientOcclusionUpsamplePipeline;
-    Vulkan::Pipeline mFogPipeline;
-    Vulkan::Pipeline mBlurFogPipeline;
-    Vulkan::Pipeline mShadowCullPipeline;
-    Vulkan::Pipeline mShadowPipeline;
-    Vulkan::Pipeline mVisibilityRenderPipeline;
-    Vulkan::Pipeline mFullscreenPipeline;
-    Vulkan::Pipeline mCullEarlyPipeline;
-    Vulkan::Pipeline mCullLatePipeline;
-    Vulkan::Pipeline mTaaResolvePipeline;
-    Vulkan::Pipeline mDebugGradErrorPipeline;
-    Vulkan::Pipeline mDepthReducePipeline;
-    Vulkan::Pipeline mDebugDrawRectPipeline;
-    Vulkan::Pipeline mDebugDrawFillCmdPipeline;
-    Vulkan::Buffer mVertexBuffer;
-    Vulkan::Buffer mIndexBuffer;
-    Vulkan::Buffer mDrawCmdBuffer1;
-    Vulkan::Buffer mDrawCmdEarlyBuffer2;
-    Vulkan::Buffer mDrawCmdLateBuffer2;
-    Vulkan::Buffer mDrawCmdShadowBuffer;
-    Vulkan::Buffer mDrawIndicesEarlyBuffer;
-    Vulkan::Buffer mDrawIndicesLateBuffer;
-    Vulkan::Buffer mDrawIndicesShadowBuffer;
-    Vulkan::Buffer mMaterialBuffer;
-    Vulkan::Buffer mDrawDataBuffer;
-    Vulkan::Buffer mDrawCountBuffer;
-    Vulkan::Buffer mMeshPrimitiveVisibleBuffer;
-    Vulkan::Buffer mDebugDrawCountBuffer;
-    Vulkan::Buffer mDebugDrawRectBuffer;
-    Vulkan::Buffer mDebugDrawCmdBuffer;
+    RHI::SemaphoreHandle mFrameSemaphore;
+    RHI::TextureHandle mVisibilityTexture;
+    RHI::TextureHandle mRenderTexture;
+    RHI::TextureHandle mVelocityTexture;
+    RHI::TextureHandle mAmbientOcclusionTexture;
+    RHI::TextureHandle mAmbientOcclusionBlurredHorizontalTexture;
+    RHI::TextureHandle mAmbientOcclusionBlurredVerticalTexture;
+    RHI::TextureHandle mAmbientOcclusionUpsampledTexture;
+    RHI::TextureHandle mShadowTexture;
+    RHI::TextureHandle mShadowPcfJitterTexture;
+    RHI::TextureHandle mFogTexture;
+    RHI::TextureHandle mFogBlurredHorizontalTexture;
+    RHI::TextureHandle mFogBlurredVerticalTexture;
+    RHI::TextureDescriptorHandle mShadowTextureDescriptorCascade[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+    RHI::TextureHandle mDepthTexture;
+    RHI::TextureHandle mDepthViewQuarterResTexture;
+    RHI::TextureHandle mDepthPyramidTexture;
+    std::vector<RHI::TextureDescriptorHandle> mDepthPyramidMipTextureDescriptors;
+    RHI::PipelineHandle mVisibilityPipeline;
+    RHI::PipelineHandle mDepthViewQuarterResPipeline;
+    RHI::PipelineHandle mAmbientOcclusionPipeline;
+    RHI::PipelineHandle mAmbientOcclusionBlurPipeline;
+    RHI::PipelineHandle mAmbientOcclusionUpsamplePipeline;
+    RHI::PipelineHandle mFogPipeline;
+    RHI::PipelineHandle mBlurFogPipeline;
+    RHI::PipelineHandle mShadowCullPipeline;
+    RHI::PipelineHandle mShadowPipeline;
+    RHI::PipelineHandle mVisibilityRenderPipeline;
+    RHI::PipelineHandle mFullscreenPipeline;
+    RHI::PipelineHandle mCullEarlyPipeline;
+    RHI::PipelineHandle mCullLatePipeline;
+    RHI::PipelineHandle mTaaResolvePipeline;
+    RHI::PipelineHandle mDebugGradErrorPipeline;
+    RHI::PipelineHandle mDepthReducePipeline;
+    RHI::PipelineHandle mDebugDrawRectPipeline;
+    RHI::PipelineHandle mDebugDrawFillCmdPipeline;
+    RHI::BufferHandle mVertexBuffer;
+    RHI::BufferHandle mIndexBuffer;
+    RHI::BufferHandle mDrawCmdBuffer1;
+    RHI::BufferHandle mDrawCmdEarlyBuffer2;
+    RHI::BufferHandle mDrawCmdLateBuffer2;
+    RHI::BufferHandle mDrawCmdShadowBuffer;
+    RHI::BufferHandle mDrawIndicesEarlyBuffer;
+    RHI::BufferHandle mDrawIndicesLateBuffer;
+    RHI::BufferHandle mDrawIndicesShadowBuffer;
+    RHI::BufferHandle mMaterialBuffer;
+    RHI::BufferHandle mDrawDataBuffer;
+    RHI::BufferHandle mDrawCountBuffer;
+    RHI::BufferHandle mMeshPrimitiveVisibleBuffer;
+    RHI::BufferHandle mDebugDrawCountBuffer;
+    RHI::BufferHandle mDebugDrawRectBuffer;
+    RHI::BufferHandle mDebugDrawCmdBuffer;
     ImguiRenderer mImguiRenderer;
-    VkDescriptorPool mDescriptorPool;
-    VkDescriptorSet mTextureDescriptorSet;
-    VkDescriptorSetLayout mTextureDescriptorSetLayout;
-    VkSampler mTextureSampler;
-    VkSampler mLinearSampler;
-    VkSampler mNearestSampler;
-    VkSampler mMinSampler;
-    VkSampler mShadowSampler;
-    VkSampler mShadowPcfJitterSampler;
-    VkCommandPool mCommandPoolGraphics;
-    VkCommandPool mCommandPoolCompute;
-    VkSampleCountFlagBits mSampleCount;
-    std::vector<VkSemaphore> mRenderFinishedSemaphores;
-    std::vector<Vulkan::Image> mTextures;
-    Frame mFrame[RENDERER_MAX_FRAMES_IN_FLIGHT];
+    RHI::SamplerHandle mTextureSampler;
+    RHI::SamplerHandle mLinearSampler;
+    RHI::SamplerHandle mNearestSampler;
+    RHI::SamplerHandle mMinSampler;
+    RHI::SamplerHandle mShadowSampler;
+    RHI::SamplerHandle mShadowPcfJitterSampler;
+    std::vector<RHI::TextureHandle> mTextures;
+    U32Vec2 mWindowSize;
+    Frame mFrame[RHI::FRAMES_IN_FLIGHT];
     f32 mShadowCascadeRadii[RENDERER_SHADOW_MAP_CASCADE_COUNT];
     int mFrameIdx;
     int mPrevFrameIdx;
@@ -150,31 +142,35 @@ private:
     bool UploadTextures(const std::vector<std::string>& texturePaths);
     void UpdateShadowCascades();
 
-    void VisibilityBufferPass(VkCommandBuffer cb, bool cullLate);
-    void CullPass(VkCommandBuffer cb, bool late);
-    void DepthReducePass(VkCommandBuffer cb);
+    void VisibilityBufferPass(RHI::CommandBufferHandle cb, bool cullLate);
+    void CullPass(RHI::CommandBufferHandle cb, bool late);
+    void DepthReducePass(RHI::CommandBufferHandle cb);
 
-    void DepthViewQuarterResPass(VkCommandBuffer cb);
-    void AmbientOcclusionPass(VkCommandBuffer cb);
-    void AmbientOcclusionBlurPass(VkCommandBuffer cb, bool horizontal);
-    void AmbientOcclusionUpsamplePass(VkCommandBuffer cb);
+    void DepthViewQuarterResPass(RHI::CommandBufferHandle cb);
+    void AmbientOcclusionPass(RHI::CommandBufferHandle cb);
+    void AmbientOcclusionBlurPass(RHI::CommandBufferHandle cb, bool horizontal);
+    void AmbientOcclusionUpsamplePass(RHI::CommandBufferHandle cb);
 
-    void ShadowCullPass(VkCommandBuffer cb);
-    void ShadowPass(VkCommandBuffer cb);
+    void ShadowCullPass(RHI::CommandBufferHandle cb);
+    void ShadowPass(RHI::CommandBufferHandle cb);
 
-    void FogPass(VkCommandBuffer cb);
-    void BlurFogPass(VkCommandBuffer cb, bool horizontal);
+    void FogPass(RHI::CommandBufferHandle cb);
+    void BlurFogPass(RHI::CommandBufferHandle cb, bool horizontal);
 
-    void RenderPass(VkCommandBuffer cb);
-    void TaaResolvePass(VkCommandBuffer cb);
-    void DebugDrawPass(VkCommandBuffer cb);
-    void FullscreenPass(VkCommandBuffer cb, u32 imageIdx);
+    void RenderPass(RHI::CommandBufferHandle cb);
+    void TaaResolvePass(RHI::CommandBufferHandle cb);
+    void DebugDrawPass(RHI::CommandBufferHandle cb);
+    void FullscreenPass(RHI::CommandBufferHandle cb, RHI::TextureHandle swapchainTexture);
 
-    void DebugDrawGradErrorPass(VkCommandBuffer cb, bool cullLate, u32 imageIdx);
+    void DebugDrawGradErrorPass(
+        RHI::CommandBufferHandle cb,
+        bool cullLate,
+        RHI::TextureHandle swapchainTexture
+    );
 
-    bool RecordCommandBufferDebugGradError(u32 imageIdx);
-    bool RecordCommandBufferVisibility(u32 imageIdx);
-    bool CreateSwapchain();
+    bool RecordAndSubmitDebugGradError(RHI::TextureHandle swapchainTexture);
+    bool RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture);
+    bool CreateSwapchain(U32Vec2 size);
     void CleanupSwapchain();
     bool CreateColorResources();
     void CleanupColorResources();

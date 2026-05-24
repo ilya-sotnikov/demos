@@ -1,7 +1,5 @@
 #pragma once
 
-#include "../Common.hpp"
-
 #define VK_NO_PROTOTYPES
 #include <volk.h>
 #define VMA_VULKAN_VERSION 1004000

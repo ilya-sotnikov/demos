@@ -8,7 +8,7 @@ float4 Main(VertexOutput input, uint primitiveId : SV_PrimitiveID) : SV_Target
     const uint triangleIdx = primitiveId;
     const uint drawIdx = drawIndicesBuffer[rawDrawIdx];
 
-    const VkDrawIndexedIndirectCommand drawCmd = drawCmdBuffer[rawDrawIdx];
+    const DrawIndexedIndirectCommand drawCmd = drawCmdBuffer[rawDrawIdx];
     const DrawData drawData = drawDataBuffer[drawIdx];
 
     const uint indexBufferIdx0 = drawCmd.firstIndex + (triangleIdx * 3 + 0);
@@ -38,9 +38,9 @@ float4 Main(VertexOutput input, uint primitiveId : SV_PrimitiveID) : SV_Target
     const float4 posClip1 = mul(uniformBuffer.worldToClip, float4(posWorld1, 1.0));
     const float4 posClip2 = mul(uniformBuffer.worldToClip, float4(posWorld2, 1.0));
 
-    const float2 imageSize = float2(uniformBuffer.swapchainWidth, uniformBuffer.swapchainHeight);
+    const float2 textureSize = float2(uniformBuffer.swapchainWidth, uniformBuffer.swapchainHeight);
 
-    float2 pixelNdc = (input.positionClip.xy / imageSize) * 2.0 - 1.0;
+    float2 pixelNdc = (input.positionClip.xy / textureSize) * 2.0 - 1.0;
     pixelNdc.y *= -1.0;
 
     const BarycentricData baryData = CalcBarycentricData(
@@ -48,7 +48,7 @@ float4 Main(VertexOutput input, uint primitiveId : SV_PrimitiveID) : SV_Target
         posClip1,
         posClip2,
         pixelNdc,
-        2.0 / imageSize
+        2.0 / textureSize
     );
 
     const float2 uv0 = float2(v0.u, v0.v);

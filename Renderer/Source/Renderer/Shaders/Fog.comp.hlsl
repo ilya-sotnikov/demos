@@ -4,10 +4,10 @@
 ConstantBuffer<UniformData> uniformBuffer;
 
 SamplerState nearestSampler;
-Texture2D<float> depthImage;
-Texture2DArray<float> shadowImage;
+Texture2D<float> depthTexture;
+Texture2DArray<float> shadowTexture;
 [[vk::image_format("r16f")]]
-RWTexture2D<float> outImage;
+RWTexture2D<float> outTexture;
 
 // TODO: this is a brute force approach, implement something like:
 // https://bartwronski.com/wp-content/uploads/2014/08/bwronski_volumetric_fog_siggraph2014.pdf
@@ -17,7 +17,7 @@ static const float FOG_INTENSITY = 0.5;
 
 float3 CalcPosWorld(float2 uv)
 {
-    const float depth = depthImage.SampleLevel(nearestSampler, uv, 0);
+    const float depth = depthTexture.SampleLevel(nearestSampler, uv, 0);
 
     float2 posNdc = uv * 2.0 - 1.0;
     posNdc.y *= -1.0;
@@ -47,7 +47,7 @@ float CalcShadow(float3 posWorld)
 
     if ((minShadowCoord >= 0.0) && (maxShadowCoord <= 1.0))
     {
-        shadow = shadowImage.SampleLevel(
+        shadow = shadowTexture.SampleLevel(
             nearestSampler,
             float3(posShadow.xy, RENDERER_SHADOW_MAP_CASCADE_COUNT - 1),
             0
@@ -69,14 +69,14 @@ float PhaseHenyeyGreenstein(float marchDir_dot_lightDir, float scatterFactor)
 [numthreads(RENDERER_FOG_WORKGROUP_SIZE_X, RENDERER_FOG_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    const uint2 imageSize = uint2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
+    const uint2 textureSize = uint2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 
-    if (dtid.x >= imageSize.x || dtid.y >= imageSize.y)
+    if (dtid.x >= textureSize.x || dtid.y >= textureSize.y)
     {
         return;
     }
 
-    const float2 uv = (dtid.xy + 0.5) * uniformBuffer.renderImageSizeInv;
+    const float2 uv = (dtid.xy + 0.5) * uniformBuffer.renderTextureSizeInv;
 
     const float3 rayStart = uniformBuffer.cameraPosition;
     const float3 rayEnd = CalcPosWorld(uv);
@@ -100,5 +100,5 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     result /= RAYMARCH_STEPS;
 
-    outImage[dtid.xy] = result;
+    outTexture[dtid.xy] = result;
 }

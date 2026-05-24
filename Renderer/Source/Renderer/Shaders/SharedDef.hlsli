@@ -28,14 +28,6 @@
 #define MAT_4X4 float4x4
 #endif
 
-#ifdef __cplusplus
-#define GPU_PTR(type) VkDeviceAddress
-#define GPU_CONST_PTR(type) VkDeviceAddress
-#else
-#define GPU_PTR(type) Ptr<type, Access.ReadWrite>
-#define GPU_CONST_PTR(type) Ptr<type, Access.Read>
-#endif
-
 struct UniformData
 {
     MAT_4X4 worldToView;
@@ -49,8 +41,8 @@ struct UniformData
     FLOAT_2 taaJitter;
     FLOAT_2 prevTaaJitter;
     FLOAT_2 viewToClipInv0011;
-    FLOAT_2 renderImageSizeInv;
-    FLOAT_2 ambientOcclusionImageSizeInv;
+    FLOAT_2 renderTextureSizeInv;
+    FLOAT_2 ambientOcclusionTextureSizeInv;
     float taaBlendWeight;
     float cullFrustumPlaneXX;
     float cullFrustumPlaneXZ;

@@ -2,10 +2,7 @@
 
 // Shared with C++.
 
-// #define VULKAN_ENABLE_DEBUG_UTILS
-
 static const float RENDERER_NEAR_PLANE = 0.1f;
-static const int RENDERER_MAX_FRAMES_IN_FLIGHT = 2;
 static const int RENDERER_DEBUG_DRAW_RECT_MAX_COUNT = 4096;
 static const float RENDERER_SHADOW_FAR_PLANE = 50.0f;
 static const int RENDERER_SHADOW_MAP_CASCADE_COUNT = 4;

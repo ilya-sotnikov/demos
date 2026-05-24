@@ -2,11 +2,11 @@
 #include "Math.hlsli"
 
 ConstantBuffer<UniformData> uniformBuffer;
-Texture2D renderImage;
-Texture2D depthImage;
-Texture2D velocityImage;
-Texture2D prevResolvedRenderImage;
-RWTexture2D<float3> resolvedRenderImageRW;
+Texture2D renderTexture;
+Texture2D depthTexture;
+Texture2D velocityTexture;
+Texture2D prevResolvedRenderTexture;
+RWTexture2D<float3> resolvedRenderTextureRW;
 SamplerState linearSampler;
 
 // Took an implementation from this article:
@@ -30,16 +30,16 @@ SamplerState linearSampler;
 [numthreads(RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_X, RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    int2 renderImageSize = int2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
+    int2 renderTextureSize = int2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 
-    if (dtid.x >= renderImageSize.x || dtid.y >= renderImageSize.y)
+    if (dtid.x >= renderTextureSize.x || dtid.y >= renderTextureSize.y)
     {
         return;
     }
 
     if (uniformBuffer.taaEnable == 0)
     {
-        resolvedRenderImageRW[dtid.xy] = renderImage[dtid.xy].rgb;
+        resolvedRenderTextureRW[dtid.xy] = renderTexture[dtid.xy].rgb;
         return;
     }
 
@@ -58,9 +58,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         for (int y = -1; y <= 1; ++y)
         {
             int2 pixelPosition = dtid.xy + int2(x, y);
-            pixelPosition = clamp(pixelPosition, 0, renderImageSize - 1);
+            pixelPosition = clamp(pixelPosition, 0, renderTextureSize - 1);
 
-            const float3 neighbor = max(0, renderImage[pixelPosition].rgb);
+            const float3 neighbor = max(0, renderTexture[pixelPosition].rgb);
 
             // A filter over a neighborhood negates jitter.
             const float subSampleDistance = length(float2(x, y));
@@ -78,7 +78,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
             m2 += neighbor * neighbor;
 
             // For sampling the velocity buffer.
-            const float currentDepth = depthImage[pixelPosition].r;
+            const float currentDepth = depthTexture[pixelPosition].r;
             if (currentDepth > closestDepth)
             {
                 closestDepth = currentDepth;
@@ -88,22 +88,22 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     }
 
     const float2 motionVector =
-        velocityImage[closestDepthPixelPosition].xy * float2(0.5, 0.5);
-    const float2 uv = float2(dtid.xy + 0.5) / float2(renderImageSize);
+        velocityTexture[closestDepthPixelPosition].xy * float2(0.5, 0.5);
+    const float2 uv = float2(dtid.xy + 0.5) / float2(renderTextureSize);
     const float2 prevUV = uv - motionVector;
     const float3 currSample = currSampleTotal / currSampleWeight;
 
     if (any(prevUV != saturate(prevUV)))
     {
-        resolvedRenderImageRW[dtid.xy] = currSample;
+        resolvedRenderTextureRW[dtid.xy] = currSample;
         return;
     }
 
     float3 prevSample = SampleTextureCatmullRom(
-        prevResolvedRenderImage,
+        prevResolvedRenderTexture,
         linearSampler,
         prevUV,
-        float2(renderImageSize)
+        float2(renderTextureSize)
     ).rgb;
 
     const float sampleCountInv = 1.0 / 9.0;
@@ -129,5 +129,5 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float3 result =
         (currSample * currWeight + prevSample * prevWeight) / max(currWeight + prevWeight, 0.00001);
 
-    resolvedRenderImageRW[dtid.xy] = result;
+    resolvedRenderTextureRW[dtid.xy] = result;
 }

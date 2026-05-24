@@ -1,7 +1,8 @@
 #pragma once
 
 #include "../Math/Types.hpp"
-#include "RendererCommon.hpp"
+#include "../Common.hpp"
+#include "RHI/RHI.hpp"
 #include "Shaders/SharedDef.hlsli"
 
 #include <vector>
@@ -30,7 +31,7 @@ bool LoadScene(
     std::vector<Vertex>& vertices,
     std::vector<u32>& indices,
     std::vector<MeshPrimitive>& meshPrimitives,
-    std::vector<VkDrawIndexedIndirectCommand>& drawCmds,
+    std::vector<RHI::DrawIndexedIndirectCommand>& drawCmds,
     std::vector<DrawData>& drawData,
     std::vector<Material>& materials,
     std::vector<std::string>& texturePaths,

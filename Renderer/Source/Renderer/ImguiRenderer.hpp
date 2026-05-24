@@ -1,7 +1,7 @@
 #pragma once
 
-#include "RendererCommon.hpp"
-#include "Vulkan.hpp"
+#include "../Common.hpp"
+#include "RHI/RHI.hpp"
 #include "Shaders/SharedConfig.hlsli"
 #include "../Math/Types.hpp"
 #include "Shaders/SharedDef.hlsli"
@@ -18,33 +18,23 @@ struct ImguiRenderer
         Vec2 translate;
     };
 
-    // From main renderer.
-    Vulkan::Device mDevice;
-    VkCommandPool mCommandPool;
-
-    // It's own resources.
-    Vulkan::Image mFontImage;
-    VkSampler mFontSampler;
-    Vulkan::Pipeline mPipeline;
+    RHI::TextureHandle mFontTexture;
+    RHI::SamplerHandle mFontSampler;
+    RHI::PipelineHandle mPipeline;
 
     struct Frame
     {
-        Vulkan::Buffer vertexBuffer;
-        Vulkan::Buffer indexBuffer;
-        VkDeviceSize vertexBufferSize;
-        VkDeviceSize indexBufferSize;
+        RHI::BufferHandle vertexBuffer;
+        RHI::BufferHandle indexBuffer;
+        u64 vertexBufferSize;
+        u64 indexBufferSize;
         int vertexCount;
         int indexCount;
-    } mFrame[RENDERER_MAX_FRAMES_IN_FLIGHT];
+    } mFrame[RHI::FRAMES_IN_FLIGHT];
 
-    bool Init(
-        SDL_Window* window,
-        Vulkan::Device device,
-        VkCommandPool commandPool,
-        VkFormat colorFormat
-    );
+    bool Init(SDL_Window* window, RHI::Format colorFormat);
     void Cleanup();
     bool UpdateVertexIndexBuffers(u32 frameIndex);
     void StartNewFrame() const;
-    bool Render(VkCommandBuffer cb, u32 frameIndex);
+    bool Render(RHI::CommandBufferHandle cb, u32 frameIndex);
 };

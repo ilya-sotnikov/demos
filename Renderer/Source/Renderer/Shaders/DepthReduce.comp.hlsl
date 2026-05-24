@@ -6,8 +6,8 @@
 // I don't see any artifacts and doubt that they can occur in practice. For the explanation:
 // https://github.com/zeux/niagara/discussions/50
 
-Texture2D<float> inImage;
-RWTexture2D<float> outImageRW;
+Texture2D<float> inTexture;
+RWTexture2D<float> outTextureRW;
 SamplerState minSampler;
 
 [[vk::push_constant]]
@@ -21,10 +21,10 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         return;
     }
 
-    const float2 outImageSize = float2(pushConstants.outWidth, pushConstants.outHeight);
-    const float2 uv = (float2(dtid.xy) + 0.5) / outImageSize;
+    const float2 outTextureSize = float2(pushConstants.outWidth, pushConstants.outHeight);
+    const float2 uv = (float2(dtid.xy) + 0.5) / outTextureSize;
     // Min reduction sampler (minimum depth of 2x2 texel quad).
-    const float minDepth = inImage.SampleLevel(minSampler, uv, 0).r;
+    const float minDepth = inTexture.SampleLevel(minSampler, uv, 0).r;
 
-    outImageRW[dtid.xy] = minDepth;
+    outTextureRW[dtid.xy] = minDepth;
 }

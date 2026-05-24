@@ -1,14 +1,14 @@
 #include "Common.hlsli"
 
 ByteAddressBuffer countBuffer;
-RWStructuredBuffer<VkDrawIndirectCommand> cmdBuffer;
+RWStructuredBuffer<DrawIndirectCommand> cmdBuffer;
 
 [numthreads(1, 1, 1)]
 void Main()
 {
     const uint count = countBuffer.Load(0);
 
-    VkDrawIndirectCommand cmd;
+    DrawIndirectCommand cmd;
     cmd.vertexCount = 6 * count;
     cmd.instanceCount = 1;
     cmd.firstVertex = 0;

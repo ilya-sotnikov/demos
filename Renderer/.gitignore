@@ -1,5 +1,4 @@
-Build
-BuildRelease
+Build*
 Assets/main_sponza
 compile_commands.json
 .cache/
