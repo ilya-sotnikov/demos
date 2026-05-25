@@ -161,6 +161,15 @@ inline Vec4& operator/=(Vec4& lhs, f32 rhs)
     return lhs;
 }
 
+inline Vec4& operator/=(Vec4& lhs, Vec4 rhs)
+{
+    lhs.val[0] /= rhs.val[0];
+    lhs.val[1] /= rhs.val[1];
+    lhs.val[2] /= rhs.val[2];
+    lhs.val[3] /= rhs.val[3];
+    return lhs;
+}
+
 inline Vec4 operator+(Vec4 lhs, Vec4 rhs)
 {
     return {
@@ -208,6 +217,16 @@ inline Vec4 operator/(Vec4 lhs, f32 rhs)
         lhs.val[1] / rhs,
         lhs.val[2] / rhs,
         lhs.val[3] / rhs,
+    };
+}
+
+inline Vec4 operator/(Vec4 lhs, Vec4 rhs)
+{
+    return {
+        lhs.val[0] / rhs.val[0],
+        lhs.val[1] / rhs.val[1],
+        lhs.val[2] / rhs.val[2],
+        lhs.val[3] / rhs.val[3],
     };
 }
 

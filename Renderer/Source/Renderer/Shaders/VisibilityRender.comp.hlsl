@@ -297,10 +297,6 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     const float3 ambient = albedo.rgb * uniformBuffer.ambientIntensity * ambientOcclusion;
 
-    // TODO: precompute.
-    const float3 sunColor =
-        CalcSky(-uniformBuffer.sunDirectionWorld, uniformBuffer.sunDirectionWorld);
-
     float fogFactor = 0.0;
     if (uniformBuffer.enableFog)
     {
@@ -315,7 +311,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         ambient * (-uniformBuffer.sunDirectionWorld.y) +
         radianceOut * shadow +
         fogFactor
-    ) * sunColor;
+    ) * uniformBuffer.sunColor;
 
     switch (uniformBuffer.renderMode)
     {

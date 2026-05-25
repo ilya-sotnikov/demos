@@ -76,6 +76,13 @@ inline Vec2& operator/=(Vec2& lhs, f32 rhs)
     return lhs;
 }
 
+inline Vec2& operator/=(Vec2& lhs, Vec2 rhs)
+{
+    lhs.val[0] /= rhs.val[0];
+    lhs.val[1] /= rhs.val[1];
+    return lhs;
+}
+
 inline Vec2 operator+(Vec2 lhs, Vec2 rhs)
 {
     return {lhs.val[0] + rhs.val[0], lhs.val[1] + rhs.val[1]};
@@ -99,6 +106,11 @@ inline Vec2 operator*(Vec2 lhs, f32 rhs)
 inline Vec2 operator/(Vec2 lhs, f32 rhs)
 {
     return {lhs.val[0] / rhs, lhs.val[1] / rhs};
+}
+
+inline Vec2 operator/(Vec2 lhs, Vec2 rhs)
+{
+    return {lhs.val[0] / rhs.val[0], lhs.val[1] / rhs.val[1]};
 }
 
 inline Vec2 operator*(f32 lhs, Vec2 rhs)

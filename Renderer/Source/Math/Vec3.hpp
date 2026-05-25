@@ -121,6 +121,14 @@ inline Vec3& operator/=(Vec3& lhs, f32 rhs)
     return lhs;
 }
 
+inline Vec3& operator/=(Vec3& lhs, Vec3 rhs)
+{
+    lhs.val[0] /= rhs.val[0];
+    lhs.val[1] /= rhs.val[1];
+    lhs.val[2] /= rhs.val[2];
+    return lhs;
+}
+
 inline Vec3 operator+(Vec3 lhs, Vec3 rhs)
 {
     return {lhs.val[0] + rhs.val[0], lhs.val[1] + rhs.val[1], lhs.val[2] + rhs.val[2]};
@@ -144,6 +152,11 @@ inline Vec3 operator*(Vec3 lhs, f32 rhs)
 inline Vec3 operator/(Vec3 lhs, f32 rhs)
 {
     return {lhs.val[0] / rhs, lhs.val[1] / rhs, lhs.val[2] / rhs};
+}
+
+inline Vec3 operator/(Vec3 lhs, Vec3 rhs)
+{
+    return {lhs.val[0] / rhs.val[0], lhs.val[1] / rhs.val[1], lhs.val[2] / rhs.val[2]};
 }
 
 inline Vec3 operator*(f32 lhs, Vec3 rhs)

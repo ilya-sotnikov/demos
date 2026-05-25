@@ -118,6 +118,42 @@ static std::vector<i8> CreateShadowJitterOffsets(size_t size, size_t samplesU, s
     return result;
 }
 
+// Adapted from Sky.hlsli, assuming viewDirectionWorld == -sunDirectionWorld.
+static Vec3 CalcSunColor(Vec3 sunDirectionWorld)
+{
+    const f32 I0 = 11.0f;
+    const Vec3 sigmaRayleigh = Vec3{0.33f, 0.78f, 1.89f};
+    const f32 sRayleigh = 0.17f;
+    const f32 sMie = 0.05f;
+    const f32 sSun = 0.07f;
+    const f32 wMie = 0.25f;
+    const f32 wSun = 0.0002f;
+
+    const Vec3 viewDirectionWorld = -sunDirectionWorld;
+
+    const f32 dotViewSun = Dot(viewDirectionWorld, sunDirectionWorld);
+    // Tweaking a little to prevent divisions by zero.
+    const f32 sunY = sunDirectionWorld.Y() + 1e-5f;
+    const f32 viewY = viewDirectionWorld.Y() + 2e-5f;
+
+    const f32 phaseRayleigh = 3.0f / (16.0f * M_PIf) * (1.0f + dotViewSun * dotViewSun);
+
+    f32 phaseMie = wMie / (1.0f + wMie + dotViewSun);
+    phaseMie = 0.3f * phaseMie * phaseMie;
+
+    f32 phaseSun = wSun / (1.0f + wSun + dotViewSun);
+    phaseSun = 4.0f * phaseSun * phaseSun;
+
+    const Vec3 sigmaSum = sRayleigh * sigmaRayleigh + Vec3{sMie};
+    const Vec3 phaseSum
+        = sRayleigh * sigmaRayleigh * phaseRayleigh + Vec3{sMie * phaseMie + sSun * phaseSun};
+
+    const f32 surfaceDarkening = viewDirectionWorld.Y() < 0.0f ? 0.3f : 1.0f;
+
+    return I0 * surfaceDarkening * sunY / (sunY + viewY) * (phaseSum / sigmaSum)
+        * (Exp(sigmaSum / sunY) - Exp(-sigmaSum / Abs(viewY)));
+}
+
 bool Renderer::Init()
 {
     mScratchArena.Init(16'000'000);
@@ -1347,6 +1383,8 @@ void Renderer::SetSunDirection(f32 yaw, f32 pitch)
     mUniformData.sunDirectionWorld.X() = sinf(yaw) * cosf(pitch);
     mUniformData.sunDirectionWorld.Y() = -sinf(pitch);
     mUniformData.sunDirectionWorld.Z() = cosf(yaw) * cosf(pitch);
+
+    mUniformData.sunColor = CalcSunColor(mUniformData.sunDirectionWorld);
 }
 
 bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)

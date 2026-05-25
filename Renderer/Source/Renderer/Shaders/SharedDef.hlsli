@@ -38,6 +38,7 @@ struct UniformData
     MAT_4X4 clipToWorld;
     FLOAT_3 cameraPosition;
     FLOAT_3 sunDirectionWorld;
+    FLOAT_3 sunColor;
     FLOAT_2 taaJitter;
     FLOAT_2 prevTaaJitter;
     FLOAT_2 viewToClipInv0011;

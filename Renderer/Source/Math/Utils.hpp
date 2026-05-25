@@ -198,3 +198,12 @@ inline u32 PreviousPow2(u32 x)
 
     return result;
 }
+
+inline Vec3 Exp(Vec3 v)
+{
+    return {
+        expf(v.val[0]),
+        expf(v.val[1]),
+        expf(v.val[2]),
+    };
+}
