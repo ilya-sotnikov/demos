@@ -692,6 +692,8 @@ bool Renderer::Init()
     mUniformData.ambientIntensity = 0.04f;
     mUniformData.sunIntensity = 1.0f;
     mUniformData.gradErrorMax = 0.01f;
+    mUniformData.enableSSAO = true;
+    mUniformData.enableFog = true;
 
     mUniformData.shadow.enablePcf = 1;
     mUniformData.shadow.pcfKernelScale = 3.0f;

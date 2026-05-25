@@ -289,7 +289,11 @@ void Main(uint3 dtid : SV_DispatchThreadID)
             cascadeIdx
         );
 
-    const float ambientOcclusion = ambientOcclusionTexture[dtid.xy];
+    float ambientOcclusion = 1.0;
+    if (uniformBuffer.enableSSAO)
+    {
+        ambientOcclusion = ambientOcclusionTexture[dtid.xy];
+    }
 
     const float3 ambient = albedo.rgb * uniformBuffer.ambientIntensity * ambientOcclusion;
 
@@ -297,8 +301,15 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float3 sunColor =
         CalcSky(-uniformBuffer.sunDirectionWorld, uniformBuffer.sunDirectionWorld);
 
-    const float fogFactor =
-        fogTexture.SampleLevel(linearSampler, (dtid.xy + 0.5) * uniformBuffer.renderTextureSizeInv, 0);
+    float fogFactor = 0.0;
+    if (uniformBuffer.enableFog)
+    {
+        fogFactor = fogTexture.SampleLevel(
+            linearSampler,
+            (dtid.xy + 0.5) * uniformBuffer.renderTextureSizeInv,
+            0
+        );
+    }
 
     float3 color = (
         ambient * (-uniformBuffer.sunDirectionWorld.y) +

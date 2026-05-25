@@ -419,11 +419,19 @@ int main()
 
             renderer.SetSunDirection(Radians(sunYaw), Radians(sunPitch));
 
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImguiCheckbox("Draw cull AABB", renderer.mUniformData.drawCullAABB);
+
             // TODO: shadow stuff.
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImguiCheckbox("Draw cull AABB", renderer.mUniformData.drawCullAABB);
+            ImguiCheckbox("SSAO", renderer.mUniformData.enableSSAO);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImguiCheckbox("Fog", renderer.mUniformData.enableFog);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();

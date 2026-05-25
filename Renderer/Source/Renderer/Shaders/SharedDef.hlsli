@@ -66,6 +66,8 @@ struct UniformData
     uint32_t taaEnable;
     uint32_t drawCullAABB;
     uint32_t renderMode;
+    uint32_t enableSSAO;
+    uint32_t enableFog;
 
     struct
     {
