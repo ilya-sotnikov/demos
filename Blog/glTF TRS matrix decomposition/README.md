@@ -340,7 +340,7 @@ We can use xor to to do it, let's start with the first case. Xoring with 0 doesn
 
 If we xor with 1, we'll get the second case:
 
-| op1 | op2 | result hex | result dec |
+| op1 | op2 | result bin | result dec |
 | - | - | - | - |
 | 0b00 | 0b01 | 0b01 | 1 |
 | 0b01 | 0b01 | 0b00 | 0 |
@@ -349,7 +349,7 @@ If we xor with 1, we'll get the second case:
 
 If we xor with 2, we'll get the third case:
 
-| op1 | op2 | result hex | result dec |
+| op1 | op2 | result bin | result dec |
 | - | - | - | - |
 | 0b00 | 0b10 | 0b10 | 2 |
 | 0b01 | 0b10 | 0b11 | 3 |
