@@ -1080,8 +1080,8 @@ bool Renderer::RecompilePipelines()
 
         mVisibilityPipeline = RHI::CreateGraphicsPipeline({
             .bytecodes = {
-                {static_cast<u8*>(vertData.data), vertData.size},
-                {static_cast<u8*>(fragData.data), fragData.size},
+                {static_cast<u8*>(vertData.data), int(vertData.size)},
+                {static_cast<u8*>(fragData.data), int(fragData.size)},
             },
             .cull = RHI::CULL_CW,
             .depthFormat = RHI::GetTextureFormat(mDepthTexture),
@@ -1108,8 +1108,8 @@ bool Renderer::RecompilePipelines()
 
         mDebugDrawRectPipeline = RHI::CreateGraphicsPipeline({
             .bytecodes = {
-                {static_cast<u8*>(vertData.data), vertData.size},
-                {static_cast<u8*>(fragData.data), fragData.size},
+                {static_cast<u8*>(vertData.data), int(vertData.size)},
+                {static_cast<u8*>(fragData.data), int(fragData.size)},
             },
             .colorTargets = {
                 {.format = RHI::GetTextureFormat(mRenderTexture)},
@@ -1130,8 +1130,8 @@ bool Renderer::RecompilePipelines()
 
         mFullscreenPipeline = RHI::CreateGraphicsPipeline({
             .bytecodes = {
-                {static_cast<u8*>(vertData.data), vertData.size},
-                {static_cast<u8*>(fragData.data), fragData.size},
+                {static_cast<u8*>(vertData.data), int(vertData.size)},
+                {static_cast<u8*>(fragData.data), int(fragData.size)},
             },
             .colorTargets = {{.format = RHI::GetTextureFormat(RHI::GetSwapchainTexture(0))}},
             .debugName = "FullscreenPass",
@@ -1150,8 +1150,8 @@ bool Renderer::RecompilePipelines()
 
         mDebugGradErrorPipeline = RHI::CreateGraphicsPipeline({
             .bytecodes = {
-                {static_cast<u8*>(vertData.data), vertData.size},
-                {static_cast<u8*>(fragData.data), fragData.size},
+                {static_cast<u8*>(vertData.data), int(vertData.size)},
+                {static_cast<u8*>(fragData.data), int(fragData.size)},
             },
             .cull = RHI::CULL_CW,
             .depthFormat = RHI::GetTextureFormat(mDepthTexture),
@@ -1173,8 +1173,8 @@ bool Renderer::RecompilePipelines()
 
         mShadowPipeline = RHI::CreateGraphicsPipeline({
             .bytecodes = {
-                {static_cast<u8*>(vertData.data), vertData.size},
-                {static_cast<u8*>(fragData.data), fragData.size},
+                {static_cast<u8*>(vertData.data), int(vertData.size)},
+                {static_cast<u8*>(fragData.data), int(fragData.size)},
             },
             .cull = RHI::CULL_CW,
             .depthFormat = RHI::GetTextureFormat(mShadowTexture),
@@ -1194,7 +1194,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mCullEarlyPipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "CullEarlyPass",
         });
         if (!mCullEarlyPipeline)
@@ -1208,7 +1208,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mCullLatePipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "CullLatePass",
         });
         if (!mCullLatePipeline)
@@ -1222,7 +1222,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mShadowCullPipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "ShadowCullPass",
         });
         if (!mCullLatePipeline)
@@ -1236,7 +1236,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mVisibilityRenderPipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .usesBindlessTextures = true,
             .debugName = "VisibilityRenderPass",
         });
@@ -1251,7 +1251,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mTaaResolvePipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "TaaResolvePass",
         });
         if (!mTaaResolvePipeline)
@@ -1265,7 +1265,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mDepthReducePipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "DepthReducePass",
         });
         if (!mDepthReducePipeline)
@@ -1279,7 +1279,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mDepthViewQuarterResPipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "DepthViewQuarterResPass",
         });
         if (!mDepthViewQuarterResPipeline)
@@ -1293,7 +1293,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mAmbientOcclusionPipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "AmbientOcclusionPass",
         });
         if (!mAmbientOcclusionPipeline)
@@ -1307,7 +1307,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mAmbientOcclusionBlurPipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "AmbientOcclusionBlurPass",
         });
         if (!mAmbientOcclusionBlurPipeline)
@@ -1321,7 +1321,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mAmbientOcclusionUpsamplePipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "AmbientOcclusionUpsamplePass",
         });
         if (!mAmbientOcclusionUpsamplePipeline)
@@ -1335,7 +1335,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mFogPipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "FogPass",
         });
         if (!mFogPipeline)
@@ -1349,7 +1349,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mBlurFogPipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "BlurFogPass",
         });
         if (!mBlurFogPipeline)
@@ -1363,7 +1363,7 @@ bool Renderer::RecompilePipelines()
         DEFER(free(compData.data));
 
         mDebugDrawFillCmdPipeline = RHI::CreateComputePipeline({
-            .bytecode = {static_cast<u8*>(compData.data), compData.size},
+            .bytecode = {static_cast<u8*>(compData.data), int(compData.size)},
             .debugName = "DebugDrawFillCmdPass",
         });
         if (!mDebugDrawFillCmdPipeline)
@@ -2816,7 +2816,8 @@ bool Renderer::CreateColorResources()
     mUniformData.renderWidth = renderDimensions.x;
     mUniformData.renderHeight = renderDimensions.y;
     mUniformData.aspect = f32(mUniformData.renderWidth) / f32(mUniformData.renderHeight);
-    mUniformData.renderTextureSizeInv = {1.0f / renderDimensions.x, 1.0f / renderDimensions.y};
+    mUniformData.renderTextureSizeInv
+        = {1.0f / f32(renderDimensions.x), 1.0f / f32(renderDimensions.y)};
 
     mVisibilityTexture = RHI::CreateTexture({
         .format = RHI::FORMAT_R32G32_UINT,

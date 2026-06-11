@@ -96,6 +96,7 @@ else()
         -Wconversion
         -Wsign-conversion
         -Wshadow
+        -Wno-missing-designated-field-initializers
     )
 
     set(SANITIZERS -fsanitize=address,undefined)

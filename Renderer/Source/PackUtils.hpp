@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.hpp"
+#include "Utils.hpp"
 #include "Math/Utils.hpp"
 #include "Math/Vec2.hpp"
 #include "Math/Vec3.hpp"
@@ -66,8 +67,8 @@ inline u16 PackFloat2ToRG8Snorm(Vec2 value)
     DEBUG_ASSERT(value.Y() >= -1.0f);
     DEBUG_ASSERT(value.Y() <= 1.0f);
 
-    const u8 byteX = u8(roundf(value.X() * 127.0f));
-    const u8 byteY = u8(roundf(value.Y() * 127.0f));
+    const u8 byteX = Utils::BitCast<u8>(i8(roundf(value.X() * 127.0f)));
+    const u8 byteY = Utils::BitCast<u8>(i8(roundf(value.Y() * 127.0f)));
     return u16(byteY << 8) | byteX;
 }
 

@@ -155,8 +155,8 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
 
         mPipeline = RHI::CreateGraphicsPipeline({
             .bytecodes = {
-                {static_cast<u8*>(vertData.data), vertData.size},
-                {static_cast<u8*>(fragData.data), fragData.size},
+                {static_cast<u8*>(vertData.data), int(vertData.size)},
+                {static_cast<u8*>(fragData.data), int(fragData.size)},
             },
             .stencilFormat = RHI::FORMAT_S8_UINT,
             .colorTargets = {{

@@ -1846,7 +1846,7 @@ RHI::PipelineHandle RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&
 
     std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
     descriptorSetLayoutBindings.reserve(32);
-    std::vector<Shader> shaders(desc.bytecodes.count);
+    std::vector<Shader> shaders(size_t(desc.bytecodes.count));
 
     bool failed = true;
     Pipeline pipeline{};
@@ -1874,7 +1874,7 @@ RHI::PipelineHandle RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&
     for (int i = 0; i < desc.bytecodes.count; ++i)
     {
         if (!CreateShader(
-                shaders[i],
+                shaders[size_t(i)],
                 descriptorSetLayoutBindings,
                 sCtx.device,
                 *(desc.bytecodes.begin() + i)
