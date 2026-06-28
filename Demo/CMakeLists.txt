@@ -1,0 +1,128 @@
+cmake_minimum_required(VERSION 3.20)
+project(Demo)
+
+# if(("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC") AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))
+#     add_compile_options(/fsanitize=address)
+# endif()
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# TODO: disable some stuff.
+add_subdirectory(Lib/SDL)
+add_subdirectory(Lib/glm)
+
+set(SOURCES
+    Source/Camera.cpp
+)
+
+set(LIBS
+    SDL3::SDL3
+    glm::glm
+)
+
+add_executable(${PROJECT_NAME}
+    ${SOURCES}
+    Source/Main.cpp
+)
+
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    set(COMPILE_OPTIONS /W4)
+    target_compile_options(${PROJECT_NAME} PRIVATE ${COMPILE_OPTIONS})
+else()
+    set(COMPILE_OPTIONS
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+        -Wsign-conversion
+        -Wshadow
+        -Wno-missing-field-initializers
+    )
+
+    set(SANITIZERS -fsanitize=address,undefined)
+
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+        set(SANITIZERS ${SANITIZERS} -shared-libasan)
+    endif()
+
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_compile_options(${PROJECT_NAME} PRIVATE -Og)
+        target_compile_options(${PROJECT_NAME} PRIVATE ${SANITIZERS})
+        target_link_options(${PROJECT_NAME} PRIVATE ${SANITIZERS})
+    endif()
+
+    target_compile_options(${PROJECT_NAME} PRIVATE ${COMPILE_OPTIONS})
+endif()
+
+target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBS})
+
+if(NOT DEFINED DXC_EXECUTABLE)
+    if(UNIX)
+        if(DEFINED ENV{VULKAN_SDK})
+            set(DXC_EXECUTABLE "$ENV{VULKAN_SDK}/bin/dxc")
+        else()
+            set(DXC_EXECUTABLE "dxc")
+        endif()
+    else()
+        set(DXC_EXECUTABLE "$ENV{VULKAN_SDK}/Bin/dxc.exe")
+    endif()
+endif()
+
+set(SHADER_SOURCE_DIRECTORY ${CMAKE_SOURCE_DIR}/Source/Shaders/)
+set(SHADER_SOURCE_FILES
+    ${SHADER_SOURCE_DIRECTORY}/Grid.vert.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/Grid.frag.hlsl
+)
+set(SHADER_INCLUDE_FILES
+    ${SHADER_SOURCE_DIRECTORY}/Common.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/SharedDef.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/Math.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/Grid.hlsli
+)
+
+execute_process(COMMAND ${DXC_EXECUTABLE} --version)
+
+foreach(shader ${SHADER_SOURCE_FILES})
+    message(STATUS "Building shaders")
+    get_filename_component(FILE_NAME ${shader} NAME)
+    set(SPIRV "${CMAKE_BINARY_DIR}/${FILE_NAME}.spv")
+    cmake_path(GET shader EXTENSION FILE_EXTENSION)
+
+    if("${FILE_EXTENSION}" STREQUAL ".vert.hlsl")
+        set(SHADER_TYPE vs)
+    elseif("${FILE_EXTENSION}" STREQUAL ".frag.hlsl")
+        set(SHADER_TYPE ps)
+    elseif("${FILE_EXTENSION}" STREQUAL ".comp.hlsl")
+        set(SHADER_TYPE cs)
+    elseif("${FILE_EXTENSION}" STREQUAL ".mesh.hlsl")
+        set(SHADER_TYPE ms)
+    elseif("${FILE_EXTENSION}" STREQUAL ".task.hlsl")
+        set(SHADER_TYPE as)
+    else()
+        message(FATAL_ERROR "unknown shader extension ${shader}")
+    endif()
+
+    message(STATUS ${shader})
+
+    add_custom_command(
+        OUTPUT ${SPIRV}
+        COMMAND ${DXC_EXECUTABLE}
+            -spirv
+            -O3 #-Zi -fspv-debug=vulkan-with-source
+            -T ${SHADER_TYPE}_6_6
+            -Zpc
+            -E Main
+            -fspv-target-env=vulkan1.0
+            -Fo ${SPIRV} ${shader}
+        DEPENDS ${shader} ${SHADER_INCLUDE_FILES}
+    )
+    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+endforeach(shader)
+
+add_custom_target(Shaders DEPENDS ${SPIRV_BINARY_FILES})
+add_dependencies(${PROJECT_NAME} Shaders)

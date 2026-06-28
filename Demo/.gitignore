@@ -1,0 +1,6 @@
+Build*
+Assets/main_sponza
+compile_commands.json
+.cache/
+.vs
+CMakeSettings.json
