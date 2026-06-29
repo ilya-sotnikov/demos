@@ -44,7 +44,7 @@ static SDL_GPUShader* LoadShader(const ShaderDesc&& desc)
         .code_size = codeSize,
         .code = static_cast<u8*>(code),
         .entrypoint = "Main",
-        .format = SDL_GPU_SHADERFORMAT_SPIRV,
+        .format = SDL_GPU_SHADERFORMAT_DXIL,
         .stage = desc.stage,
         .num_samplers = desc.samplerCount,
         .num_storage_textures = desc.storageTextureCount,
@@ -89,7 +89,7 @@ static bool RecompilePipelines(SDL_GPUDevice* device, SDL_Window* window)
     SDL_GPUShader* const vertexShader = LoadShader({
         .device = device,
         .stage = SDL_GPU_SHADERSTAGE_VERTEX,
-        .path = "Grid.vert.hlsl.spv",
+        .path = "Grid.vert.hlsl.ir",
         .uniformBufferCount = 1,
     });
     if (!vertexShader)
@@ -101,7 +101,7 @@ static bool RecompilePipelines(SDL_GPUDevice* device, SDL_Window* window)
     SDL_GPUShader* const fragmentShader = LoadShader({
         .device = device,
         .stage = SDL_GPU_SHADERSTAGE_FRAGMENT,
-        .path = "Grid.frag.hlsl.spv",
+        .path = "Grid.frag.hlsl.ir",
         .uniformBufferCount = 1,
     });
     if (!fragmentShader)
@@ -269,7 +269,7 @@ int main()
     const bool debugMode = true;
 
     SDL_GPUDevice* const device
-        = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, debugMode, "vulkan");
+        = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_DXIL, debugMode, "direct3d12");
     if (!device)
     {
         SDL_Log("SDL_CreateGPUDevice failed: %s", SDL_GetError());
@@ -359,7 +359,8 @@ int main()
             }
 
             const glm::mat4 worldToView = sCamera.GetViewMatrix();
-            const glm::mat4 viewToClip = Perspective(70.0f, f32(width) / f32(height), 0.1f);
+            const glm::mat4 viewToClip
+                = Perspective(glm::radians(70.0f), f32(width) / f32(height), 0.1f);
             uniformData.worldToClip = viewToClip * worldToView;
             uniformData.cameraPositionWorld = sCamera.mPosition;
 

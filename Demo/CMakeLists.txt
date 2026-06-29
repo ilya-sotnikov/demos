@@ -90,7 +90,7 @@ execute_process(COMMAND ${DXC_EXECUTABLE} --version)
 foreach(shader ${SHADER_SOURCE_FILES})
     message(STATUS "Building shaders")
     get_filename_component(FILE_NAME ${shader} NAME)
-    set(SPIRV "${CMAKE_BINARY_DIR}/${FILE_NAME}.spv")
+    set(IR "${CMAKE_BINARY_DIR}/${FILE_NAME}.ir")
     cmake_path(GET shader EXTENSION FILE_EXTENSION)
 
     if("${FILE_EXTENSION}" STREQUAL ".vert.hlsl")
@@ -110,19 +110,17 @@ foreach(shader ${SHADER_SOURCE_FILES})
     message(STATUS ${shader})
 
     add_custom_command(
-        OUTPUT ${SPIRV}
+        OUTPUT ${IR}
         COMMAND ${DXC_EXECUTABLE}
-            -spirv
-            -O3 #-Zi -fspv-debug=vulkan-with-source
+            -O3 #-Zi
             -T ${SHADER_TYPE}_6_6
             -Zpc
             -E Main
-            -fspv-target-env=vulkan1.0
-            -Fo ${SPIRV} ${shader}
+            -Fo ${IR} ${shader}
         DEPENDS ${shader} ${SHADER_INCLUDE_FILES}
     )
-    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+    list(APPEND IR_BINARY_FILES ${IR})
 endforeach(shader)
 
-add_custom_target(Shaders DEPENDS ${SPIRV_BINARY_FILES})
+add_custom_target(Shaders DEPENDS ${IR_BINARY_FILES})
 add_dependencies(${PROJECT_NAME} Shaders)
