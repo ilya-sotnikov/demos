@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Common.hpp"
+#include "common.hpp"
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -14,6 +14,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/matrix_clip_space.hpp>
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

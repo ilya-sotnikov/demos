@@ -1,8 +1,8 @@
-#include "Common.hpp"
+#include "common.hpp"
 
-#include "Camera.hpp"
-#include "Math.hpp"
-#include "Shaders/SharedDef.hlsli"
+#include "camera.hpp"
+#include "math.hpp"
+#include "shaders/shared_def.hlsli"
 
 #include <stdio.h>
 
@@ -12,8 +12,10 @@
 static u8 sKeys[SDL_SCANCODE_COUNT + 1];
 static Camera sCamera;
 static bool sShouldWindowClose;
-static bool sMouseRelativeMode = true;
 static SDL_GPUGraphicsPipeline* sPipeline;
+
+static const f32 CAMERA_SPEED_NORMAL = 5.0f;
+static const f32 CAMERA_SPEED_FAST = 20.0f;
 
 struct ShaderDesc
 {
@@ -26,7 +28,7 @@ struct ShaderDesc
     u32 storageTextureCount;
 };
 
-static SDL_GPUShader* LoadShader(const ShaderDesc&& desc)
+static SDL_GPUShader* loadShader(const ShaderDesc&& desc)
 {
     DEBUG_ASSERT(desc.device);
     DEBUG_ASSERT(desc.path);
@@ -43,8 +45,8 @@ static SDL_GPUShader* LoadShader(const ShaderDesc&& desc)
     const SDL_GPUShaderCreateInfo shaderInfo = {
         .code_size = codeSize,
         .code = static_cast<u8*>(code),
-        .entrypoint = "Main",
-        .format = SDL_GPU_SHADERFORMAT_DXIL,
+        .entrypoint = "main",
+        .format = SDL_GPU_SHADERFORMAT_SPIRV,
         .stage = desc.stage,
         .num_samplers = desc.samplerCount,
         .num_storage_textures = desc.storageTextureCount,
@@ -61,12 +63,12 @@ static SDL_GPUShader* LoadShader(const ShaderDesc&& desc)
     return shader;
 }
 
-static bool RecompilePipelines(SDL_GPUDevice* device, SDL_Window* window)
+static bool recompilePipelines(SDL_GPUDevice* device, SDL_Window* window)
 {
     DEBUG_ASSERT(device);
     DEBUG_ASSERT(window);
 
-    const char* args[] = {"cmake", "--build", ".", "-t", "Shaders", nullptr};
+    const char* args[] = {"cmake", "--build", ".", "-t", "shaders", nullptr};
 
     SDL_Process* const process = SDL_CreateProcess(args, false);
     if (!process)
@@ -86,10 +88,10 @@ static bool RecompilePipelines(SDL_GPUDevice* device, SDL_Window* window)
         return false;
     }
 
-    SDL_GPUShader* const vertexShader = LoadShader({
+    SDL_GPUShader* const vertexShader = loadShader({
         .device = device,
         .stage = SDL_GPU_SHADERSTAGE_VERTEX,
-        .path = "Grid.vert.hlsl.ir",
+        .path = "grid.vert.hlsl.ir",
         .uniformBufferCount = 1,
     });
     if (!vertexShader)
@@ -98,10 +100,10 @@ static bool RecompilePipelines(SDL_GPUDevice* device, SDL_Window* window)
     }
     DEFER(SDL_ReleaseGPUShader(device, vertexShader));
 
-    SDL_GPUShader* const fragmentShader = LoadShader({
+    SDL_GPUShader* const fragmentShader = loadShader({
         .device = device,
         .stage = SDL_GPU_SHADERSTAGE_FRAGMENT,
-        .path = "Grid.frag.hlsl.ir",
+        .path = "grid.frag.hlsl.ir",
         .uniformBufferCount = 1,
     });
     if (!fragmentShader)
@@ -127,7 +129,10 @@ static bool RecompilePipelines(SDL_GPUDevice* device, SDL_Window* window)
         .vertex_shader = vertexShader,
         .fragment_shader = fragmentShader,
         .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-        .rasterizer_state = {.fill_mode = SDL_GPU_FILLMODE_FILL},
+        .rasterizer_state = {
+            .fill_mode = SDL_GPU_FILLMODE_FILL,
+            .enable_depth_clip = true,
+        },
         .target_info = {
             .color_target_descriptions = &colorTargetDescription,
             .num_color_targets = 1,
@@ -147,14 +152,8 @@ static bool RecompilePipelines(SDL_GPUDevice* device, SDL_Window* window)
     return true;
 }
 
-static void ProcessMouse(SDL_Window* window)
+static void processMouse(const SDL_Event& event)
 {
-    assert(window);
-
-    f32 x{};
-    f32 y{};
-    (void)SDL_GetRelativeMouseState(&x, &y);
-
     static bool sFirst = true;
 
     if (sFirst)
@@ -163,18 +162,11 @@ static void ProcessMouse(SDL_Window* window)
         return;
     }
 
-    sCamera.ChangeDirection(x, -y);
-
-    if (sMouseRelativeMode)
-    {
-        SDL_WarpMouseInWindow(window, 0.0f, 0.0f);
-    }
+    sCamera.changeDirection(event.motion.xrel, -event.motion.yrel);
 }
 
-static void ProcessEvent(SDL_Window* window, const SDL_Event& event)
+static void processEvent(const SDL_Event& event)
 {
-    DEBUG_ASSERT(window);
-
     switch (event.type)
     {
     case SDL_EVENT_QUIT:
@@ -184,7 +176,7 @@ static void ProcessEvent(SDL_Window* window, const SDL_Event& event)
         sKeys[event.key.scancode] = 1;
         break;
     case SDL_EVENT_MOUSE_MOTION:
-        ProcessMouse(window);
+        processMouse(event);
         break;
     case SDL_EVENT_KEY_UP:
         sKeys[event.key.scancode] = 0;
@@ -192,7 +184,7 @@ static void ProcessEvent(SDL_Window* window, const SDL_Event& event)
     }
 }
 
-static void ProcessInput(SDL_Window* window, SDL_GPUDevice* device, f32 deltaTime)
+static void processInput(SDL_Window* window, SDL_GPUDevice* device, f32 deltaTime)
 {
     DEBUG_ASSERT(window);
     DEBUG_ASSERT(device);
@@ -200,32 +192,36 @@ static void ProcessInput(SDL_Window* window, SDL_GPUDevice* device, f32 deltaTim
 
     if (sKeys[SDL_SCANCODE_W])
     {
-        sCamera.Move(Camera::MoveDirection::Forward, deltaTime);
+        sCamera.move(Camera::MoveDirection::Forward, deltaTime);
     }
     if (sKeys[SDL_SCANCODE_S])
     {
-        sCamera.Move(Camera::MoveDirection::Backward, deltaTime);
+        sCamera.move(Camera::MoveDirection::Backward, deltaTime);
     }
     if (sKeys[SDL_SCANCODE_D])
     {
-        sCamera.Move(Camera::MoveDirection::Right, deltaTime);
+        sCamera.move(Camera::MoveDirection::Right, deltaTime);
     }
     if (sKeys[SDL_SCANCODE_A])
     {
-        sCamera.Move(Camera::MoveDirection::Left, deltaTime);
+        sCamera.move(Camera::MoveDirection::Left, deltaTime);
     }
     if (sKeys[SDL_SCANCODE_Z])
     {
-        sCamera.Move(Camera::MoveDirection::Down, deltaTime);
+        sCamera.move(Camera::MoveDirection::Down, deltaTime);
     }
     if (sKeys[SDL_SCANCODE_X])
     {
-        sCamera.Move(Camera::MoveDirection::Up, deltaTime);
+        sCamera.move(Camera::MoveDirection::Up, deltaTime);
     }
 
-    if (sKeys[SDL_SCANCODE_PERIOD])
+    if (sKeys[SDL_SCANCODE_LSHIFT])
     {
-        sKeys[SDL_SCANCODE_PERIOD] = 0;
+        sCamera.mSpeed = CAMERA_SPEED_FAST;
+    }
+    else
+    {
+        sCamera.mSpeed = CAMERA_SPEED_NORMAL;
     }
 
     if (sKeys[SDL_SCANCODE_ESCAPE])
@@ -237,7 +233,7 @@ static void ProcessInput(SDL_Window* window, SDL_GPUDevice* device, f32 deltaTim
     if (sKeys[SDL_SCANCODE_R])
     {
         sKeys[SDL_SCANCODE_R] = 0;
-        if (!RecompilePipelines(device, window))
+        if (!recompilePipelines(device, window))
         {
             fprintf(stderr, "renderer: pipeline recompilation failed\n");
         }
@@ -266,15 +262,45 @@ int main()
         return 1;
     }
 
-    const bool debugMode = true;
+    const SDL_PropertiesID props = SDL_CreateProperties();
 
-    SDL_GPUDevice* const device
-        = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_DXIL, debugMode, "direct3d12");
-    if (!device)
+    // if (!SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_PREFERLOWPOWER_BOOLEAN, true))
+    // {
+    //     SDL_Log("SDL_CreateGPUDeviceWithProperties failed: %s", SDL_GetError());
+    //     return 1;
+    // }
+
+    if (!SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true))
     {
-        SDL_Log("SDL_CreateGPUDevice failed: %s", SDL_GetError());
+        SDL_Log("SDL_CreateGPUDeviceWithProperties failed: %s", SDL_GetError());
         return 1;
     }
+
+    // if (!SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, true))
+    // {
+    //     SDL_Log("SDL_CreateGPUDeviceWithProperties failed: %s", SDL_GetError());
+    //     return 1;
+    // }
+
+    if (!SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_VERBOSE_BOOLEAN, true))
+    {
+        SDL_Log("SDL_CreateGPUDeviceWithProperties failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    SDL_GPUDevice* const device = SDL_CreateGPUDeviceWithProperties(props);
+    if (!device)
+    {
+        SDL_Log("SDL_CreateGPUDeviceWithProperties failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    SDL_PropertiesID selectedProps = SDL_GetGPUDeviceProperties(device);
+
+    printf(
+        "GPU: %s\n",
+        SDL_GetStringProperty(selectedProps, SDL_PROP_GPU_DEVICE_NAME_STRING, "unknown")
+    );
 
     SDL_Window* const window = SDL_CreateWindow(
         "demo",
@@ -297,7 +323,7 @@ int main()
         return 1;
     }
 
-    if (!RecompilePipelines(device, window))
+    if (!recompilePipelines(device, window))
     {
         return 1;
     }
@@ -305,10 +331,10 @@ int main()
 
     sCamera.mPosition = {0.0f, 1.0f, 0.0f};
     sCamera.mWorldUp = {0.0f, 1.0f, 0.0f};
-    sCamera.mSpeed = 1.0f;
+    sCamera.mSpeed = 10.0f;
     sCamera.mMouseSensitivity = 0.001f;
     sCamera.mPitchClamp = glm::radians(89.0f);
-    sCamera.UpdateVectors();
+    sCamera.updateVectors();
 
     u64 performanceCounter = SDL_GetPerformanceCounter();
     const f64 performancePeriod = 1.0 / f64(SDL_GetPerformanceFrequency());
@@ -322,9 +348,9 @@ int main()
         SDL_Event event{};
         while (SDL_PollEvent(&event))
         {
-            ProcessEvent(window, event);
+            processEvent(event);
         }
-        ProcessInput(window, device, f32(deltaTime));
+        processInput(window, device, f32(deltaTime));
 
         SDL_GPUCommandBuffer* const cmd = SDL_AcquireGPUCommandBuffer(device);
         if (!cmd)
@@ -358,9 +384,9 @@ int main()
                 return 1;
             }
 
-            const glm::mat4 worldToView = sCamera.GetViewMatrix();
+            const glm::mat4 worldToView = sCamera.getViewMatrix();
             const glm::mat4 viewToClip
-                = Perspective(glm::radians(70.0f), f32(width) / f32(height), 0.1f);
+                = Perspective(glm::radians(70.0f), f32(width) / f32(height), 0.005f);
             uniformData.worldToClip = viewToClip * worldToView;
             uniformData.cameraPositionWorld = sCamera.mPosition;
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Common.hpp"
-#include "Math.hpp"
+#include "common.hpp"
+#include "math.hpp"
 
 struct Camera
 {
@@ -15,10 +15,10 @@ struct Camera
         Up
     };
 
-    void Move(MoveDirection move, f32 deltaTime);
-    void UpdateVectors();
-    void ChangeDirection(f32 deltaX, f32 deltaY);
-    glm::mat4 GetViewMatrix() const;
+    void move(MoveDirection move, f32 deltaTime);
+    void updateVectors();
+    void changeDirection(f32 deltaX, f32 deltaY);
+    glm::mat4 getViewMatrix() const;
 
     glm::vec3 mPosition;
     glm::vec3 mDirection;

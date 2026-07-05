@@ -32,7 +32,7 @@ struct U32Vec3
 {
     u32 x, y, z;
 
-    U32Vec2 XY() const
+    U32Vec2 xy() const
     {
         return {x, y};
     }
@@ -47,7 +47,7 @@ struct I32Vec3
 {
     i32 x, y, z;
 
-    I32Vec2 XY() const
+    I32Vec2 xy() const
     {
         return {x, y};
     }
@@ -131,7 +131,7 @@ struct Slice
         count = size;
     }
 
-    int GetSizeBytes() const
+    int getSizeBytes() const
     {
         return count * int(sizeof(T));
     }

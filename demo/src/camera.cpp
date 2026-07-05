@@ -1,6 +1,6 @@
-#include "Camera.hpp"
+#include "camera.hpp"
 
-void Camera::Move(MoveDirection move, f32 deltaTime)
+void Camera::move(MoveDirection move, f32 deltaTime)
 {
     const f32 deltaPos = mSpeed * deltaTime;
 
@@ -27,7 +27,7 @@ void Camera::Move(MoveDirection move, f32 deltaTime)
     }
 }
 
-void Camera::ChangeDirection(f32 deltaX, f32 deltaY)
+void Camera::changeDirection(f32 deltaX, f32 deltaY)
 {
     if (mLockDirection)
     {
@@ -39,10 +39,10 @@ void Camera::ChangeDirection(f32 deltaX, f32 deltaY)
 
     mPitch = glm::clamp(mPitch, -mPitchClamp, mPitchClamp);
 
-    UpdateVectors();
+    updateVectors();
 }
 
-void Camera::UpdateVectors()
+void Camera::updateVectors()
 {
     mDirection[0] = sinf(mYaw) * cosf(mPitch);
     mDirection[1] = sinf(mPitch);
@@ -52,7 +52,7 @@ void Camera::UpdateVectors()
     mRight = glm::normalize(glm::cross(mWorldUp, mDirection));
 }
 
-glm::mat4 Camera::GetViewMatrix() const
+glm::mat4 Camera::getViewMatrix() const
 {
     return glm::lookAt(mPosition, mPosition + mDirection, mWorldUp);
 }

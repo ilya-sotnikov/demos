@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Demo)
+project(demo)
 
 # if(("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC") AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))
 #     add_compile_options(/fsanitize=address)
@@ -12,11 +12,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # TODO: disable some stuff.
-add_subdirectory(Lib/SDL)
-add_subdirectory(Lib/glm)
+add_subdirectory(lib/SDL)
+add_subdirectory(lib/glm)
 
 set(SOURCES
-    Source/Camera.cpp
+    src/camera.cpp
 )
 
 set(LIBS
@@ -26,7 +26,7 @@ set(LIBS
 
 add_executable(${PROJECT_NAME}
     ${SOURCES}
-    Source/Main.cpp
+    src/main.cpp
 )
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
@@ -73,16 +73,16 @@ if(NOT DEFINED DXC_EXECUTABLE)
     endif()
 endif()
 
-set(SHADER_SOURCE_DIRECTORY ${CMAKE_SOURCE_DIR}/Source/Shaders/)
+set(SHADER_SOURCE_DIRECTORY ${CMAKE_SOURCE_DIR}/src/shaders/)
 set(SHADER_SOURCE_FILES
-    ${SHADER_SOURCE_DIRECTORY}/Grid.vert.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/Grid.frag.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/grid.vert.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/grid.frag.hlsl
 )
 set(SHADER_INCLUDE_FILES
-    ${SHADER_SOURCE_DIRECTORY}/Common.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/SharedDef.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/Math.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/Grid.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/common.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/shared_def.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/math.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/grid.hlsli
 )
 
 execute_process(COMMAND ${DXC_EXECUTABLE} --version)
@@ -112,15 +112,17 @@ foreach(shader ${SHADER_SOURCE_FILES})
     add_custom_command(
         OUTPUT ${IR}
         COMMAND ${DXC_EXECUTABLE}
-            -O3 #-Zi
+            -spirv
+            -O3 #-Zi -fspv-debug=vulkan-with-source
             -T ${SHADER_TYPE}_6_6
             -Zpc
-            -E Main
+            -E main
+            -fspv-target-env=vulkan1.0
             -Fo ${IR} ${shader}
         DEPENDS ${shader} ${SHADER_INCLUDE_FILES}
     )
     list(APPEND IR_BINARY_FILES ${IR})
 endforeach(shader)
 
-add_custom_target(Shaders DEPENDS ${IR_BINARY_FILES})
-add_dependencies(${PROJECT_NAME} Shaders)
+add_custom_target(shaders DEPENDS ${IR_BINARY_FILES})
+add_dependencies(${PROJECT_NAME} shaders)

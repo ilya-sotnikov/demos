@@ -1,8 +1,8 @@
-#include "Grid.hlsli"
+#include "grid.hlsli"
 
 ConstantBuffer<UniformData> uniformBuffer : register(b0, space1);
 
-void Main(uint vertexId : SV_VertexID, out VertexOutput output)
+void main(uint vertexId : SV_VertexID, out VertexOutput output)
 {
     const float2 positionsXZ[] = {
         float2(-1.0, -1.0) * GRID_SIZE,
