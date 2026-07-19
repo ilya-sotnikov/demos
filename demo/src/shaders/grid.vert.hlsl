@@ -1,24 +1,24 @@
 #include "grid.hlsli"
 
-ConstantBuffer<UniformData> uniformBuffer : register(b0, space1);
+ConstantBuffer<UniformData> uniform_buffer : register(b0, space1);
 
-void main(uint vertexId : SV_VertexID, out VertexOutput output)
-{
-    const float2 positionsXZ[] = {
-        float2(-1.0, -1.0) * GRID_SIZE,
-        float2( 1.0, -1.0) * GRID_SIZE,
-        float2( 1.0,  1.0) * GRID_SIZE,
-        float2(-1.0,  1.0) * GRID_SIZE,
+void main(uint vertex_id : SV_VertexID, out VertexOutput output) {
+    const float2 positions_xz[] = {
+        float2(-1.0, -1.0),
+        float2( 1.0, -1.0),
+        float2( 1.0,  1.0),
+        float2(-1.0,  1.0),
     };
     const int indices[] = {0, 2, 1, 2, 0, 3};
 
-    const int idx = indices[vertexId];
-    const float2 pos = positionsXZ[idx];
-    const float3 cameraPosWorld = uniformBuffer.cameraPositionWorld;
-    const float2 gridPosWorld = float2(pos.x + cameraPosWorld.x, pos.y + cameraPosWorld.z);
+    const int idx = indices[vertex_id];
+    const float3 cam_pos_world = uniform_buffer.camera_position_world;
+    const float half_size = calc_grid_half_size(cam_pos_world.y);
+    const float2 pos = positions_xz[idx] * half_size;
+    const float2 grid_pos_world = float2(pos.x + cam_pos_world.x, pos.y + cam_pos_world.z);
 
-    output.positionWorldXZ = gridPosWorld;
-    output.positionClip = mul(
-        uniformBuffer.worldToClip,
-        float4(gridPosWorld.x, 0.0, gridPosWorld.y, 1.0));
+    output.pos_world_xz = grid_pos_world;
+    output.pos_clip = mul(
+        uniform_buffer.world_to_clip,
+        float4(grid_pos_world.x, 0.0, grid_pos_world.y, 1.0));
 }

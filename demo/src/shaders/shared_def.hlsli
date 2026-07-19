@@ -16,8 +16,7 @@
 #define MAT_4X4 float4x4
 #endif
 
-struct UniformData
-{
-    MAT_4X4 worldToClip;
-    FLOAT_3 cameraPositionWorld;
+struct UniformData {
+    MAT_4X4 world_to_clip;
+    FLOAT_3 camera_position_world;
 };

@@ -15,7 +15,7 @@ static bool sShouldWindowClose;
 static SDL_GPUGraphicsPipeline* sPipeline;
 
 static const f32 CAMERA_SPEED_NORMAL = 5.0f;
-static const f32 CAMERA_SPEED_FAST = 20.0f;
+static const f32 CAMERA_SPEED_FAST = 1000.0f;
 
 struct ShaderDesc
 {
@@ -386,14 +386,14 @@ int main()
 
             const glm::mat4 worldToView = sCamera.getViewMatrix();
             const glm::mat4 viewToClip
-                = Perspective(glm::radians(70.0f), f32(width) / f32(height), 0.005f);
-            uniformData.worldToClip = viewToClip * worldToView;
-            uniformData.cameraPositionWorld = sCamera.mPosition;
+                = Perspective(glm::radians(70.0f), f32(width) / f32(height), 0.1f);
+            uniformData.world_to_clip = viewToClip * worldToView;
+            uniformData.camera_position_world = sCamera.mPosition;
 
             SDL_PushGPUVertexUniformData(cmd, 0, &uniformData, sizeof(uniformData));
             SDL_PushGPUFragmentUniformData(cmd, 0, &uniformData, sizeof(uniformData));
 
-            const f32 clearColor = f32(0x3f) / 255.0f;
+            const f32 clearColor = 1.0f;
 
             const SDL_GPUColorTargetInfo colorTargetInfo = {
                 .texture = swapchainTexture,
