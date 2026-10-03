@@ -24,8 +24,19 @@
 #include <vector>
 #include <string.h>
 
-#define SDL_PRINT_ERROR(functionName) \
-    fprintf(stderr, "%s:%d: " functionName " failed: %s\n", __FILE__, __LINE__, SDL_GetError())
+#define SDL_ERROR(functionName) \
+    do \
+    { \
+        fprintf( \
+            stderr, \
+            "%s:%d: " functionName " failed: %s\n", \
+            __FILE__, \
+            __LINE__, \
+            SDL_GetError() \
+        ); \
+        exit(1); \
+    } \
+    while (0)
 
 #define VK_CHECK_HANDLE(x) \
     do \
@@ -429,7 +440,7 @@ static VkPipelineBindPoint GetPipelineBindPoint(const Pipeline& pipeline)
         : VK_PIPELINE_BIND_POINT_GRAPHICS;
 };
 
-static bool DebugNameObject(
+static void DebugNameObject(
     VkDevice device,
     VkObjectType objectType,
     u64 objectHandle,
@@ -448,16 +459,14 @@ static bool DebugNameObject(
     };
 
     (void)device;
-    (void)nameInfo;
+    (void)nameInfo; // TODO: UNUSED macro.
 
 #ifdef RHI_ENABLE_DEBUG_UTILS
     VK_CHECK(vkSetDebugUtilsObjectNameEXT(device, &nameInfo));
 #endif
-
-    return true;
 }
 
-bool RHI::Create(SDL_Window* window)
+void RHI::Create(SDL_Window* window)
 {
     DEBUG_ASSERT(window);
 
@@ -472,7 +481,7 @@ bool RHI::Create(SDL_Window* window)
         if (vulkanApiVersion < VK_API_VERSION_1_4)
         {
             fprintf(stderr, "vulkan: API version 1.4 is required\n");
-            return false;
+            ASSERT(0); // TODO: ASSERT_MSG.
         }
 
         const VkApplicationInfo appInfo = {
@@ -490,8 +499,7 @@ bool RHI::Create(SDL_Window* window)
         const char* const* const sdlExts = SDL_Vulkan_GetInstanceExtensions(&sdlExtCount);
         if (!sdlExts)
         {
-            SDL_PRINT_ERROR("SDL_Vulkan_GetInstanceExtensions");
-            return false;
+            SDL_ERROR("SDL_Vulkan_GetInstanceExtensions");
         }
 
         std::vector<const char*> requiredExtensions{sdlExts, sdlExts + sdlExtCount};
@@ -511,7 +519,6 @@ bool RHI::Create(SDL_Window* window)
             if (!result)
             {
                 fprintf(stderr, "required vulkan extension %s is unavailable\n", ext);
-                return false;
             }
         }
 
@@ -530,8 +537,7 @@ bool RHI::Create(SDL_Window* window)
     // Surface.
     if (!SDL_Vulkan_CreateSurface(window, sCtx.instance, nullptr, &sCtx.surface))
     {
-        SDL_PRINT_ERROR("SDL_Vulkan_CreateSurface ");
-        return false;
+        SDL_ERROR("SDL_Vulkan_CreateSurface ");
     }
 
     const char* const requiredDeviceExtensions[] = {
@@ -736,7 +742,6 @@ bool RHI::Create(SDL_Window* window)
         if (physicalDeviceIndex < 0)
         {
             fprintf(stderr, "No suitable physical device found\n");
-            return false;
         }
 
         sCtx.physicalDevice = physicalDevices[size_t(physicalDeviceIndex)];
@@ -940,7 +945,7 @@ bool RHI::Create(SDL_Window* window)
                 nullptr,
                 &sCtx.frames[i].imageAcquireSemaphore
             ));
-            (void)DebugNameObject(
+            DebugNameObject(
                 sCtx.device,
                 VK_OBJECT_TYPE_SEMAPHORE,
                 reinterpret_cast<u64>(sCtx.frames[i].imageAcquireSemaphore),
@@ -1019,13 +1024,11 @@ bool RHI::Create(SDL_Window* window)
             &sCtx.bindlessTexturesDescriptorSet
         ));
     }
-
-    return true;
 }
 
 void RHI::Destroy()
 {
-    (void)RHI::DeviceWaitIdle();
+    RHI::DeviceWaitIdle();
 
     for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
     {
@@ -1047,22 +1050,7 @@ RHI::BufferHandle RHI::CreateBuffer(const BufferDesc&& desc)
 {
     DEBUG_ASSERT(desc.size > 0);
 
-    bool failed = true;
-
     Buffer buffer{};
-    // TODO: relying on the behavior similar to free(nullptr), did not check if it works.
-    // clang-format off
-    DEFER(
-        if (failed)
-        {
-            if (buffer.mapped)
-            {
-                vmaUnmapMemory(sCtx.vmaAllocator, buffer.allocation);
-            }
-            vmaDestroyBuffer(sCtx.vmaAllocator, buffer.buffer, buffer.allocation);
-        }
-    );
-    // clang-format on
 
     const VkBufferUsageFlags usage = desc.type == RHI::MEMORY_TYPE_DEFAULT_UNIFORM
         ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
@@ -1088,7 +1076,7 @@ RHI::BufferHandle RHI::CreateBuffer(const BufferDesc&& desc)
 
     if (desc.minAlignment > 0)
     {
-        VK_CHECK_HANDLE(vmaCreateBufferWithAlignment(
+        VK_CHECK(vmaCreateBufferWithAlignment(
             sCtx.vmaAllocator,
             &bufferInfo,
             &allocationInfo,
@@ -1100,7 +1088,7 @@ RHI::BufferHandle RHI::CreateBuffer(const BufferDesc&& desc)
     }
     else
     {
-        VK_CHECK_HANDLE(vmaCreateBuffer(
+        VK_CHECK(vmaCreateBuffer(
             sCtx.vmaAllocator,
             &bufferInfo,
             &allocationInfo,
@@ -1112,7 +1100,7 @@ RHI::BufferHandle RHI::CreateBuffer(const BufferDesc&& desc)
 
     if (allocationInfo.requiredFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {
-        VK_CHECK_HANDLE(vmaMapMemory(sCtx.vmaAllocator, buffer.allocation, &buffer.mapped));
+        VK_CHECK(vmaMapMemory(sCtx.vmaAllocator, buffer.allocation, &buffer.mapped));
     }
 
     const VkBufferDeviceAddressInfo addressInfo = {
@@ -1123,18 +1111,13 @@ RHI::BufferHandle RHI::CreateBuffer(const BufferDesc&& desc)
 
     if (desc.debugName)
     {
-        if (!DebugNameObject(
-                sCtx.device,
-                VK_OBJECT_TYPE_BUFFER,
-                reinterpret_cast<u64>(buffer.buffer),
-                desc.debugName
-            ))
-        {
-            return BufferHandle::Invalid();
-        }
+        DebugNameObject(
+            sCtx.device,
+            VK_OBJECT_TYPE_BUFFER,
+            reinterpret_cast<u64>(buffer.buffer),
+            desc.debugName
+        );
     }
-
-    failed = false;
 
     return sCtx.buffers.CreateHandle(buffer);
 }
@@ -1155,7 +1138,7 @@ u64 RHI::GetBufferDevicePtr(BufferHandle handle)
 
 void RHI::UnmapBuffer(BufferHandle handle)
 {
-    DEBUG_ASSERT(handle);
+    DEBUG_ASSERT(handle); // TODO: Remove these kind of asserts.
 
     Buffer* const buffer = sCtx.buffers.GetPtr(handle);
 
@@ -1196,17 +1179,7 @@ RHI::TextureHandle RHI::CreateTexture(const TextureDesc&& desc)
     DEBUG_ASSERT(desc.layerCount > 0);
     DEBUG_ASSERT(desc.format != RHI::FORMAT_UNDEFINED);
 
-    bool failed = true;
     Texture texture{};
-    // clang-format off
-    DEFER(
-        if (failed)
-        {
-            vkDestroyImageView(sCtx.device, texture.view, nullptr);
-            vmaDestroyImage(sCtx.vmaAllocator, texture.image, texture.allocation);
-        }
-    );
-    // clang-format on
 
     const VkImageType type = TextureTypeToVk(desc.type);
     const VkImageViewType viewType = TextureTypeToViewVk(desc.type);
@@ -1242,7 +1215,7 @@ RHI::TextureHandle RHI::CreateTexture(const TextureDesc&& desc)
         .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     };
 
-    VK_CHECK_HANDLE(vmaCreateImage(
+    VK_CHECK(vmaCreateImage(
         sCtx.vmaAllocator,
         &imageInfo,
         &allocationInfo,
@@ -1262,36 +1235,27 @@ RHI::TextureHandle RHI::CreateTexture(const TextureDesc&& desc)
             .layerCount = desc.layerCount,
         },
     };
-    VK_CHECK_HANDLE(vkCreateImageView(sCtx.device, &viewInfo, nullptr, &texture.view));
+    VK_CHECK(vkCreateImageView(sCtx.device, &viewInfo, nullptr, &texture.view));
 
     if (desc.debugName)
     {
-        if (!DebugNameObject(
-                sCtx.device,
-                VK_OBJECT_TYPE_IMAGE,
-                reinterpret_cast<u64>(texture.image),
-                desc.debugName
-            ))
-        {
-            return TextureHandle::Invalid();
-        }
-
-        if (!DebugNameObject(
-                sCtx.device,
-                VK_OBJECT_TYPE_IMAGE_VIEW,
-                reinterpret_cast<u64>(texture.view),
-                desc.debugName
-            ))
-        {
-            return TextureHandle::Invalid();
-        }
+        DebugNameObject(
+            sCtx.device,
+            VK_OBJECT_TYPE_IMAGE,
+            reinterpret_cast<u64>(texture.image),
+            desc.debugName
+        );
+        DebugNameObject(
+            sCtx.device,
+            VK_OBJECT_TYPE_IMAGE_VIEW,
+            reinterpret_cast<u64>(texture.view),
+            desc.debugName
+        );
     }
 
     texture.type = desc.type;
     texture.format = desc.format;
     texture.dimensions = desc.dimensions;
-
-    failed = false;
 
     return sCtx.textures.CreateHandle(texture);
 }
@@ -1320,16 +1284,7 @@ RHI::TextureDescriptorHandle RHI::CreateTextureDescriptor(const TextureDescripto
 
     const Texture* const texture = sCtx.textures.GetPtr(desc.textureHandle);
 
-    bool failed = true;
     TextureView view{};
-    // clang-format off
-    DEFER(
-        if (failed)
-        {
-            vkDestroyImageView(sCtx.device, view.view, nullptr);
-        }
-    );
-    // clang-format on
 
     const VkFormat format = FormatToVk(texture->format);
 
@@ -1346,9 +1301,7 @@ RHI::TextureDescriptorHandle RHI::CreateTextureDescriptor(const TextureDescripto
             .layerCount = desc.layerCount,
         },
     };
-    VK_CHECK_HANDLE(vkCreateImageView(sCtx.device, &viewInfo, nullptr, &view.view));
-
-    failed = false;
+    VK_CHECK(vkCreateImageView(sCtx.device, &viewInfo, nullptr, &view.view));
 
     return sCtx.texturesDescriptors.CreateHandle(view);
 }
@@ -1427,7 +1380,7 @@ RHI::SamplerHandle RHI::CreateSampler(const RHI::SamplerDesc&& desc)
 
     VkSampler sampler{};
 
-    VK_CHECK_HANDLE(vkCreateSampler(sCtx.device, &createInfo, nullptr, &sampler));
+    VK_CHECK(vkCreateSampler(sCtx.device, &createInfo, nullptr, &sampler));
 
     return sCtx.samplers.CreateHandle(sampler);
 }
@@ -1458,7 +1411,7 @@ RHI::SemaphoreHandle RHI::CreateSemaphore(u64 initialValue)
 
     VkSemaphore semaphore{};
 
-    VK_CHECK_HANDLE(vkCreateSemaphore(sCtx.device, &timelineSemaphoreInfo, nullptr, &semaphore));
+    VK_CHECK(vkCreateSemaphore(sCtx.device, &timelineSemaphoreInfo, nullptr, &semaphore));
 
     return sCtx.semaphores.CreateHandle(semaphore);
 }
@@ -1475,16 +1428,16 @@ void RHI::DestroySemaphore(RHI::SemaphoreHandle handle)
     sCtx.semaphores.DestroyHandle(handle);
 }
 
-bool RHI::GetSemaphoreValue(RHI::SemaphoreHandle handle, u64& value)
+u64 RHI::GetSemaphoreValue(RHI::SemaphoreHandle handle)
 {
     DEBUG_ASSERT(handle);
 
+    u64 value = 0;
     VK_CHECK(vkGetSemaphoreCounterValue(sCtx.device, *sCtx.semaphores.GetPtr(handle), &value));
-
-    return true;
+    return value;
 }
 
-bool RHI::WaitSemaphore(RHI::SemaphoreHandle handle, u64 value, u64 timeout)
+void RHI::WaitSemaphore(RHI::SemaphoreHandle handle, u64 value, u64 timeout)
 {
     DEBUG_ASSERT(handle);
 
@@ -1496,8 +1449,6 @@ bool RHI::WaitSemaphore(RHI::SemaphoreHandle handle, u64 value, u64 timeout)
     };
 
     VK_CHECK(vkWaitSemaphores(sCtx.device, &waitInfo, timeout));
-
-    return true;
 }
 
 RHI::CommandBufferHandle RHI::CreateCommandBuffer(
@@ -1521,24 +1472,19 @@ RHI::CommandBufferHandle RHI::CreateCommandBuffer(
     };
 
     CommandBuffer cb{};
-    VK_CHECK_HANDLE(
-        vkAllocateCommandBuffers(sCtx.device, &cmdBufferAllocateInfo, &cb.commandBuffer)
-    );
+    VK_CHECK(vkAllocateCommandBuffers(sCtx.device, &cmdBufferAllocateInfo, &cb.commandBuffer));
 
     cb.queue = queue;
     cb.frameIdx = frameInFlightIdx;
 
     if (debugName)
     {
-        if (!DebugNameObject(
-                sCtx.device,
-                VK_OBJECT_TYPE_COMMAND_BUFFER,
-                reinterpret_cast<u64>(cb.commandBuffer),
-                debugName
-            ))
-        {
-            return RHI::CommandBufferHandle::Invalid();
-        }
+        DebugNameObject(
+            sCtx.device,
+            VK_OBJECT_TYPE_COMMAND_BUFFER,
+            reinterpret_cast<u64>(cb.commandBuffer),
+            debugName
+        );
     }
 
     return sCtx.commandBuffers.CreateHandle(cb);
@@ -1560,7 +1506,7 @@ void RHI::DestroyCommandBuffer(RHI::CommandBufferHandle handle)
     }
 }
 
-bool RHI::BeginCommandBuffer(RHI::CommandBufferHandle handle)
+void RHI::BeginCommandBuffer(RHI::CommandBufferHandle handle)
 {
     DEBUG_ASSERT(handle);
 
@@ -1569,20 +1515,16 @@ bool RHI::BeginCommandBuffer(RHI::CommandBufferHandle handle)
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
     VK_CHECK(vkBeginCommandBuffer(sCtx.commandBuffers.GetPtr(handle)->commandBuffer, &beginInfo));
-
-    return true;
 }
 
-bool RHI::EndCommandBuffer(RHI::CommandBufferHandle handle)
+void RHI::EndCommandBuffer(RHI::CommandBufferHandle handle)
 {
     DEBUG_ASSERT(handle);
 
     VK_CHECK(vkEndCommandBuffer(sCtx.commandBuffers.GetPtr(handle)->commandBuffer));
-
-    return true;
 }
 
-bool RHI::QueueSubmit(RHI::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
+void RHI::QueueSubmit(RHI::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
 {
     DEBUG_ASSERT(desc.count > 0);
 
@@ -1665,8 +1607,6 @@ bool RHI::QueueSubmit(RHI::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
         = queue == QUEUE_GRAPHICS ? sCtx.graphicsQueueInfo.queue : sCtx.computeQueueInfo.queue;
 
     VK_CHECK(vkQueueSubmit2(vkQueue, u32(desc.count), submitInfos, VK_NULL_HANDLE));
-
-    return true;
 }
 
 RHI::PipelineHandle RHI::CreateComputePipeline(const RHI::ComputePipelineDesc&& desc)
@@ -1822,15 +1762,12 @@ RHI::PipelineHandle RHI::CreateComputePipeline(const RHI::ComputePipelineDesc&& 
 
     if (desc.debugName)
     {
-        if (!DebugNameObject(
-                sCtx.device,
-                VK_OBJECT_TYPE_PIPELINE,
-                reinterpret_cast<u64>(pipeline.pipeline),
-                desc.debugName
-            ))
-        {
-            return RHI::PipelineHandle::Invalid();
-        }
+        DebugNameObject(
+            sCtx.device,
+            VK_OBJECT_TYPE_PIPELINE,
+            reinterpret_cast<u64>(pipeline.pipeline),
+            desc.debugName
+        );
     }
 
     failed = false;
@@ -1927,7 +1864,7 @@ RHI::PipelineHandle RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&
         .pBindings = uniqueDescriptorSetLayoutBindings.data(),
     };
 
-    VK_CHECK_HANDLE(vkCreateDescriptorSetLayout(
+    VK_CHECK(vkCreateDescriptorSetLayout(
         sCtx.device,
         &descriptorSetLayoutInfo,
         nullptr,
@@ -2119,15 +2056,12 @@ RHI::PipelineHandle RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&
 
     if (desc.debugName)
     {
-        if (!DebugNameObject(
-                sCtx.device,
-                VK_OBJECT_TYPE_PIPELINE,
-                reinterpret_cast<u64>(pipeline.pipeline),
-                desc.debugName
-            ))
-        {
-            return RHI::PipelineHandle::Invalid();
-        }
+        DebugNameObject(
+            sCtx.device,
+            VK_OBJECT_TYPE_PIPELINE,
+            reinterpret_cast<u64>(pipeline.pipeline),
+            desc.debugName
+        );
     }
 
     failed = false;
@@ -2675,9 +2609,9 @@ void RHI::CmdBindTextureDescriptorSet(CommandBufferHandle cb, RHI::PipelineHandl
     );
 }
 
-bool RHI::CreateSwapchain(U32Vec2 size)
+void RHI::CreateSwapchain(U32Vec2 size)
 {
-    (void)RHI::DeviceWaitIdle();
+    RHI::DeviceWaitIdle();
 
     RHI::DestroySwapchain();
 
@@ -2739,7 +2673,7 @@ bool RHI::CreateSwapchain(U32Vec2 size)
     if (!swapchainSurfaceFormatFound)
     {
         fprintf(stderr, "vulkan: failed to find a suitable swapchain surface format\n");
-        return false;
+        ASSERT(0);
     }
 
     sCtx.swapchain.minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
@@ -2849,20 +2783,18 @@ bool RHI::CreateSwapchain(U32Vec2 size)
             nullptr,
             &sCtx.swapchain.readyToPresentSemaphores[i]
         ));
-        (void)DebugNameObject(
+        DebugNameObject(
             sCtx.device,
             VK_OBJECT_TYPE_SEMAPHORE,
             reinterpret_cast<u64>(sCtx.swapchain.readyToPresentSemaphores[i]),
             "ReadyToPresentSemaphore"
         );
     }
-
-    return true;
 }
 
 void RHI::DestroySwapchain()
 {
-    (void)RHI::DeviceWaitIdle();
+    RHI::DeviceWaitIdle();
 
     for (size_t i = 0; i < sCtx.swapchain.textures.size(); ++i)
     {
@@ -2936,21 +2868,19 @@ RHI::SwapchainResult RHI::QueuePresent(Queue queue)
     }
 }
 
-bool RHI::DeviceWaitIdle()
+void RHI::DeviceWaitIdle()
 {
     VK_CHECK(vkDeviceWaitIdle(sCtx.device));
-    return true;
 }
 
-bool RHI::QueueWaitIdle(RHI::Queue queue)
+void RHI::QueueWaitIdle(RHI::Queue queue)
 {
     VK_CHECK(vkQueueWaitIdle(
         queue == RHI::QUEUE_GRAPHICS ? sCtx.graphicsQueueInfo.queue : sCtx.computeQueueInfo.queue
     ));
-    return true;
 }
 
-bool RHI::BeginNewFrame(int frameInFlightIdx)
+void RHI::BeginNewFrame(int frameInFlightIdx)
 {
     DEBUG_ASSERT(frameInFlightIdx >= 0);
     DEBUG_ASSERT(frameInFlightIdx < RHI::FRAMES_IN_FLIGHT);
@@ -2959,6 +2889,4 @@ bool RHI::BeginNewFrame(int frameInFlightIdx)
 
     VK_CHECK(vkResetCommandPool(sCtx.device, sCtx.frames[frameInFlightIdx].commandPoolCompute, 0));
     VK_CHECK(vkResetCommandPool(sCtx.device, sCtx.frames[frameInFlightIdx].commandPoolGraphics, 0));
-
-    return true;
 }

@@ -92,10 +92,7 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
         }
         DEFER(RHI::DestroyCommandBuffer(cb));
 
-        if (!RHI::BeginCommandBuffer(cb))
-        {
-            return false;
-        }
+        RHI::BeginCommandBuffer(cb);
 
         RHI::CmdTextureBarrier(
             cb,
@@ -127,17 +124,11 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
             RHI::ACCESS_SHADER_READ_BIT
         );
 
-        if (!RHI::EndCommandBuffer(cb))
-        {
-            return false;
-        }
+        RHI::EndCommandBuffer(cb);
 
-        if (!RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}}))
-        {
-            return false;
-        }
+        RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}});
 
-        (void)RHI::QueueWaitIdle(RHI::QUEUE_GRAPHICS);
+        RHI::QueueWaitIdle(RHI::QUEUE_GRAPHICS);
     }
 
     mFontSampler = RHI::CreateSampler({});
@@ -180,7 +171,7 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
 
 void ImguiRenderer::Cleanup()
 {
-    (void)RHI::DeviceWaitIdle();
+    RHI::DeviceWaitIdle();
 
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();

@@ -200,10 +200,7 @@ bool Renderer::Init()
         (void)SDL_SetWindowRelativeMouseMode(mWindow, true);
     }
 
-    if (!RHI::Create(mWindow))
-    {
-        return false;
-    }
+    RHI::Create(mWindow);
 
     int width = 0;
     int height = 0;
@@ -405,10 +402,7 @@ bool Renderer::Init()
             }
             DEFER(RHI::DestroyCommandBuffer(cb));
 
-            if (!RHI::BeginCommandBuffer(cb))
-            {
-                return false;
-            }
+            RHI::BeginCommandBuffer(cb);
 
             RHI::CmdTextureBarrier(
                 cb,
@@ -444,17 +438,11 @@ bool Renderer::Init()
                 RHI::ACCESS_SHADER_READ_BIT
             );
 
-            if (!RHI::EndCommandBuffer(cb))
-            {
-                return false;
-            }
+            RHI::EndCommandBuffer(cb);
 
-            if (!RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}}))
-            {
-                return false;
-            }
+            RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}});
 
-            (void)RHI::DeviceWaitIdle();
+            RHI::DeviceWaitIdle();
 
             mShadowPcfJitterSampler = RHI::CreateSampler({
                 .magFilter = RHI::FILTER_NEAREST,
@@ -703,23 +691,14 @@ bool Renderer::Init()
         }
         DEFER(RHI::DestroyCommandBuffer(cb));
 
-        if (!RHI::BeginCommandBuffer(cb))
-        {
-            return false;
-        }
+        RHI::BeginCommandBuffer(cb);
 
         RHI::CmdFillBuffer(cb, mMeshPrimitiveVisibleBuffer, 0, sizeof(u32) * MAX_DRAW_CALLS, 0);
 
-        if (!RHI::EndCommandBuffer(cb))
-        {
-            return false;
-        }
+        RHI::EndCommandBuffer(cb);
 
-        if (!RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}}))
-        {
-            return false;
-        }
-        (void)RHI::QueueWaitIdle(RHI::QUEUE_GRAPHICS);
+        RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}});
+        RHI::QueueWaitIdle(RHI::QUEUE_GRAPHICS);
     }
 
     mSwapchainNeedsRecreating = true;
@@ -755,7 +734,7 @@ bool Renderer::Init()
 
 void Renderer::Cleanup()
 {
-    (void)RHI::DeviceWaitIdle();
+    RHI::DeviceWaitIdle();
 
     mImguiRenderer.Cleanup();
 
@@ -826,10 +805,7 @@ bool Renderer::StartNewFrame()
         RHI::WaitSemaphore(mFrameSemaphore, mUniformData.frameCount - RHI::FRAMES_IN_FLIGHT + 1);
     }
 
-    if (!RHI::BeginNewFrame(mFrameIdx))
-    {
-        return false;
-    }
+    RHI::BeginNewFrame(mFrameIdx);
 
     mImguiRenderer.StartNewFrame();
 
@@ -876,7 +852,7 @@ bool Renderer::Render(f32 deltaTime)
     // I can't be arsed to handle the edge cases and it's only used for debugging.
     if (mRenderModeChanged)
     {
-        (void)RHI::DeviceWaitIdle();
+        RHI::DeviceWaitIdle();
 
         RHI::CommandBufferHandle cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
         if (!cb)
@@ -885,10 +861,7 @@ bool Renderer::Render(f32 deltaTime)
         }
         DEFER(RHI::DestroyCommandBuffer(cb));
 
-        if (!RHI::BeginCommandBuffer(cb))
-        {
-            return false;
-        }
+        RHI::BeginCommandBuffer(cb);
 
         RHI::CmdBarrier(
             cb,
@@ -898,17 +871,11 @@ bool Renderer::Render(f32 deltaTime)
             RHI::ACCESS_MEMORY_READ_BIT | RHI::ACCESS_MEMORY_WRITE_BIT
         );
 
-        if (!RHI::EndCommandBuffer(cb))
-        {
-            return false;
-        }
+        RHI::EndCommandBuffer(cb);
 
-        if (!RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}}))
-        {
-            return false;
-        }
+        RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}});
 
-        (void)RHI::DeviceWaitIdle();
+        RHI::DeviceWaitIdle();
     }
 
     RHI::TextureHandle swapchainTextureHandle{};
@@ -1067,7 +1034,7 @@ void Renderer::CleanupPipelines()
 
 bool Renderer::RecompilePipelines()
 {
-    (void)RHI::DeviceWaitIdle();
+    RHI::DeviceWaitIdle();
 
     CleanupPipelines();
 
@@ -1473,10 +1440,7 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
         }
         DEFER(RHI::DestroyCommandBuffer(cb));
 
-        if (!RHI::BeginCommandBuffer(cb))
-        {
-            return false;
-        }
+        RHI::BeginCommandBuffer(cb);
 
         RHI::CmdTextureBarrier(
             cb,
@@ -1497,16 +1461,10 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
             {copyRegions.data(), int(copyRegions.size())}
         );
 
-        if (!RHI::EndCommandBuffer(cb))
-        {
-            return false;
-        }
+        RHI::EndCommandBuffer(cb);
 
-        if (!RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}}))
-        {
-            return false;
-        }
-        (void)RHI::QueueWaitIdle(RHI::QUEUE_GRAPHICS);
+        RHI::QueueSubmit(RHI::QUEUE_GRAPHICS, {{.cb = cb}});
+        RHI::QueueWaitIdle(RHI::QUEUE_GRAPHICS);
     }
 
     for (size_t i = 0; i < mTextures.size(); ++i)
@@ -2207,10 +2165,7 @@ bool Renderer::RecordAndSubmitDebugGradError(RHI::TextureHandle swapchainTexture
 
     const RHI::CommandBufferHandle cb = mFrame[mFrameIdx].startCommandBuffer;
 
-    if (!RHI::BeginCommandBuffer(cb))
-    {
-        return false;
-    }
+    RHI::BeginCommandBuffer(cb);
 
     RHI::CmdTextureInvalidateBarrier(
         cb,
@@ -2347,25 +2302,19 @@ bool Renderer::RecordAndSubmitDebugGradError(RHI::TextureHandle swapchainTexture
         }}
     );
 
-    if (!RHI::EndCommandBuffer(cb))
-    {
-        return false;
-    }
+    RHI::EndCommandBuffer(cb);
 
-    if (!RHI::QueueSubmit(
-            RHI::QUEUE_GRAPHICS,
-            {{
-                .cb = cb,
-                .waitForTextureAcquire = true,
-                .signalReadyToPresent = true,
-                .signalSemaphores = {
-                    {mFrameSemaphore, mUniformData.frameCount + 1},
-                },
-            }}
-        ))
-    {
-        return false;
-    }
+    RHI::QueueSubmit(
+        RHI::QUEUE_GRAPHICS,
+        {{
+            .cb = cb,
+            .waitForTextureAcquire = true,
+            .signalReadyToPresent = true,
+            .signalSemaphores = {
+                {mFrameSemaphore, mUniformData.frameCount + 1},
+            },
+        }}
+    );
 
     return true;
 }
@@ -2375,10 +2324,7 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
     Frame& frame = mFrame[mFrameIdx];
 
     const RHI::CommandBufferHandle cbStart = frame.startCommandBuffer;
-    if (!RHI::BeginCommandBuffer(cbStart))
-    {
-        return false;
-    }
+    RHI::BeginCommandBuffer(cbStart);
 
     RHI::CmdTextureInvalidateBarrier(
         cbStart,
@@ -2478,31 +2424,22 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
 
     VisibilityBufferPass(cbStart, true);
 
-    if (!RHI::EndCommandBuffer(cbStart))
-    {
-        return false;
-    }
+    RHI::EndCommandBuffer(cbStart);
 
     // TODO: I don't see why can't I use 2 submits per frame (1 for each queue).
-    if (!RHI::QueueSubmit(
-            RHI::QUEUE_GRAPHICS,
-            {{
-                .cb = cbStart,
-                .waitForTextureAcquire = true,
-                .signalSemaphores = {
-                    {frame.startSemaphore.semaphore, frame.startSemaphore.Inc()},
-                },
-            }}
-        ))
-    {
-        return false;
-    }
+    RHI::QueueSubmit(
+        RHI::QUEUE_GRAPHICS,
+        {{
+            .cb = cbStart,
+            .waitForTextureAcquire = true,
+            .signalSemaphores = {
+                {frame.startSemaphore.semaphore, frame.startSemaphore.Inc()},
+            },
+        }}
+    );
 
     const RHI::CommandBufferHandle cbSSAO = frame.ssaoCommandBuffer;
-    if (!RHI::BeginCommandBuffer(cbSSAO))
-    {
-        return false;
-    }
+    RHI::BeginCommandBuffer(cbSSAO);
 
     DepthViewQuarterResPass(cbSSAO);
 
@@ -2546,32 +2483,23 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
 
     AmbientOcclusionUpsamplePass(cbSSAO);
 
-    if (!RHI::EndCommandBuffer(cbSSAO))
-    {
-        return false;
-    }
+    RHI::EndCommandBuffer(cbSSAO);
 
-    if (!RHI::QueueSubmit(
-            RHI::QUEUE_COMPUTE,
-            {{
-                .cb = cbSSAO,
-                .waitSemaphores = {
-                    {frame.startSemaphore.semaphore, frame.startSemaphore.value},
-                },
-                .signalSemaphores = {
-                    {frame.ssaoSemaphore.semaphore, frame.ssaoSemaphore.Inc()},
-                },
-            }}
-        ))
-    {
-        return false;
-    }
+    RHI::QueueSubmit(
+        RHI::QUEUE_COMPUTE,
+        {{
+            .cb = cbSSAO,
+            .waitSemaphores = {
+                {frame.startSemaphore.semaphore, frame.startSemaphore.value},
+            },
+            .signalSemaphores = {
+                {frame.ssaoSemaphore.semaphore, frame.ssaoSemaphore.Inc()},
+            },
+        }}
+    );
 
     const RHI::CommandBufferHandle cbShadow = frame.shadowCommandBuffer;
-    if (!RHI::BeginCommandBuffer(cbShadow))
-    {
-        return false;
-    }
+    RHI::BeginCommandBuffer(cbShadow);
 
     RHI::CmdFillBuffer(cbShadow, mDrawCountBuffer, 0, sizeof(u32), 0);
 
@@ -2595,32 +2523,23 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
 
     ShadowPass(cbShadow);
 
-    if (!RHI::EndCommandBuffer(cbShadow))
-    {
-        return false;
-    }
+    RHI::EndCommandBuffer(cbShadow);
 
-    if (!RHI::QueueSubmit(
-            RHI::QUEUE_GRAPHICS,
-            {{
-                .cb = cbShadow,
-                .waitSemaphores = {
-                    {frame.startSemaphore.semaphore, frame.startSemaphore.value},
-                },
-                .signalSemaphores = {
-                    {frame.shadowSemaphore.semaphore, frame.shadowSemaphore.Inc()},
-                },
-            }}
-        ))
-    {
-        return false;
-    }
+    RHI::QueueSubmit(
+        RHI::QUEUE_GRAPHICS,
+        {{
+            .cb = cbShadow,
+            .waitSemaphores = {
+                {frame.startSemaphore.semaphore, frame.startSemaphore.value},
+            },
+            .signalSemaphores = {
+                {frame.shadowSemaphore.semaphore, frame.shadowSemaphore.Inc()},
+            },
+        }}
+    );
 
     const RHI::CommandBufferHandle cbEnd = frame.endCommandBuffer;
-    if (!RHI::BeginCommandBuffer(cbEnd))
-    {
-        return false;
-    }
+    RHI::BeginCommandBuffer(cbEnd);
 
     FogPass(cbEnd);
 
@@ -2724,44 +2643,35 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
         }}
     );
 
-    if (!RHI::EndCommandBuffer(cbEnd))
-    {
-        return false;
-    }
+    RHI::EndCommandBuffer(cbEnd);
 
-    if (!RHI::QueueSubmit(
-            RHI::QUEUE_GRAPHICS,
-            {{
-                .cb = cbEnd,
-                .waitSemaphores = {
-                    {frame.ssaoSemaphore.semaphore, frame.ssaoSemaphore.value},
-                    {frame.shadowSemaphore.semaphore, frame.shadowSemaphore.value},
-                },
-                .signalReadyToPresent = true,
-                .signalSemaphores = {
-                    {mFrameSemaphore, mUniformData.frameCount + 1},
-                },
-            }}
-    ))
-    {
-        return false;
-    }
+    RHI::QueueSubmit(
+        RHI::QUEUE_GRAPHICS,
+        {{
+            .cb = cbEnd,
+            .waitSemaphores = {
+                {frame.ssaoSemaphore.semaphore, frame.ssaoSemaphore.value},
+                {frame.shadowSemaphore.semaphore, frame.shadowSemaphore.value},
+            },
+            .signalReadyToPresent = true,
+            .signalSemaphores = {
+                {mFrameSemaphore, mUniformData.frameCount + 1},
+            },
+        }}
+    );
 
     return true;
 }
 
 bool Renderer::CreateSwapchain(U32Vec2 size)
 {
-    (void)RHI::DeviceWaitIdle();
+    RHI::DeviceWaitIdle();
 
     CleanupSwapchain();
     CleanupColorResources();
     CleanupDepthResources();
 
-    if (!RHI::CreateSwapchain(size))
-    {
-        return false;
-    }
+    RHI::CreateSwapchain(size);
 
     mUniformData.swapchainWidth = size.x;
     mUniformData.swapchainHeight = size.y;

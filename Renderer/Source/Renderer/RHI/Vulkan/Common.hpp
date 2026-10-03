@@ -34,7 +34,7 @@
 #include <vulkan/vk_enum_string_helper.h>
 
 #ifndef VK_CHECK_ACTION
-#define VK_CHECK_ACTION return false
+#define VK_CHECK_ACTION exit(1);
 #endif
 
 #ifndef VK_CHECK_PRINT_ERROR

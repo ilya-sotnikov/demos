@@ -255,7 +255,7 @@ inline constexpr u32 ALL_LAYERS = (~0U);
 
 // -----------------------------------------------------------------------------
 // TODO: for now just enabling the needed for this project features.
-bool Create(SDL_Window* window);
+void Create(SDL_Window* window);
 void Destroy();
 
 // -----------------------------------------------------------------------------
@@ -341,8 +341,8 @@ void DestroySampler(SamplerHandle handle);
 // Semaphore.
 SemaphoreHandle CreateSemaphore(u64 initialValue);
 void DestroySemaphore(SemaphoreHandle handle);
-bool GetSemaphoreValue(SemaphoreHandle handle, u64& value);
-bool WaitSemaphore(SemaphoreHandle handle, u64 value, u64 timeout = 1'000'000'000);
+u64 GetSemaphoreValue(SemaphoreHandle handle);
+void WaitSemaphore(SemaphoreHandle handle, u64 value, u64 timeout = 1'000'000'000);
 
 // -----------------------------------------------------------------------------
 // Command buffer and queue.
@@ -369,9 +369,9 @@ CommandBufferHandle CreateCommandBuffer(
     const char* debugName = nullptr
 );
 void DestroyCommandBuffer(CommandBufferHandle handle);
-bool BeginCommandBuffer(CommandBufferHandle handle);
-bool EndCommandBuffer(CommandBufferHandle handle);
-bool QueueSubmit(Queue queue, const SliceArg<QueueSubmitDesc>&& desc);
+void BeginCommandBuffer(CommandBufferHandle handle);
+void EndCommandBuffer(CommandBufferHandle handle);
+void QueueSubmit(Queue queue, const SliceArg<QueueSubmitDesc>&& desc);
 
 // -----------------------------------------------------------------------------
 // Pipeline.
@@ -655,7 +655,7 @@ enum SwapchainResult
     SWAPCHAIN_SUBOPTIMAL,
     SWAPCHAIN_ERROR,
 };
-bool CreateSwapchain(U32Vec2 size);
+void CreateSwapchain(U32Vec2 size);
 void DestroySwapchain();
 SwapchainResult AcquireNextSwapchainTexture(RHI::TextureHandle& swapchainTextureHandle);
 RHI::TextureHandle GetSwapchainTexture(u32 idx);
@@ -663,11 +663,11 @@ SwapchainResult QueuePresent(Queue queue);
 
 // -----------------------------------------------------------------------------
 // Misc stuff.
-bool DeviceWaitIdle();
-bool QueueWaitIdle(Queue queue);
+void DeviceWaitIdle();
+void QueueWaitIdle(Queue queue);
 // TODO: It's not great that I expose these concepts, but it simplifies some
 // stuff so for now it's alright.
-bool BeginNewFrame(int frameInFlightIdx);
+void BeginNewFrame(int frameInFlightIdx);
 }
 
 #undef RHI_HANDLE
