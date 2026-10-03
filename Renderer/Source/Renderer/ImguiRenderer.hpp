@@ -18,14 +18,14 @@ struct ImguiRenderer
         Vec2 translate;
     };
 
-    RHI::TextureHandle mFontTexture;
-    RHI::SamplerHandle mFontSampler;
-    RHI::PipelineHandle mPipeline;
+    RHI::Texture mFontTexture;
+    RHI::Sampler mFontSampler;
+    RHI::Pipeline mPipeline;
 
     struct Frame
     {
-        RHI::BufferHandle vertexBuffer;
-        RHI::BufferHandle indexBuffer;
+        RHI::Buffer vertexBuffer;
+        RHI::Buffer indexBuffer;
         u64 vertexBufferSize;
         u64 indexBufferSize;
         int vertexCount;
@@ -34,7 +34,7 @@ struct ImguiRenderer
 
     bool Init(SDL_Window* window, RHI::Format colorFormat);
     void Cleanup();
-    bool UpdateVertexIndexBuffers(u32 frameIndex);
+    void UpdateVertexIndexBuffers(u32 frameIndex);
     void StartNewFrame() const;
-    bool Render(RHI::CommandBufferHandle cb, u32 frameIndex);
+    void Render(RHI::CommandBuffer cb, u32 frameIndex);
 };

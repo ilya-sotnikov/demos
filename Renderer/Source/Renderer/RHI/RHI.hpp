@@ -50,13 +50,13 @@ inline constexpr int FRAMES_IN_FLIGHT = 2;
 inline constexpr u32 MAX_BINDLESS_DESCRIPTOR_COUNT = 16384;
 inline constexpr int PUSH_CONSTANTS_MAX_SIZE_BYTES = 128;
 
-RHI_HANDLE(PipelineHandle);
-RHI_HANDLE(BufferHandle);
-RHI_HANDLE(TextureHandle);
-RHI_HANDLE(TextureDescriptorHandle);
-RHI_HANDLE(SamplerHandle);
-RHI_HANDLE(SemaphoreHandle);
-RHI_HANDLE(CommandBufferHandle);
+RHI_HANDLE(Pipeline);
+RHI_HANDLE(Buffer);
+RHI_HANDLE(Texture);
+RHI_HANDLE(TextureDescriptor);
+RHI_HANDLE(Sampler);
+RHI_HANDLE(Semaphore);
+RHI_HANDLE(CommandBuffer);
 
 enum MemoryType
 {
@@ -272,11 +272,11 @@ struct BufferDesc
 // (and a lot better than freeing some random stuff).
 
 // Creates a default descriptor.
-BufferHandle CreateBuffer(const BufferDesc&& desc);
-void* GetBufferHostPtr(BufferHandle handle);
-u64 GetBufferDevicePtr(BufferHandle handle);
-void UnmapBuffer(BufferHandle handle);
-void DestroyBuffer(BufferHandle handle);
+Buffer CreateBuffer(const BufferDesc&& desc);
+void* GetBufferHostPtr(Buffer buffer);
+u64 GetBufferDevicePtr(Buffer buffer);
+void UnmapBuffer(Buffer buffer);
+void DestroyBuffer(Buffer buffer);
 
 // -----------------------------------------------------------------------------
 // Texture.
@@ -292,27 +292,27 @@ struct TextureDesc
 };
 
 // Creates a default descriptor.
-TextureHandle CreateTexture(const TextureDesc&& desc);
-void DestroyTexture(TextureHandle handle);
+Texture CreateTexture(const TextureDesc&& desc);
+void DestroyTexture(Texture texture);
 
 struct TextureDescriptorDesc
 {
     // TODO: so far I didn't find having different image/view formats useful.
-    TextureHandle textureHandle;
+    Texture texture;
     TextureType type = TEXTURE_TYPE_2D;
     u32 baseMip;
     u32 mipCount = ALL_MIPS;
     u32 baseLayer;
     u32 layerCount = ALL_LAYERS;
 };
-TextureDescriptorHandle CreateTextureDescriptor(const TextureDescriptorDesc&& desc);
-void DestroyTextureDescriptor(TextureDescriptorHandle handle);
+TextureDescriptor CreateTextureDescriptor(const TextureDescriptorDesc&& desc);
+void DestroyTextureDescriptor(TextureDescriptor descriptor);
 
-Format GetTextureFormat(TextureHandle handle);
-U32Vec3 GetTextureDimensions(TextureHandle handle);
+Format GetTextureFormat(Texture texture);
+U32Vec3 GetTextureDimensions(Texture texture);
 
 // TODO: kinda retarded, but works for now.
-void UpdateTextureDescriptorSet(TextureHandle handle, u32 dstArrayElement);
+void UpdateTextureDescriptorSet(Texture texture, u32 dstArrayElement);
 
 // -----------------------------------------------------------------------------
 // Sampler.
@@ -334,15 +334,15 @@ struct SamplerDesc
     f32 maxLod;
 };
 
-SamplerHandle CreateSampler(const SamplerDesc&& desc);
-void DestroySampler(SamplerHandle handle);
+Sampler CreateSampler(const SamplerDesc&& desc);
+void DestroySampler(Sampler sampler);
 
 // -----------------------------------------------------------------------------
 // Semaphore.
-SemaphoreHandle CreateSemaphore(u64 initialValue);
-void DestroySemaphore(SemaphoreHandle handle);
-u64 GetSemaphoreValue(SemaphoreHandle handle);
-void WaitSemaphore(SemaphoreHandle handle, u64 value, u64 timeout = 1'000'000'000);
+Semaphore CreateSemaphore(u64 initialValue);
+void DestroySemaphore(Semaphore semaphore);
+u64 GetSemaphoreValue(Semaphore semaphore);
+void WaitSemaphore(Semaphore semaphore, u64 value, u64 timeout = 1'000'000'000);
 
 // -----------------------------------------------------------------------------
 // Command buffer and queue.
@@ -351,26 +351,26 @@ struct QueueSubmitDesc
 {
     struct SemaphoreSubmitDesc
     {
-        SemaphoreHandle semaphore;
+        Semaphore semaphore;
         u64 value;
         RHI::StageFlags stageMask = RHI::STAGE_ALL_COMMANDS_BIT;
     };
 
-    CommandBufferHandle cb;
+    CommandBuffer cb;
     SliceArg<SemaphoreSubmitDesc> waitSemaphores;
     // I really didn't want to expose binary semaphores to the RHI.
     bool waitForTextureAcquire;
     bool signalReadyToPresent;
     SliceArg<SemaphoreSubmitDesc> signalSemaphores;
 };
-CommandBufferHandle CreateCommandBuffer(
+CommandBuffer CreateCommandBuffer(
     Queue queue,
     int frameInFlightIdx = 0,
     const char* debugName = nullptr
 );
-void DestroyCommandBuffer(CommandBufferHandle handle);
-void BeginCommandBuffer(CommandBufferHandle handle);
-void EndCommandBuffer(CommandBufferHandle handle);
+void DestroyCommandBuffer(CommandBuffer cb);
+void BeginCommandBuffer(CommandBuffer cb);
+void EndCommandBuffer(CommandBuffer cb);
 void QueueSubmit(Queue queue, const SliceArg<QueueSubmitDesc>&& desc);
 
 // -----------------------------------------------------------------------------
@@ -381,7 +381,7 @@ struct ComputePipelineDesc
     bool usesBindlessTextures;
     const char* debugName;
 };
-PipelineHandle CreateComputePipeline(const ComputePipelineDesc&& desc);
+Pipeline CreateComputePipeline(const ComputePipelineDesc&& desc);
 
 struct PipelineColorTarget
 {
@@ -408,16 +408,16 @@ struct GraphicsPipelineDesc
     SliceArg<PipelineColorTarget> colorTargets;
     const char* debugName;
 };
-PipelineHandle CreateGraphicsPipeline(const GraphicsPipelineDesc&& desc);
+Pipeline CreateGraphicsPipeline(const GraphicsPipelineDesc&& desc);
 
-U32Vec3 GetPipelineLocalSize(PipelineHandle handle);
+U32Vec3 GetPipelineLocalSize(Pipeline pipeline);
 
-void DestroyPipeline(PipelineHandle handle);
+void DestroyPipeline(Pipeline pipeline);
 
 // -----------------------------------------------------------------------------
 // Commands.
 void CmdBarrier(
-    CommandBufferHandle cb,
+    CommandBuffer cb,
     StageFlags srcStageMask,
     AccessFlags srcAccessMask,
     StageFlags dstStageMask,
@@ -426,7 +426,7 @@ void CmdBarrier(
 
 struct TextureBarrierDesc
 {
-    TextureHandle handle;
+    Texture texture;
     TextureLayout oldLayout;
     TextureLayout newLayout;
     StageFlags srcStageMask = STAGE_NONE;
@@ -436,16 +436,16 @@ struct TextureBarrierDesc
     u32 mipCount = ALL_MIPS;
     u32 layerCount = ALL_LAYERS;
 };
-void CmdTextureBarrier(CommandBufferHandle handle, const SliceArg<TextureBarrierDesc>&& desc);
+void CmdTextureBarrier(CommandBuffer cb, const SliceArg<TextureBarrierDesc>&& desc);
 
 // UNDEFINED -> GENERAL.
 void CmdTextureInvalidateBarrier(
-    CommandBufferHandle cb,
+    CommandBuffer cb,
     StageFlags srcStageMask,
     AccessFlags srcAccessMask,
     StageFlags dstStageMask,
     AccessFlags dstAccessMask,
-    const SliceArg<TextureHandle>&& textures
+    const SliceArg<Texture>&& textures
 );
 
 struct TextureSubresourceLayers
@@ -464,17 +464,17 @@ struct BufferTextureCopy
     U32Vec3 textureDimensions;
 };
 void CmdCopyBufferToTexture(
-    CommandBufferHandle cb,
-    BufferHandle buffer,
-    TextureHandle texture,
+    CommandBuffer cb,
+    Buffer buffer,
+    Texture texture,
     const SliceArg<BufferTextureCopy>&& copyRegions
 );
 
-void CmdFillBuffer(CommandBufferHandle cb, BufferHandle buffer, u64 offset, u64 size, u32 data);
+void CmdFillBuffer(CommandBuffer cb, Buffer buffer, u64 offset, u64 size, u32 data);
 
-void CmdBindPipeline(CommandBufferHandle cb, PipelineHandle pipeline);
+void CmdBindPipeline(CommandBuffer cb, Pipeline pipeline);
 
-void CmdDispatch(CommandBufferHandle cb, U32Vec3 groupCount);
+void CmdDispatch(CommandBuffer cb, U32Vec3 groupCount);
 
 struct DescriptorInfo
 {
@@ -490,35 +490,35 @@ struct DescriptorInfo
 
     union
     {
-        TextureHandle texture;
-        TextureDescriptorHandle textureDescriptor;
-        SamplerHandle sampler;
-        BufferHandle buffer;
+        Texture texture;
+        TextureDescriptor textureDescriptor;
+        Sampler sampler;
+        Buffer buffer;
     } resource;
 
-    DescriptorInfo(TextureHandle handle) : type{TYPE_TEXTURE}, resource{.texture = handle} { }
+    DescriptorInfo(Texture texture) : type{TYPE_TEXTURE}, resource{.texture = texture} { }
 
-    DescriptorInfo(TextureDescriptorHandle handle)
+    DescriptorInfo(TextureDescriptor descriptor)
         : type{TYPE_TEXTURE_DESCRIPTOR}
-        , resource{.textureDescriptor = handle}
+        , resource{.textureDescriptor = descriptor}
     { }
 
-    DescriptorInfo(SamplerHandle handle) : type{TYPE_SAMPLER}, resource{.sampler = handle} { }
+    DescriptorInfo(Sampler sampler) : type{TYPE_SAMPLER}, resource{.sampler = sampler} { }
 
-    DescriptorInfo(BufferHandle handle) : type{TYPE_BUFFER}, resource{.buffer = handle} { }
+    DescriptorInfo(Buffer buffer) : type{TYPE_BUFFER}, resource{.buffer = buffer} { }
 };
 
 void CmdPushDescriptors(
-    CommandBufferHandle cb,
-    PipelineHandle pipeline,
+    CommandBuffer cb,
+    Pipeline pipeline,
     const SliceArg<DescriptorInfo>&& descriptors
 );
 
-void CmdPushConstants(CommandBufferHandle cb, PipelineHandle pipeline, const void* data);
+void CmdPushConstants(CommandBuffer cb, Pipeline pipeline, const void* data);
 
 struct SetViewportDesc
 {
-    CommandBufferHandle cb;
+    CommandBuffer cb;
     f32 x = 0.0f;
     f32 y = 0.0f;
     f32 width;
@@ -530,7 +530,7 @@ void CmdSetViewport(const SetViewportDesc&& desc);
 
 struct SetScissorDesc
 {
-    CommandBufferHandle cb;
+    CommandBuffer cb;
     I32Vec2 offset;
     U32Vec2 extent;
 };
@@ -538,7 +538,7 @@ void CmdSetScissor(const SetScissorDesc&& desc);
 
 struct Attachment
 {
-    struct TextureOrDescriptorHandle
+    struct TextureOrDescriptor
     {
         enum
         {
@@ -549,21 +549,21 @@ struct Attachment
 
         union
         {
-            TextureHandle texture;
-            TextureDescriptorHandle descriptor;
+            Texture texture;
+            TextureDescriptor descriptor;
         };
 
-        TextureOrDescriptorHandle() : type{TYPE_NONE} { }
+        TextureOrDescriptor() : type{TYPE_NONE} { }
 
-        TextureOrDescriptorHandle(TextureHandle handle) : type{TYPE_TEXTURE}, texture{handle} { }
+        TextureOrDescriptor(Texture texture) : type{TYPE_TEXTURE}, texture{texture} { }
 
-        TextureOrDescriptorHandle(TextureDescriptorHandle handle)
+        TextureOrDescriptor(TextureDescriptor descriptor)
             : type{TYPE_TEXTURE_DESCRIPTOR}
-            , descriptor{handle}
+            , descriptor{descriptor}
         { }
     };
 
-    TextureOrDescriptorHandle attachment;
+    TextureOrDescriptor attachment;
     AttachmentLoadOp loadOp;
     AttachmentStoreOp storeOp;
 
@@ -575,31 +575,26 @@ struct Attachment
 };
 struct BeginRenderingDesc
 {
-    CommandBufferHandle cb;
+    CommandBuffer cb;
     I32Vec2 offset;
     U32Vec2 extent;
     SliceArg<Attachment> colorTargets;
     Attachment depthTarget;
 };
 void CmdBeginRendering(const BeginRenderingDesc&& desc);
-void CmdEndRendering(CommandBufferHandle cb);
+void CmdEndRendering(CommandBuffer cb);
 
-void CmdBindIndexBuffer(
-    CommandBufferHandle cb,
-    BufferHandle buffer,
-    u64 offset,
-    IndexType indexType
-);
+void CmdBindIndexBuffer(CommandBuffer cb, Buffer buffer, u64 offset, IndexType indexType);
 
 void CmdDraw(
-    CommandBufferHandle cb,
+    CommandBuffer cb,
     u32 vertexCount,
     u32 instanceCount,
     u32 firstVertex,
     u32 firstInstance
 );
 void CmdDrawIndexed(
-    CommandBufferHandle cb,
+    CommandBuffer cb,
     u32 indexCount,
     u32 instanceCount,
     u32 firstIndex,
@@ -616,8 +611,8 @@ struct DrawIndirectCommand
 };
 
 void CmdDrawIndirect(
-    CommandBufferHandle cb,
-    BufferHandle buffer,
+    CommandBuffer cb,
+    Buffer buffer,
     u64 offset,
     u32 drawCount,
     u32 stride = sizeof(DrawIndirectCommand)
@@ -633,17 +628,17 @@ struct DrawIndexedIndirectCommand
 };
 
 void CmdDrawIndexedIndirectCount(
-    CommandBufferHandle cb,
-    BufferHandle buffer,
+    CommandBuffer cb,
+    Buffer buffer,
     u64 offset,
-    BufferHandle countBuffer,
+    Buffer countBuffer,
     u64 countBufferOffset,
     u32 maxDrawCount,
     u32 stride = sizeof(DrawIndexedIndirectCommand)
 );
 
 // TODO: kinda retarded, but works for now.
-void CmdBindTextureDescriptorSet(CommandBufferHandle cb, RHI::PipelineHandle pipeline);
+void CmdBindTextureDescriptorSet(CommandBuffer cb, RHI::Pipeline pipeline);
 
 // -----------------------------------------------------------------------------
 // Swapchain.
@@ -657,8 +652,8 @@ enum SwapchainResult
 };
 void CreateSwapchain(U32Vec2 size);
 void DestroySwapchain();
-SwapchainResult AcquireNextSwapchainTexture(RHI::TextureHandle& swapchainTextureHandle);
-RHI::TextureHandle GetSwapchainTexture(u32 idx);
+SwapchainResult AcquireNextSwapchainTexture(RHI::Texture& swapchainTexture);
+RHI::Texture GetSwapchainTexture(u32 idx);
 SwapchainResult QueuePresent(Queue queue);
 
 // -----------------------------------------------------------------------------

@@ -71,6 +71,7 @@ struct Pool
 private:
     // TODO: fixed size.
     // TODO: split to cold and hot data?
+    // TODO: Generations are only relevant in debug builds.
     std::vector<Resource> mData;
     std::vector<u32> mGenerations;
     std::vector<u32> mFreeList;

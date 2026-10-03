@@ -50,14 +50,14 @@
     } \
     while (0)
 
-struct QueueInfo
+struct QueueInfoImpl
 {
     u32 familyIdx;
     u32 queueIdx;
     VkQueue queue;
 };
 
-struct Buffer
+struct BufferImpl
 {
     VkBuffer buffer;
     void* mapped;
@@ -65,12 +65,12 @@ struct Buffer
     VmaAllocation allocation;
 };
 
-struct BufferDescriptor
+struct BufferDescriptorImpl
 {
     VkBuffer buffer;
 };
 
-struct Texture
+struct TextureImpl
 {
     VkImage image;
     VkImageView view;
@@ -80,29 +80,29 @@ struct Texture
     U32Vec3 dimensions;
 };
 
-struct TextureView
+struct TextureViewImpl
 {
     VkImageView view;
 };
 
-struct Swapchain
+struct SwapchainImpl
 {
     VkSwapchainKHR swapchain;
     VkExtent2D extent;
     VkSurfaceFormatKHR surfaceFormat;
-    std::vector<RHI::TextureHandle> textures;
+    std::vector<RHI::Texture> textures;
     std::vector<VkSemaphore> readyToPresentSemaphores;
     u32 minImageCount;
 };
 
-struct CommandBuffer
+struct CommandBufferImpl
 {
     VkCommandBuffer commandBuffer;
     RHI::Queue queue;
     int frameIdx;
 };
 
-struct Shader
+struct ShaderImpl
 {
     VkShaderModule module;
     VkShaderStageFlagBits stage;
@@ -110,7 +110,7 @@ struct Shader
     U32Vec3 localSize;
 };
 
-struct Pipeline
+struct PipelineImpl
 {
     VkPipeline pipeline;
     VkPipelineLayout layout;
@@ -120,23 +120,19 @@ struct Pipeline
     U32Vec3 localSize;
 };
 
-union VulkanDescriptorInfo
+union DescriptorInfoImpl
 {
     VkDescriptorImageInfo image;
     VkDescriptorBufferInfo buffer;
     VkAccelerationStructureKHR accelerationStructure;
 
-    VulkanDescriptorInfo() = default;
+    DescriptorInfoImpl() = default;
 
-    VulkanDescriptorInfo(
-        VkBuffer buffer,
-        VkDeviceSize offset = 0,
-        VkDeviceSize range = VK_WHOLE_SIZE
-    )
+    DescriptorInfoImpl(VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE)
         : buffer{buffer, offset, range}
     { }
 
-    VulkanDescriptorInfo(
+    DescriptorInfoImpl(
         VkImageView imageView,
         VkImageLayout imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         VkSampler sampler = VK_NULL_HANDLE
@@ -144,16 +140,16 @@ union VulkanDescriptorInfo
         : image{sampler, imageView, imageLayout}
     { }
 
-    VulkanDescriptorInfo(VkSampler sampler)
+    DescriptorInfoImpl(VkSampler sampler)
         : image{sampler, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED}
     { }
 
-    VulkanDescriptorInfo(VkAccelerationStructureKHR accelerationStructure)
+    DescriptorInfoImpl(VkAccelerationStructureKHR accelerationStructure)
         : accelerationStructure{accelerationStructure}
     { }
 };
 
-struct Context
+struct ContextImpl
 {
     struct Frame
     {
@@ -168,26 +164,26 @@ struct Context
     VkDevice device{};
     VkPhysicalDevice physicalDevice{};
     VmaAllocator vmaAllocator{};
-    QueueInfo graphicsQueueInfo{};
-    QueueInfo computeQueueInfo{};
+    QueueInfoImpl graphicsQueueInfo{};
+    QueueInfoImpl computeQueueInfo{};
     VkDescriptorSetLayout bindlessTexturesDescriptorSetLayout{};
     VkDescriptorSet bindlessTexturesDescriptorSet{};
     VkDescriptorPool bindlessTexturesDescriptorPool{};
-    Pool<RHI::BufferHandle, Buffer> buffers{};
-    Pool<RHI::TextureHandle, Texture> textures{};
-    Pool<RHI::TextureDescriptorHandle, TextureView> texturesDescriptors{};
-    Pool<RHI::SamplerHandle, VkSampler> samplers{};
-    Pool<RHI::SemaphoreHandle, VkSemaphore> semaphores{};
-    Pool<RHI::CommandBufferHandle, CommandBuffer> commandBuffers{};
-    Pool<RHI::PipelineHandle, Pipeline> pipelines{};
-    Swapchain swapchain{};
+    Pool<RHI::Buffer, BufferImpl> buffers{};
+    Pool<RHI::Texture, TextureImpl> textures{};
+    Pool<RHI::TextureDescriptor, TextureViewImpl> texturesDescriptors{};
+    Pool<RHI::Sampler, VkSampler> samplers{};
+    Pool<RHI::Semaphore, VkSemaphore> semaphores{};
+    Pool<RHI::CommandBuffer, CommandBufferImpl> commandBuffers{};
+    Pool<RHI::Pipeline, PipelineImpl> pipelines{};
+    SwapchainImpl swapchain{};
     int frameIdx{};
     u32 imageIdx{};
     char deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE]{};
 };
 
 // I don't see any situation where duplicating this stuff would be useful in practice.
-Context sCtx;
+ContextImpl sCtx;
 
 static bool ExtensionIsAvailable(const char* name, SliceArg<VkExtensionProperties> extensions)
 {
@@ -250,7 +246,7 @@ static VkImageAspectFlags VkAspectFlagsFromFormat(VkFormat format)
 }
 
 static bool CreateShader(
-    Shader& shader,
+    ShaderImpl& shader,
     std::vector<VkDescriptorSetLayoutBinding>& descriptorSetLayoutBindings,
     VkDevice device,
     Slice<u8> bytecode
@@ -433,7 +429,7 @@ static bool CreateShader(
     return true;
 }
 
-static VkPipelineBindPoint GetPipelineBindPoint(const Pipeline& pipeline)
+static VkPipelineBindPoint GetPipelineBindPoint(const PipelineImpl& pipeline)
 {
     return (pipeline.localSize.x > 0) && (pipeline.localSize.y > 0) && (pipeline.localSize.z > 0)
         ? VK_PIPELINE_BIND_POINT_COMPUTE
@@ -758,14 +754,14 @@ void RHI::Create(SDL_Window* window)
     // Logical device, queue.
     {
         // Already checked when picking a physical device.
-        QueueInfo graphicsQueueInfo{};
+        QueueInfoImpl graphicsQueueInfo{};
         GetQueue(
             graphicsQueueInfo.familyIdx,
             graphicsQueueInfo.queueIdx,
             sCtx.physicalDevice,
             VK_QUEUE_GRAPHICS_BIT
         );
-        QueueInfo computeQueueInfo{};
+        QueueInfoImpl computeQueueInfo{};
         GetQueue(
             computeQueueInfo.familyIdx,
             computeQueueInfo.queueIdx,
@@ -1046,11 +1042,11 @@ void RHI::Destroy()
     volkFinalize();
 }
 
-RHI::BufferHandle RHI::CreateBuffer(const BufferDesc&& desc)
+RHI::Buffer RHI::CreateBuffer(const BufferDesc&& desc)
 {
     DEBUG_ASSERT(desc.size > 0);
 
-    Buffer buffer{};
+    BufferImpl buffer{};
 
     const VkBufferUsageFlags usage = desc.type == RHI::MEMORY_TYPE_DEFAULT_UNIFORM
         ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
@@ -1122,25 +1118,25 @@ RHI::BufferHandle RHI::CreateBuffer(const BufferDesc&& desc)
     return sCtx.buffers.CreateHandle(buffer);
 }
 
-void* RHI::GetBufferHostPtr(BufferHandle handle)
+void* RHI::GetBufferHostPtr(Buffer handle)
 {
     DEBUG_ASSERT(handle);
 
     return sCtx.buffers.GetPtr(handle)->mapped;
 }
 
-u64 RHI::GetBufferDevicePtr(BufferHandle handle)
+u64 RHI::GetBufferDevicePtr(Buffer handle)
 {
     DEBUG_ASSERT(handle);
 
     return static_cast<u64>(sCtx.buffers.GetPtr(handle)->deviceAddress);
 }
 
-void RHI::UnmapBuffer(BufferHandle handle)
+void RHI::UnmapBuffer(Buffer handle)
 {
     DEBUG_ASSERT(handle); // TODO: Remove these kind of asserts.
 
-    Buffer* const buffer = sCtx.buffers.GetPtr(handle);
+    BufferImpl* const buffer = sCtx.buffers.GetPtr(handle);
 
     if (buffer->mapped)
     {
@@ -1149,14 +1145,14 @@ void RHI::UnmapBuffer(BufferHandle handle)
     }
 }
 
-void RHI::DestroyBuffer(BufferHandle handle)
+void RHI::DestroyBuffer(Buffer handle)
 {
     if (!handle)
     {
         return;
     }
 
-    Buffer* const buffer = sCtx.buffers.GetPtr(handle);
+    BufferImpl* const buffer = sCtx.buffers.GetPtr(handle);
 
     if (buffer->mapped)
     {
@@ -1170,7 +1166,7 @@ void RHI::DestroyBuffer(BufferHandle handle)
     sCtx.buffers.DestroyHandle(handle);
 }
 
-RHI::TextureHandle RHI::CreateTexture(const TextureDesc&& desc)
+RHI::Texture RHI::CreateTexture(const TextureDesc&& desc)
 {
     DEBUG_ASSERT(desc.dimensions.x > 0);
     DEBUG_ASSERT(desc.dimensions.y > 0);
@@ -1179,7 +1175,7 @@ RHI::TextureHandle RHI::CreateTexture(const TextureDesc&& desc)
     DEBUG_ASSERT(desc.layerCount > 0);
     DEBUG_ASSERT(desc.format != RHI::FORMAT_UNDEFINED);
 
-    Texture texture{};
+    TextureImpl texture{};
 
     const VkImageType type = TextureTypeToVk(desc.type);
     const VkImageViewType viewType = TextureTypeToViewVk(desc.type);
@@ -1260,14 +1256,14 @@ RHI::TextureHandle RHI::CreateTexture(const TextureDesc&& desc)
     return sCtx.textures.CreateHandle(texture);
 }
 
-void RHI::DestroyTexture(RHI::TextureHandle handle)
+void RHI::DestroyTexture(RHI::Texture handle)
 {
     if (!handle)
     {
         return;
     }
 
-    Texture* const texture = sCtx.textures.GetPtr(handle);
+    TextureImpl* const texture = sCtx.textures.GetPtr(handle);
 
     vkDestroyImageView(sCtx.device, texture->view, nullptr);
     texture->view = VK_NULL_HANDLE;
@@ -1278,13 +1274,13 @@ void RHI::DestroyTexture(RHI::TextureHandle handle)
     sCtx.textures.DestroyHandle(handle);
 }
 
-RHI::TextureDescriptorHandle RHI::CreateTextureDescriptor(const TextureDescriptorDesc&& desc)
+RHI::TextureDescriptor RHI::CreateTextureDescriptor(const TextureDescriptorDesc&& desc)
 {
-    DEBUG_ASSERT(desc.textureHandle);
+    DEBUG_ASSERT(desc.texture);
 
-    const Texture* const texture = sCtx.textures.GetPtr(desc.textureHandle);
+    const TextureImpl* const texture = sCtx.textures.GetPtr(desc.texture);
 
-    TextureView view{};
+    TextureViewImpl view{};
 
     const VkFormat format = FormatToVk(texture->format);
 
@@ -1306,31 +1302,31 @@ RHI::TextureDescriptorHandle RHI::CreateTextureDescriptor(const TextureDescripto
     return sCtx.texturesDescriptors.CreateHandle(view);
 }
 
-void RHI::DestroyTextureDescriptor(RHI::TextureDescriptorHandle handle)
+void RHI::DestroyTextureDescriptor(RHI::TextureDescriptor handle)
 {
     if (!handle)
     {
         return;
     }
 
-    TextureView* const view = sCtx.texturesDescriptors.GetPtr(handle);
+    TextureViewImpl* const view = sCtx.texturesDescriptors.GetPtr(handle);
 
     vkDestroyImageView(sCtx.device, view->view, nullptr);
 
     sCtx.texturesDescriptors.DestroyHandle(handle);
 }
 
-RHI::Format RHI::GetTextureFormat(TextureHandle handle)
+RHI::Format RHI::GetTextureFormat(Texture handle)
 {
     return sCtx.textures.GetPtr(handle)->format;
 }
 
-U32Vec3 RHI::GetTextureDimensions(TextureHandle handle)
+U32Vec3 RHI::GetTextureDimensions(Texture handle)
 {
     return sCtx.textures.GetPtr(handle)->dimensions;
 }
 
-void RHI::UpdateTextureDescriptorSet(RHI::TextureHandle handle, u32 dstArrayElement)
+void RHI::UpdateTextureDescriptorSet(RHI::Texture handle, u32 dstArrayElement)
 {
     DEBUG_ASSERT(handle);
 
@@ -1352,7 +1348,7 @@ void RHI::UpdateTextureDescriptorSet(RHI::TextureHandle handle, u32 dstArrayElem
     vkUpdateDescriptorSets(sCtx.device, 1, &writeSet, 0, nullptr);
 }
 
-RHI::SamplerHandle RHI::CreateSampler(const RHI::SamplerDesc&& desc)
+RHI::Sampler RHI::CreateSampler(const RHI::SamplerDesc&& desc)
 {
     const VkSamplerReductionModeCreateInfo reductionModeInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO,
@@ -1385,7 +1381,7 @@ RHI::SamplerHandle RHI::CreateSampler(const RHI::SamplerDesc&& desc)
     return sCtx.samplers.CreateHandle(sampler);
 }
 
-void RHI::DestroySampler(RHI::SamplerHandle handle)
+void RHI::DestroySampler(RHI::Sampler handle)
 {
     if (!handle)
     {
@@ -1397,7 +1393,7 @@ void RHI::DestroySampler(RHI::SamplerHandle handle)
     sCtx.samplers.DestroyHandle(handle);
 }
 
-RHI::SemaphoreHandle RHI::CreateSemaphore(u64 initialValue)
+RHI::Semaphore RHI::CreateSemaphore(u64 initialValue)
 {
     const VkSemaphoreTypeCreateInfo timelineSemaphoreTypeInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
@@ -1416,7 +1412,7 @@ RHI::SemaphoreHandle RHI::CreateSemaphore(u64 initialValue)
     return sCtx.semaphores.CreateHandle(semaphore);
 }
 
-void RHI::DestroySemaphore(RHI::SemaphoreHandle handle)
+void RHI::DestroySemaphore(RHI::Semaphore handle)
 {
     if (!handle)
     {
@@ -1428,7 +1424,7 @@ void RHI::DestroySemaphore(RHI::SemaphoreHandle handle)
     sCtx.semaphores.DestroyHandle(handle);
 }
 
-u64 RHI::GetSemaphoreValue(RHI::SemaphoreHandle handle)
+u64 RHI::GetSemaphoreValue(RHI::Semaphore handle)
 {
     DEBUG_ASSERT(handle);
 
@@ -1437,7 +1433,7 @@ u64 RHI::GetSemaphoreValue(RHI::SemaphoreHandle handle)
     return value;
 }
 
-void RHI::WaitSemaphore(RHI::SemaphoreHandle handle, u64 value, u64 timeout)
+void RHI::WaitSemaphore(RHI::Semaphore handle, u64 value, u64 timeout)
 {
     DEBUG_ASSERT(handle);
 
@@ -1451,7 +1447,7 @@ void RHI::WaitSemaphore(RHI::SemaphoreHandle handle, u64 value, u64 timeout)
     VK_CHECK(vkWaitSemaphores(sCtx.device, &waitInfo, timeout));
 }
 
-RHI::CommandBufferHandle RHI::CreateCommandBuffer(
+RHI::CommandBuffer RHI::CreateCommandBuffer(
     RHI::Queue queue,
     int frameInFlightIdx,
     const char* debugName
@@ -1471,7 +1467,7 @@ RHI::CommandBufferHandle RHI::CreateCommandBuffer(
         .commandBufferCount = 1,
     };
 
-    CommandBuffer cb{};
+    CommandBufferImpl cb{};
     VK_CHECK(vkAllocateCommandBuffers(sCtx.device, &cmdBufferAllocateInfo, &cb.commandBuffer));
 
     cb.queue = queue;
@@ -1490,11 +1486,11 @@ RHI::CommandBufferHandle RHI::CreateCommandBuffer(
     return sCtx.commandBuffers.CreateHandle(cb);
 }
 
-void RHI::DestroyCommandBuffer(RHI::CommandBufferHandle handle)
+void RHI::DestroyCommandBuffer(RHI::CommandBuffer handle)
 {
     if (handle)
     {
-        const CommandBuffer* const cb = sCtx.commandBuffers.GetPtr(handle);
+        const CommandBufferImpl* const cb = sCtx.commandBuffers.GetPtr(handle);
 
         const VkCommandPool pool = cb->queue == QUEUE_GRAPHICS
             ? sCtx.frames[cb->frameIdx].commandPoolGraphics
@@ -1506,7 +1502,7 @@ void RHI::DestroyCommandBuffer(RHI::CommandBufferHandle handle)
     }
 }
 
-void RHI::BeginCommandBuffer(RHI::CommandBufferHandle handle)
+void RHI::BeginCommandBuffer(RHI::CommandBuffer handle)
 {
     DEBUG_ASSERT(handle);
 
@@ -1517,7 +1513,7 @@ void RHI::BeginCommandBuffer(RHI::CommandBufferHandle handle)
     VK_CHECK(vkBeginCommandBuffer(sCtx.commandBuffers.GetPtr(handle)->commandBuffer, &beginInfo));
 }
 
-void RHI::EndCommandBuffer(RHI::CommandBufferHandle handle)
+void RHI::EndCommandBuffer(RHI::CommandBuffer handle)
 {
     DEBUG_ASSERT(handle);
 
@@ -1534,7 +1530,7 @@ void RHI::QueueSubmit(RHI::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
 
     for (int i = 0; i < desc.count; ++i)
     {
-        const CommandBuffer* const cb = sCtx.commandBuffers.GetPtr(desc[i].cb);
+        const CommandBufferImpl* const cb = sCtx.commandBuffers.GetPtr(desc[i].cb);
 
         // +1 for optional image acquire binary semaphore.
         VkSemaphoreSubmitInfo* const semWaitSubmitInfos
@@ -1609,18 +1605,18 @@ void RHI::QueueSubmit(RHI::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
     VK_CHECK(vkQueueSubmit2(vkQueue, u32(desc.count), submitInfos, VK_NULL_HANDLE));
 }
 
-RHI::PipelineHandle RHI::CreateComputePipeline(const RHI::ComputePipelineDesc&& desc)
+RHI::Pipeline RHI::CreateComputePipeline(const RHI::ComputePipelineDesc&& desc)
 {
     DEBUG_ASSERT(desc.bytecode.count > 0);
 
     std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
     descriptorSetLayoutBindings.reserve(32);
-    Shader shader{};
+    ShaderImpl shader{};
     DEFER(vkDestroyShaderModule(sCtx.device, shader.module, nullptr));
 
     if (!CreateShader(shader, descriptorSetLayoutBindings, sCtx.device, desc.bytecode))
     {
-        return RHI::PipelineHandle::Invalid();
+        return RHI::Pipeline::Invalid();
     }
 
     // Remove duplicates.
@@ -1657,7 +1653,7 @@ RHI::PipelineHandle RHI::CreateComputePipeline(const RHI::ComputePipelineDesc&& 
     };
 
     bool failed = true;
-    Pipeline pipeline{};
+    PipelineImpl pipeline{};
     // clang-format off
     DEFER(
         if (failed)
@@ -1734,8 +1730,8 @@ RHI::PipelineHandle RHI::CreateComputePipeline(const RHI::ComputePipelineDesc&& 
             .dstBinding = uniqueDescriptorSetLayoutBindings[i].binding,
             .descriptorCount = 1,
             .descriptorType = uniqueDescriptorSetLayoutBindings[i].descriptorType,
-            .offset = sizeof(VulkanDescriptorInfo) * i,
-            .stride = sizeof(VulkanDescriptorInfo),
+            .offset = sizeof(DescriptorInfoImpl) * i,
+            .stride = sizeof(DescriptorInfoImpl),
         };
 
         descriptorUpdateTemplateEntries[i] = entry;
@@ -1777,20 +1773,20 @@ RHI::PipelineHandle RHI::CreateComputePipeline(const RHI::ComputePipelineDesc&& 
     return sCtx.pipelines.CreateHandle(pipeline);
 }
 
-RHI::PipelineHandle RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&& desc)
+RHI::Pipeline RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&& desc)
 {
     DEBUG_ASSERT(desc.bytecodes.count > 0);
 
     std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings;
     descriptorSetLayoutBindings.reserve(32);
-    std::vector<Shader> shaders(size_t(desc.bytecodes.count));
+    std::vector<ShaderImpl> shaders(size_t(desc.bytecodes.count));
 
     bool failed = true;
-    Pipeline pipeline{};
+    PipelineImpl pipeline{};
 
     // clang-format off
     DEFER(
-        for (Shader& shader : shaders)
+        for (ShaderImpl& shader : shaders)
         {
             vkDestroyShaderModule(sCtx.device, shader.module, nullptr);
         }
@@ -1817,12 +1813,12 @@ RHI::PipelineHandle RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&
                 *(desc.bytecodes.begin() + i)
             ))
         {
-            return RHI::PipelineHandle::Invalid();
+            return RHI::Pipeline::Invalid();
         }
     }
 
     u32 pushConstantSize = 0;
-    for (Shader& shader : shaders)
+    for (ShaderImpl& shader : shaders)
     {
         ASSERT(
             (pushConstantSize == 0 || shader.pushConstantSize == 0)
@@ -2028,8 +2024,8 @@ RHI::PipelineHandle RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&
             .dstBinding = uniqueDescriptorSetLayoutBindings[i].binding,
             .descriptorCount = 1,
             .descriptorType = uniqueDescriptorSetLayoutBindings[i].descriptorType,
-            .offset = sizeof(VulkanDescriptorInfo) * i,
-            .stride = sizeof(VulkanDescriptorInfo),
+            .offset = sizeof(DescriptorInfoImpl) * i,
+            .stride = sizeof(DescriptorInfoImpl),
         };
 
         descriptorUpdateTemplateEntries[i] = entry;
@@ -2069,21 +2065,21 @@ RHI::PipelineHandle RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&
     return sCtx.pipelines.CreateHandle(pipeline);
 }
 
-U32Vec3 RHI::GetPipelineLocalSize(RHI::PipelineHandle handle)
+U32Vec3 RHI::GetPipelineLocalSize(RHI::Pipeline handle)
 {
     DEBUG_ASSERT(handle);
 
     return sCtx.pipelines.GetPtr(handle)->localSize;
 }
 
-void RHI::DestroyPipeline(RHI::PipelineHandle handle)
+void RHI::DestroyPipeline(RHI::Pipeline handle)
 {
     if (!handle)
     {
         return;
     }
 
-    const Pipeline* const pipeline = sCtx.pipelines.GetPtr(handle);
+    const PipelineImpl* const pipeline = sCtx.pipelines.GetPtr(handle);
 
     vkDestroyPipelineLayout(sCtx.device, pipeline->layout, nullptr);
     vkDestroyDescriptorSetLayout(sCtx.device, pipeline->descriptorSetLayout, nullptr);
@@ -2094,7 +2090,7 @@ void RHI::DestroyPipeline(RHI::PipelineHandle handle)
 }
 
 void RHI::CmdBarrier(
-    RHI::CommandBufferHandle cb,
+    RHI::CommandBuffer cb,
     RHI::StageFlags srcStageMask,
     RHI::AccessFlags srcAccessMask,
     RHI::StageFlags dstStageMask,
@@ -2120,7 +2116,7 @@ void RHI::CmdBarrier(
 }
 
 void RHI::CmdTextureBarrier(
-    RHI::CommandBufferHandle handle,
+    RHI::CommandBuffer handle,
     const SliceArg<RHI::TextureBarrierDesc>&& desc
 )
 {
@@ -2136,7 +2132,7 @@ void RHI::CmdTextureBarrier(
     {
         const RHI::TextureBarrierDesc& d = desc[i];
 
-        const Texture* const texture = sCtx.textures.GetPtr(d.handle);
+        const TextureImpl* const texture = sCtx.textures.GetPtr(d.texture);
 
         barriers[i] = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -2159,7 +2155,7 @@ void RHI::CmdTextureBarrier(
         };
     }
 
-    const CommandBuffer* const cb = sCtx.commandBuffers.GetPtr(handle);
+    const CommandBufferImpl* const cb = sCtx.commandBuffers.GetPtr(handle);
 
     const VkDependencyInfo dependencyInfo = {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
@@ -2170,12 +2166,12 @@ void RHI::CmdTextureBarrier(
 }
 
 void RHI::CmdTextureInvalidateBarrier(
-    CommandBufferHandle cb,
+    CommandBuffer cb,
     StageFlags srcStageMask,
     AccessFlags srcAccessMask,
     StageFlags dstStageMask,
     AccessFlags dstAccessMask,
-    const SliceArg<TextureHandle>&& textures
+    const SliceArg<Texture>&& textures
 )
 {
     DEBUG_ASSERT(cb);
@@ -2188,7 +2184,7 @@ void RHI::CmdTextureInvalidateBarrier(
 
     for (int i = 0; i < textures.count; ++i)
     {
-        const Texture* const texture = sCtx.textures.GetPtr(textures[i]);
+        const TextureImpl* const texture = sCtx.textures.GetPtr(textures[i]);
 
         barriers[i] = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -2221,9 +2217,9 @@ void RHI::CmdTextureInvalidateBarrier(
 }
 
 void RHI::CmdCopyBufferToTexture(
-    RHI::CommandBufferHandle cb,
-    RHI::BufferHandle buffer,
-    RHI::TextureHandle texture,
+    RHI::CommandBuffer cb,
+    RHI::Buffer buffer,
+    RHI::Texture texture,
     const SliceArg<RHI::BufferTextureCopy>&& copyRegions
 )
 {
@@ -2237,7 +2233,7 @@ void RHI::CmdCopyBufferToTexture(
     VkBufferImageCopy* const regions
         = scratchArena.AllocOrDie<VkBufferImageCopy>(copyRegions.count);
 
-    const Texture* const tex = sCtx.textures.GetPtr(texture);
+    const TextureImpl* const tex = sCtx.textures.GetPtr(texture);
 
     for (int i = 0; i < copyRegions.count; ++i)
     {
@@ -2267,13 +2263,7 @@ void RHI::CmdCopyBufferToTexture(
     );
 }
 
-void RHI::CmdFillBuffer(
-    RHI::CommandBufferHandle cb,
-    RHI::BufferHandle buffer,
-    u64 offset,
-    u64 size,
-    u32 data
-)
+void RHI::CmdFillBuffer(RHI::CommandBuffer cb, RHI::Buffer buffer, u64 offset, u64 size, u32 data)
 {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(buffer);
@@ -2288,12 +2278,12 @@ void RHI::CmdFillBuffer(
     );
 }
 
-void RHI::CmdBindPipeline(RHI::CommandBufferHandle cb, RHI::PipelineHandle pipeline)
+void RHI::CmdBindPipeline(RHI::CommandBuffer cb, RHI::Pipeline pipeline)
 {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(pipeline);
 
-    const Pipeline* const vkPipeline = sCtx.pipelines.GetPtr(pipeline);
+    const PipelineImpl* const vkPipeline = sCtx.pipelines.GetPtr(pipeline);
 
     vkCmdBindPipeline(
         sCtx.commandBuffers.GetPtr(cb)->commandBuffer,
@@ -2302,7 +2292,7 @@ void RHI::CmdBindPipeline(RHI::CommandBufferHandle cb, RHI::PipelineHandle pipel
     );
 }
 
-void RHI::CmdDispatch(RHI::CommandBufferHandle cb, U32Vec3 groupCount)
+void RHI::CmdDispatch(RHI::CommandBuffer cb, U32Vec3 groupCount)
 {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(groupCount.x > 0);
@@ -2318,8 +2308,8 @@ void RHI::CmdDispatch(RHI::CommandBufferHandle cb, U32Vec3 groupCount)
 }
 
 void RHI::CmdPushDescriptors(
-    RHI::CommandBufferHandle cb,
-    RHI::PipelineHandle pipeline,
+    RHI::CommandBuffer cb,
+    RHI::Pipeline pipeline,
     const SliceArg<RHI::DescriptorInfo>&& descriptors
 )
 {
@@ -2328,8 +2318,8 @@ void RHI::CmdPushDescriptors(
 
     Arena scratchArena = sCtx.scratchArena;
 
-    VulkanDescriptorInfo* const infos
-        = scratchArena.AllocOrDie<VulkanDescriptorInfo>(descriptors.count);
+    DescriptorInfoImpl* const infos
+        = scratchArena.AllocOrDie<DescriptorInfoImpl>(descriptors.count);
 
     for (int i = 0; i < descriptors.count; ++i)
     {
@@ -2351,7 +2341,7 @@ void RHI::CmdPushDescriptors(
         }
     }
 
-    const Pipeline* const vkPipeline = sCtx.pipelines.GetPtr(pipeline);
+    const PipelineImpl* const vkPipeline = sCtx.pipelines.GetPtr(pipeline);
 
     vkCmdPushDescriptorSetWithTemplate(
         sCtx.commandBuffers.GetPtr(cb)->commandBuffer,
@@ -2362,17 +2352,13 @@ void RHI::CmdPushDescriptors(
     );
 }
 
-void RHI::CmdPushConstants(
-    RHI::CommandBufferHandle cb,
-    RHI::PipelineHandle pipeline,
-    const void* data
-)
+void RHI::CmdPushConstants(RHI::CommandBuffer cb, RHI::Pipeline pipeline, const void* data)
 {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(pipeline);
     DEBUG_ASSERT(data);
 
-    const Pipeline* const vkPipeline = sCtx.pipelines.GetPtr(pipeline);
+    const PipelineImpl* const vkPipeline = sCtx.pipelines.GetPtr(pipeline);
 
     vkCmdPushConstants(
         sCtx.commandBuffers.GetPtr(cb)->commandBuffer,
@@ -2430,8 +2416,7 @@ void RHI::CmdBeginRendering(const BeginRenderingDesc&& desc)
 
         renderingAttachmentInfos[i] = {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView
-            = t.attachment.type == RHI::Attachment::TextureOrDescriptorHandle::TYPE_TEXTURE
+            .imageView = t.attachment.type == RHI::Attachment::TextureOrDescriptor::TYPE_TEXTURE
                 ? sCtx.textures.GetPtr(t.attachment.texture)->view
                 : sCtx.texturesDescriptors.GetPtr(t.attachment.descriptor)->view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
@@ -2441,7 +2426,7 @@ void RHI::CmdBeginRendering(const BeginRenderingDesc&& desc)
     }
 
     const bool depthAttachmentExists
-        = desc.depthTarget.attachment.type != RHI::Attachment::TextureOrDescriptorHandle::TYPE_NONE;
+        = desc.depthTarget.attachment.type != RHI::Attachment::TextureOrDescriptor::TYPE_NONE;
 
     VkRenderingAttachmentInfo depthAttachmentInfo{};
 
@@ -2449,8 +2434,8 @@ void RHI::CmdBeginRendering(const BeginRenderingDesc&& desc)
     {
         depthAttachmentInfo = {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = desc.depthTarget.attachment.type
-                    == RHI::Attachment::TextureOrDescriptorHandle::TYPE_TEXTURE
+            .imageView
+            = desc.depthTarget.attachment.type == RHI::Attachment::TextureOrDescriptor::TYPE_TEXTURE
                 ? sCtx.textures.GetPtr(desc.depthTarget.attachment.texture)->view
                 : sCtx.texturesDescriptors.GetPtr(desc.depthTarget.attachment.descriptor)->view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
@@ -2474,7 +2459,7 @@ void RHI::CmdBeginRendering(const BeginRenderingDesc&& desc)
     vkCmdBeginRendering(sCtx.commandBuffers.GetPtr(desc.cb)->commandBuffer, &renderingInfo);
 }
 
-void RHI::CmdEndRendering(RHI::CommandBufferHandle cb)
+void RHI::CmdEndRendering(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
@@ -2482,8 +2467,8 @@ void RHI::CmdEndRendering(RHI::CommandBufferHandle cb)
 }
 
 void RHI::CmdBindIndexBuffer(
-    RHI::CommandBufferHandle cb,
-    RHI::BufferHandle buffer,
+    RHI::CommandBuffer cb,
+    RHI::Buffer buffer,
     u64 offset,
     RHI::IndexType indexType
 )
@@ -2500,7 +2485,7 @@ void RHI::CmdBindIndexBuffer(
 }
 
 void RHI::CmdDraw(
-    RHI::CommandBufferHandle cb,
+    RHI::CommandBuffer cb,
     u32 vertexCount,
     u32 instanceCount,
     u32 firstVertex,
@@ -2521,7 +2506,7 @@ void RHI::CmdDraw(
 }
 
 void RHI::CmdDrawIndexed(
-    RHI::CommandBufferHandle cb,
+    RHI::CommandBuffer cb,
     u32 indexCount,
     u32 instanceCount,
     u32 firstIndex,
@@ -2543,13 +2528,7 @@ void RHI::CmdDrawIndexed(
     );
 }
 
-void RHI::CmdDrawIndirect(
-    CommandBufferHandle cb,
-    BufferHandle buffer,
-    u64 offset,
-    u32 drawCount,
-    u32 stride
-)
+void RHI::CmdDrawIndirect(CommandBuffer cb, Buffer buffer, u64 offset, u32 drawCount, u32 stride)
 {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(buffer);
@@ -2565,10 +2544,10 @@ void RHI::CmdDrawIndirect(
 }
 
 void RHI::CmdDrawIndexedIndirectCount(
-    RHI::CommandBufferHandle cb,
-    RHI::BufferHandle buffer,
+    RHI::CommandBuffer cb,
+    RHI::Buffer buffer,
     u64 offset,
-    RHI::BufferHandle countBuffer,
+    RHI::Buffer countBuffer,
     u64 countBufferOffset,
     u32 maxDrawCount,
     u32 stride
@@ -2590,12 +2569,12 @@ void RHI::CmdDrawIndexedIndirectCount(
     );
 }
 
-void RHI::CmdBindTextureDescriptorSet(CommandBufferHandle cb, RHI::PipelineHandle pipeline)
+void RHI::CmdBindTextureDescriptorSet(CommandBuffer cb, RHI::Pipeline pipeline)
 {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(pipeline);
 
-    const Pipeline* const vkPipeline = sCtx.pipelines.GetPtr(pipeline);
+    const PipelineImpl* const vkPipeline = sCtx.pipelines.GetPtr(pipeline);
 
     vkCmdBindDescriptorSets(
         sCtx.commandBuffers.GetPtr(cb)->commandBuffer,
@@ -2735,7 +2714,7 @@ void RHI::CreateSwapchain(U32Vec2 size)
         images.data()
     ));
 
-    std::vector<Texture> textures(swapchainTextureCount);
+    std::vector<TextureImpl> textures(swapchainTextureCount);
 
     for (u32 i = 0; i < swapchainTextureCount; ++i)
     {
@@ -2798,7 +2777,7 @@ void RHI::DestroySwapchain()
 
     for (size_t i = 0; i < sCtx.swapchain.textures.size(); ++i)
     {
-        Texture* const t = sCtx.textures.GetPtr(sCtx.swapchain.textures[i]);
+        TextureImpl* const t = sCtx.textures.GetPtr(sCtx.swapchain.textures[i]);
         vkDestroyImageView(sCtx.device, t->view, nullptr);
         vkDestroySemaphore(sCtx.device, sCtx.swapchain.readyToPresentSemaphores[i], nullptr);
         sCtx.textures.DestroyHandle(sCtx.swapchain.textures[i]);
@@ -2808,7 +2787,7 @@ void RHI::DestroySwapchain()
     sCtx.swapchain.swapchain = VK_NULL_HANDLE;
 }
 
-RHI::SwapchainResult RHI::AcquireNextSwapchainTexture(RHI::TextureHandle& swapchainTextureHandle)
+RHI::SwapchainResult RHI::AcquireNextSwapchainTexture(RHI::Texture& swapchainTexture)
 {
     const VkResult vulkanResult = vkAcquireNextImageKHR(
         sCtx.device,
@@ -2819,7 +2798,7 @@ RHI::SwapchainResult RHI::AcquireNextSwapchainTexture(RHI::TextureHandle& swapch
         &sCtx.imageIdx
     );
 
-    swapchainTextureHandle = sCtx.swapchain.textures[sCtx.imageIdx];
+    swapchainTexture = sCtx.swapchain.textures[sCtx.imageIdx];
 
     switch (vulkanResult)
     {
@@ -2834,7 +2813,7 @@ RHI::SwapchainResult RHI::AcquireNextSwapchainTexture(RHI::TextureHandle& swapch
     }
 }
 
-RHI::TextureHandle RHI::GetSwapchainTexture(u32 idx)
+RHI::Texture RHI::GetSwapchainTexture(u32 idx)
 {
     DEBUG_ASSERT(idx < sCtx.swapchain.textures.size());
     return sCtx.swapchain.textures[idx];

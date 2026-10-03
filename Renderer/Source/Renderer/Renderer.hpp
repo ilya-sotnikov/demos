@@ -27,7 +27,7 @@ struct Renderer
 
     struct Semaphore
     {
-        RHI::SemaphoreHandle semaphore;
+        RHI::Semaphore semaphore;
         u64 value;
 
         u64 Inc()
@@ -41,76 +41,76 @@ struct Renderer
         Semaphore startSemaphore;
         Semaphore shadowSemaphore;
         Semaphore ssaoSemaphore;
-        RHI::CommandBufferHandle startCommandBuffer;
-        RHI::CommandBufferHandle shadowCommandBuffer;
-        RHI::CommandBufferHandle ssaoCommandBuffer;
-        RHI::CommandBufferHandle endCommandBuffer;
-        RHI::BufferHandle uniformBuffer;
-        RHI::TextureHandle resolvedRenderTexture;
+        RHI::CommandBuffer startCommandBuffer;
+        RHI::CommandBuffer shadowCommandBuffer;
+        RHI::CommandBuffer ssaoCommandBuffer;
+        RHI::CommandBuffer endCommandBuffer;
+        RHI::Buffer uniformBuffer;
+        RHI::Texture resolvedRenderTexture;
     };
 
     Arena mScratchArena;
     SDL_Window* mWindow;
-    RHI::SemaphoreHandle mFrameSemaphore;
-    RHI::TextureHandle mVisibilityTexture;
-    RHI::TextureHandle mRenderTexture;
-    RHI::TextureHandle mVelocityTexture;
-    RHI::TextureHandle mAmbientOcclusionTexture;
-    RHI::TextureHandle mAmbientOcclusionBlurredHorizontalTexture;
-    RHI::TextureHandle mAmbientOcclusionBlurredVerticalTexture;
-    RHI::TextureHandle mAmbientOcclusionUpsampledTexture;
-    RHI::TextureHandle mShadowTexture;
-    RHI::TextureHandle mShadowPcfJitterTexture;
-    RHI::TextureHandle mFogTexture;
-    RHI::TextureHandle mFogBlurredHorizontalTexture;
-    RHI::TextureHandle mFogBlurredVerticalTexture;
-    RHI::TextureDescriptorHandle mShadowTextureDescriptorCascade[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    RHI::TextureHandle mDepthTexture;
-    RHI::TextureHandle mDepthViewQuarterResTexture;
-    RHI::TextureHandle mDepthPyramidTexture;
-    std::vector<RHI::TextureDescriptorHandle> mDepthPyramidMipTextureDescriptors;
-    RHI::PipelineHandle mVisibilityPipeline;
-    RHI::PipelineHandle mDepthViewQuarterResPipeline;
-    RHI::PipelineHandle mAmbientOcclusionPipeline;
-    RHI::PipelineHandle mAmbientOcclusionBlurPipeline;
-    RHI::PipelineHandle mAmbientOcclusionUpsamplePipeline;
-    RHI::PipelineHandle mFogPipeline;
-    RHI::PipelineHandle mBlurFogPipeline;
-    RHI::PipelineHandle mShadowCullPipeline;
-    RHI::PipelineHandle mShadowPipeline;
-    RHI::PipelineHandle mVisibilityRenderPipeline;
-    RHI::PipelineHandle mFullscreenPipeline;
-    RHI::PipelineHandle mCullEarlyPipeline;
-    RHI::PipelineHandle mCullLatePipeline;
-    RHI::PipelineHandle mTaaResolvePipeline;
-    RHI::PipelineHandle mDebugGradErrorPipeline;
-    RHI::PipelineHandle mDepthReducePipeline;
-    RHI::PipelineHandle mDebugDrawRectPipeline;
-    RHI::PipelineHandle mDebugDrawFillCmdPipeline;
-    RHI::BufferHandle mVertexBuffer;
-    RHI::BufferHandle mIndexBuffer;
-    RHI::BufferHandle mDrawCmdBuffer1;
-    RHI::BufferHandle mDrawCmdEarlyBuffer2;
-    RHI::BufferHandle mDrawCmdLateBuffer2;
-    RHI::BufferHandle mDrawCmdShadowBuffer;
-    RHI::BufferHandle mDrawIndicesEarlyBuffer;
-    RHI::BufferHandle mDrawIndicesLateBuffer;
-    RHI::BufferHandle mDrawIndicesShadowBuffer;
-    RHI::BufferHandle mMaterialBuffer;
-    RHI::BufferHandle mDrawDataBuffer;
-    RHI::BufferHandle mDrawCountBuffer;
-    RHI::BufferHandle mMeshPrimitiveVisibleBuffer;
-    RHI::BufferHandle mDebugDrawCountBuffer;
-    RHI::BufferHandle mDebugDrawRectBuffer;
-    RHI::BufferHandle mDebugDrawCmdBuffer;
+    RHI::Semaphore mFrameSemaphore;
+    RHI::Texture mVisibilityTexture;
+    RHI::Texture mRenderTexture;
+    RHI::Texture mVelocityTexture;
+    RHI::Texture mAmbientOcclusionTexture;
+    RHI::Texture mAmbientOcclusionBlurredHorizontalTexture;
+    RHI::Texture mAmbientOcclusionBlurredVerticalTexture;
+    RHI::Texture mAmbientOcclusionUpsampledTexture;
+    RHI::Texture mShadowTexture;
+    RHI::Texture mShadowPcfJitterTexture;
+    RHI::Texture mFogTexture;
+    RHI::Texture mFogBlurredHorizontalTexture;
+    RHI::Texture mFogBlurredVerticalTexture;
+    RHI::TextureDescriptor mShadowTextureDescriptorCascade[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+    RHI::Texture mDepthTexture;
+    RHI::Texture mDepthViewQuarterResTexture;
+    RHI::Texture mDepthPyramidTexture;
+    std::vector<RHI::TextureDescriptor> mDepthPyramidMipTextureDescriptors;
+    RHI::Pipeline mVisibilityPipeline;
+    RHI::Pipeline mDepthViewQuarterResPipeline;
+    RHI::Pipeline mAmbientOcclusionPipeline;
+    RHI::Pipeline mAmbientOcclusionBlurPipeline;
+    RHI::Pipeline mAmbientOcclusionUpsamplePipeline;
+    RHI::Pipeline mFogPipeline;
+    RHI::Pipeline mBlurFogPipeline;
+    RHI::Pipeline mShadowCullPipeline;
+    RHI::Pipeline mShadowPipeline;
+    RHI::Pipeline mVisibilityRenderPipeline;
+    RHI::Pipeline mFullscreenPipeline;
+    RHI::Pipeline mCullEarlyPipeline;
+    RHI::Pipeline mCullLatePipeline;
+    RHI::Pipeline mTaaResolvePipeline;
+    RHI::Pipeline mDebugGradErrorPipeline;
+    RHI::Pipeline mDepthReducePipeline;
+    RHI::Pipeline mDebugDrawRectPipeline;
+    RHI::Pipeline mDebugDrawFillCmdPipeline;
+    RHI::Buffer mVertexBuffer;
+    RHI::Buffer mIndexBuffer;
+    RHI::Buffer mDrawCmdBuffer1;
+    RHI::Buffer mDrawCmdEarlyBuffer2;
+    RHI::Buffer mDrawCmdLateBuffer2;
+    RHI::Buffer mDrawCmdShadowBuffer;
+    RHI::Buffer mDrawIndicesEarlyBuffer;
+    RHI::Buffer mDrawIndicesLateBuffer;
+    RHI::Buffer mDrawIndicesShadowBuffer;
+    RHI::Buffer mMaterialBuffer;
+    RHI::Buffer mDrawDataBuffer;
+    RHI::Buffer mDrawCountBuffer;
+    RHI::Buffer mMeshPrimitiveVisibleBuffer;
+    RHI::Buffer mDebugDrawCountBuffer;
+    RHI::Buffer mDebugDrawRectBuffer;
+    RHI::Buffer mDebugDrawCmdBuffer;
     ImguiRenderer mImguiRenderer;
-    RHI::SamplerHandle mTextureSampler;
-    RHI::SamplerHandle mLinearSampler;
-    RHI::SamplerHandle mNearestSampler;
-    RHI::SamplerHandle mMinSampler;
-    RHI::SamplerHandle mShadowSampler;
-    RHI::SamplerHandle mShadowPcfJitterSampler;
-    std::vector<RHI::TextureHandle> mTextures;
+    RHI::Sampler mTextureSampler;
+    RHI::Sampler mLinearSampler;
+    RHI::Sampler mNearestSampler;
+    RHI::Sampler mMinSampler;
+    RHI::Sampler mShadowSampler;
+    RHI::Sampler mShadowPcfJitterSampler;
+    std::vector<RHI::Texture> mTextures;
     U32Vec2 mWindowSize;
     Frame mFrame[RHI::FRAMES_IN_FLIGHT];
     f32 mShadowCascadeRadii[RENDERER_SHADOW_MAP_CASCADE_COUNT];
@@ -142,39 +142,39 @@ private:
     bool UploadTextures(const std::vector<std::string>& texturePaths);
     void UpdateShadowCascades();
 
-    void VisibilityBufferPass(RHI::CommandBufferHandle cb, bool cullLate);
-    void CullPass(RHI::CommandBufferHandle cb, bool late);
-    void DepthReducePass(RHI::CommandBufferHandle cb);
+    void VisibilityBufferPass(RHI::CommandBuffer cb, bool cullLate);
+    void CullPass(RHI::CommandBuffer cb, bool late);
+    void DepthReducePass(RHI::CommandBuffer cb);
 
-    void DepthViewQuarterResPass(RHI::CommandBufferHandle cb);
-    void AmbientOcclusionPass(RHI::CommandBufferHandle cb);
-    void AmbientOcclusionBlurPass(RHI::CommandBufferHandle cb, bool horizontal);
-    void AmbientOcclusionUpsamplePass(RHI::CommandBufferHandle cb);
+    void DepthViewQuarterResPass(RHI::CommandBuffer cb);
+    void AmbientOcclusionPass(RHI::CommandBuffer cb);
+    void AmbientOcclusionBlurPass(RHI::CommandBuffer cb, bool horizontal);
+    void AmbientOcclusionUpsamplePass(RHI::CommandBuffer cb);
 
-    void ShadowCullPass(RHI::CommandBufferHandle cb);
-    void ShadowPass(RHI::CommandBufferHandle cb);
+    void ShadowCullPass(RHI::CommandBuffer cb);
+    void ShadowPass(RHI::CommandBuffer cb);
 
-    void FogPass(RHI::CommandBufferHandle cb);
-    void BlurFogPass(RHI::CommandBufferHandle cb, bool horizontal);
+    void FogPass(RHI::CommandBuffer cb);
+    void BlurFogPass(RHI::CommandBuffer cb, bool horizontal);
 
-    void RenderPass(RHI::CommandBufferHandle cb);
-    void TaaResolvePass(RHI::CommandBufferHandle cb);
-    void DebugDrawPass(RHI::CommandBufferHandle cb);
-    void FullscreenPass(RHI::CommandBufferHandle cb, RHI::TextureHandle swapchainTexture);
+    void RenderPass(RHI::CommandBuffer cb);
+    void TaaResolvePass(RHI::CommandBuffer cb);
+    void DebugDrawPass(RHI::CommandBuffer cb);
+    void FullscreenPass(RHI::CommandBuffer cb, RHI::Texture swapchainTexture);
 
     void DebugDrawGradErrorPass(
-        RHI::CommandBufferHandle cb,
+        RHI::CommandBuffer cb,
         bool cullLate,
-        RHI::TextureHandle swapchainTexture
+        RHI::Texture swapchainTexture
     );
 
-    bool RecordAndSubmitDebugGradError(RHI::TextureHandle swapchainTexture);
-    bool RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture);
-    bool CreateSwapchain(U32Vec2 size);
+    void RecordAndSubmitDebugGradError(RHI::Texture swapchainTexture);
+    void RecordAndSubmitVisibility(RHI::Texture swapchainTexture);
+    void CreateSwapchain(U32Vec2 size);
     void CleanupSwapchain();
-    bool CreateColorResources();
+    void CreateColorResources();
     void CleanupColorResources();
-    bool CreateDepthResources();
+    void CreateDepthResources();
     void CleanupDepthResources();
     void CleanupPipelines();
 };

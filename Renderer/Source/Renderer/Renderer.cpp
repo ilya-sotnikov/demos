@@ -41,9 +41,9 @@ static U32Vec3 CalcDispatchSize(U32Vec2 textureSize, U32Vec3 localSize)
 }
 
 static void CmdDispatchOverTextureSize(
-    RHI::CommandBufferHandle cb,
-    RHI::PipelineHandle pipeline,
-    RHI::TextureHandle texture
+    RHI::CommandBuffer cb,
+    RHI::Pipeline pipeline,
+    RHI::Texture texture
 )
 {
     RHI::CmdDispatch(
@@ -56,7 +56,7 @@ static void CmdDispatchOverTextureSize(
 }
 
 [[maybe_unused]]
-static void CmdFullBarrier(RHI::CommandBufferHandle cb)
+static void CmdFullBarrier(RHI::CommandBuffer cb)
 {
     RHI::CmdBarrier(
         cb,
@@ -210,10 +210,7 @@ bool Renderer::Init()
         return false;
     }
 
-    if (!CreateSwapchain({u32(width), u32(height)}))
-    {
-        return false;
-    }
+    CreateSwapchain({u32(width), u32(height)});
 
     // Buffers.
     {
@@ -228,10 +225,6 @@ bool Renderer::Init()
                 .size = sizeof(UniformData),
                 .debugName = "UniformBuffer",
             });
-            if (!mFrame[i].uniformBuffer)
-            {
-                return false;
-            }
         }
 
         mDrawCountBuffer = RHI::CreateBuffer({
@@ -239,50 +232,30 @@ bool Renderer::Init()
             .size = sizeof(u32),
             .debugName = "DrawCountBuffer",
         });
-        if (!mDrawCountBuffer)
-        {
-            return false;
-        }
 
         mMeshPrimitiveVisibleBuffer = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(u32) * MAX_DRAW_CALLS,
             .debugName = "MeshPrimitiveVisibleBuffer",
         });
-        if (!mMeshPrimitiveVisibleBuffer)
-        {
-            return false;
-        }
 
         mDebugDrawCountBuffer = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(u32) * 1, // TODO: maybe enum max count for offsets?
             .debugName = "DebugDrawCountBuffer",
         });
-        if (!mDebugDrawCountBuffer)
-        {
-            return false;
-        }
 
         mDebugDrawRectBuffer = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(DebugDrawRectData) * RENDERER_DEBUG_DRAW_RECT_MAX_COUNT,
             .debugName = "DebugDrawRectBuffer",
         });
-        if (!mDebugDrawRectBuffer)
-        {
-            return false;
-        }
 
         mDebugDrawCmdBuffer = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(RHI::DrawIndirectCommand),
             .debugName = "DebugDrawCmdBuffer",
         });
-        if (!mDebugDrawCmdBuffer)
-        {
-            return false;
-        }
     }
 
     mShadowTexture = RHI::CreateTexture({
@@ -293,10 +266,6 @@ bool Renderer::Init()
         .usage = RHI::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "ShadowTexture",
     });
-    if (!mShadowTexture)
-    {
-        return false;
-    }
 
     if (!RecompilePipelines())
     {
@@ -306,28 +275,12 @@ bool Renderer::Init()
     // Synchronization primitives.
     {
         mFrameSemaphore = RHI::CreateSemaphore(0);
-        if (!mFrameSemaphore)
-        {
-            return false;
-        }
 
         for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
         {
             mFrame[i].startSemaphore.semaphore = RHI::CreateSemaphore(0);
-            if (!mFrame[i].startSemaphore.semaphore)
-            {
-                return false;
-            }
             mFrame[i].shadowSemaphore.semaphore = RHI::CreateSemaphore(0);
-            if (!mFrame[i].shadowSemaphore.semaphore)
-            {
-                return false;
-            }
             mFrame[i].ssaoSemaphore.semaphore = RHI::CreateSemaphore(0);
-            if (!mFrame[i].ssaoSemaphore.semaphore)
-            {
-                return false;
-            }
         }
     }
 
@@ -337,25 +290,17 @@ bool Renderer::Init()
         for (int i = 0; i < RENDERER_SHADOW_MAP_CASCADE_COUNT; ++i)
         {
             mShadowTextureDescriptorCascade[i] = RHI::CreateTextureDescriptor({
-                .textureHandle = mShadowTexture,
+                .texture = mShadowTexture,
                 .type = RHI::TEXTURE_TYPE_2D,
                 .baseLayer = u32(i),
                 .layerCount = 1,
             });
-            if (!mShadowTextureDescriptorCascade[i])
-            {
-                return false;
-            }
         }
 
         mShadowSampler = RHI::CreateSampler({
             .compareEnable = true,
             .compareOp = RHI::COMPARE_OP_GREATER,
         });
-        if (!mShadowSampler)
-        {
-            return false;
-        }
 
         // PCF jitter offsets.
         {
@@ -371,10 +316,6 @@ bool Renderer::Init()
                 .usage = RHI::TEXTURE_USAGE_TRANSFER_DST_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
                 .debugName = "ShadowPcfJitterTexture",
             });
-            if (!mShadowPcfJitterTexture)
-            {
-                return false;
-            }
 
             const std::vector<i8> jitterOffsets = CreateShadowJitterOffsets(
                 RENDERER_SHADOW_MAP_JITTER_OFFSETS_SIZE,
@@ -383,23 +324,15 @@ bool Renderer::Init()
             );
 
             const u64 uploadSize = VEC_SIZE_BYTES(jitterOffsets);
-            RHI::BufferHandle stagingBuffer = RHI::CreateBuffer({
+            RHI::Buffer stagingBuffer = RHI::CreateBuffer({
                 .size = uploadSize,
                 .debugName = "StagingBuffer",
             });
-            if (!stagingBuffer)
-            {
-                return false;
-            }
             DEFER(RHI::DestroyBuffer(stagingBuffer));
 
             memcpy(RHI::GetBufferHostPtr(stagingBuffer), jitterOffsets.data(), uploadSize);
 
-            RHI::CommandBufferHandle cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
-            if (!cb)
-            {
-                return false;
-            }
+            RHI::CommandBuffer cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
             DEFER(RHI::DestroyCommandBuffer(cb));
 
             RHI::BeginCommandBuffer(cb);
@@ -407,7 +340,7 @@ bool Renderer::Init()
             RHI::CmdTextureBarrier(
                 cb,
                 {{
-                    .handle = mShadowPcfJitterTexture,
+                    .texture = mShadowPcfJitterTexture,
                     .oldLayout = RHI::TEXTURE_LAYOUT_UNDEFINED,
                     .newLayout = RHI::TEXTURE_LAYOUT_GENERAL,
                     .srcStageMask = RHI::STAGE_HOST_BIT,
@@ -452,10 +385,6 @@ bool Renderer::Init()
                 .addressModeV = RHI::SAMPLER_ADDRESS_MODE_REPEAT,
                 .addressModeW = RHI::SAMPLER_ADDRESS_MODE_REPEAT,
             });
-            if (!mShadowPcfJitterSampler)
-            {
-                return false;
-            }
         }
     }
 
@@ -469,34 +398,18 @@ bool Renderer::Init()
             .maxAnisotropy = 4.0f,
             .maxLod = 16.0f,
         });
-        if (!mTextureSampler)
-        {
-            return false;
-        }
 
         mLinearSampler = RHI::CreateSampler({});
-        if (!mLinearSampler)
-        {
-            return false;
-        }
 
         mNearestSampler = RHI::CreateSampler({
             .magFilter = RHI::FILTER_NEAREST,
             .minFilter = RHI::FILTER_NEAREST,
         });
-        if (!mNearestSampler)
-        {
-            return false;
-        }
 
         mMinSampler = RHI::CreateSampler({
             .reductionMode = RHI::SAMPLER_REDUCTION_MODE_MIN,
             .maxLod = 16.0f,
         });
-        if (!mMinSampler)
-        {
-            return false;
-        }
     }
 
     // Scene.
@@ -539,10 +452,6 @@ bool Renderer::Init()
             .size = VEC_SIZE_BYTES(vertices),
             .debugName = "VertexBuffer",
         });
-        if (!mVertexBuffer)
-        {
-            return false;
-        }
         memcpy(RHI::GetBufferHostPtr(mVertexBuffer), vertices.data(), VEC_SIZE_BYTES(vertices));
         RHI::UnmapBuffer(mVertexBuffer);
 
@@ -550,10 +459,6 @@ bool Renderer::Init()
             .size = VEC_SIZE_BYTES(indices),
             .debugName = "IndexBuffer",
         });
-        if (!mIndexBuffer)
-        {
-            return false;
-        }
         memcpy(RHI::GetBufferHostPtr(mIndexBuffer), indices.data(), VEC_SIZE_BYTES(indices));
         RHI::UnmapBuffer(mIndexBuffer);
 
@@ -561,88 +466,52 @@ bool Renderer::Init()
             .size = sizeof(RHI::DrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
             .debugName = "DrawCmdBuffer1",
         });
-        if (!mDrawCmdBuffer1)
-        {
-            return false;
-        }
 
         mDrawCmdEarlyBuffer2 = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(RHI::DrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
             .debugName = "DrawCmdEarlyBuffer2",
         });
-        if (!mDrawCmdEarlyBuffer2)
-        {
-            return false;
-        }
 
         mDrawCmdLateBuffer2 = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(RHI::DrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
             .debugName = "DrawCmdLateBuffer2",
         });
-        if (!mDrawCmdLateBuffer2)
-        {
-            return false;
-        }
 
         mDrawCmdShadowBuffer = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(RHI::DrawIndexedIndirectCommand) * MAX_DRAW_CALLS,
             .debugName = "DrawCmdShadowBuffer",
         });
-        if (!mDrawCmdShadowBuffer)
-        {
-            return false;
-        }
 
         mDrawIndicesEarlyBuffer = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(u32) * MAX_DRAW_CALLS,
             .debugName = "DrawIndicesEarlyBuffer",
         });
-        if (!mDrawIndicesEarlyBuffer)
-        {
-            return false;
-        }
 
         mDrawIndicesLateBuffer = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(u32) * MAX_DRAW_CALLS,
             .debugName = "DrawIndicesLateBuffer",
         });
-        if (!mDrawIndicesLateBuffer)
-        {
-            return false;
-        }
 
         mDrawIndicesShadowBuffer = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(u32) * MAX_DRAW_CALLS,
             .debugName = "DrawIndicesShadowBuffer",
         });
-        if (!mDrawIndicesShadowBuffer)
-        {
-            return false;
-        }
 
         mMaterialBuffer = RHI::CreateBuffer({
             .size = sizeof(Material) * MAX_DRAW_CALLS,
             .debugName = "MaterialBuffer",
         });
-        if (!mMaterialBuffer)
-        {
-            return false;
-        }
 
         mDrawDataBuffer = RHI::CreateBuffer({
             .size = sizeof(DrawData) * MAX_DRAW_CALLS,
             .debugName = "DrawDataBuffer",
         });
-        if (!mDrawDataBuffer)
-        {
-            return false;
-        }
 
         memcpy(RHI::GetBufferHostPtr(mDrawCmdBuffer1), drawCmds.data(), VEC_SIZE_BYTES(drawCmds));
 
@@ -655,25 +524,9 @@ bool Renderer::Init()
     for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
     {
         mFrame[i].startCommandBuffer = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS, i, "Start");
-        if (!mFrame[i].startCommandBuffer)
-        {
-            return false;
-        }
         mFrame[i].shadowCommandBuffer = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS, i, "Shadow");
-        if (!mFrame[i].shadowCommandBuffer)
-        {
-            return false;
-        }
         mFrame[i].ssaoCommandBuffer = RHI::CreateCommandBuffer(RHI::QUEUE_COMPUTE, i, "SSAO");
-        if (!mFrame[i].ssaoCommandBuffer)
-        {
-            return false;
-        }
         mFrame[i].endCommandBuffer = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS, i, "End");
-        if (!mFrame[i].endCommandBuffer)
-        {
-            return false;
-        }
     }
 
     if (!mImguiRenderer.Init(mWindow, RHI::GetTextureFormat(RHI::GetSwapchainTexture(0))))
@@ -684,11 +537,7 @@ bool Renderer::Init()
 
     // Initializing resources.
     {
-        RHI::CommandBufferHandle cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
-        if (!cb)
-        {
-            return false;
-        }
+        RHI::CommandBuffer cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
         DEFER(RHI::DestroyCommandBuffer(cb));
 
         RHI::BeginCommandBuffer(cb);
@@ -742,7 +591,7 @@ void Renderer::Cleanup()
     CleanupColorResources();
     CleanupDepthResources();
 
-    for (RHI::TextureHandle& tex : mTextures)
+    for (RHI::Texture& tex : mTextures)
     {
         RHI::DestroyTexture(tex);
     }
@@ -840,11 +689,7 @@ bool Renderer::Render(f32 deltaTime)
     if (mSwapchainNeedsRecreating)
     {
         mSwapchainNeedsRecreating = false;
-
-        if (!CreateSwapchain(mWindowSize))
-        {
-            return false;
-        }
+        CreateSwapchain(mWindowSize);
     }
 
     Frame& frame = mFrame[mFrameIdx];
@@ -854,11 +699,7 @@ bool Renderer::Render(f32 deltaTime)
     {
         RHI::DeviceWaitIdle();
 
-        RHI::CommandBufferHandle cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
-        if (!cb)
-        {
-            return false;
-        }
+        RHI::CommandBuffer cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
         DEFER(RHI::DestroyCommandBuffer(cb));
 
         RHI::BeginCommandBuffer(cb);
@@ -878,7 +719,7 @@ bool Renderer::Render(f32 deltaTime)
         RHI::DeviceWaitIdle();
     }
 
-    RHI::TextureHandle swapchainTextureHandle{};
+    RHI::Texture swapchainTextureHandle{};
     RHI::SwapchainResult swapchainResult = RHI::AcquireNextSwapchainTexture(swapchainTextureHandle);
 
     if (swapchainResult == RHI::SWAPCHAIN_OUT_OF_DATE)
@@ -949,16 +790,10 @@ bool Renderer::Render(f32 deltaTime)
     switch (mUniformData.renderMode)
     {
     case RENDER_MODE_GRAD_ERROR:
-        if (!RecordAndSubmitDebugGradError(swapchainTextureHandle))
-        {
-            return false;
-        }
+        RecordAndSubmitDebugGradError(swapchainTextureHandle);
         break;
     default:
-        if (!RecordAndSubmitVisibility(swapchainTextureHandle))
-        {
-            return false;
-        }
+        RecordAndSubmitVisibility(swapchainTextureHandle);
         break;
     }
 
@@ -1393,19 +1228,11 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
             .usage = RHI::TEXTURE_USAGE_SAMPLED_BIT | RHI::TEXTURE_USAGE_TRANSFER_DST_BIT,
             .debugName = texturePaths[i].c_str(),
         });
-        if (!mTextures[i])
-        {
-            return false;
-        }
 
-        RHI::BufferHandle stagingBuffer = RHI::CreateBuffer({
+        RHI::Buffer stagingBuffer = RHI::CreateBuffer({
             .size = size,
             .debugName = "StagingBuffer",
         });
-        if (!stagingBuffer)
-        {
-            return false;
-        }
         DEFER(RHI::DestroyBuffer(stagingBuffer));
 
         std::vector<RHI::BufferTextureCopy> copyRegions(mipLevels);
@@ -1433,11 +1260,7 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
         memcpy(RHI::GetBufferHostPtr(stagingBuffer), ktxData, size);
         RHI::UnmapBuffer(stagingBuffer);
 
-        RHI::CommandBufferHandle cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
-        if (!cb)
-        {
-            return false;
-        }
+        RHI::CommandBuffer cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
         DEFER(RHI::DestroyCommandBuffer(cb));
 
         RHI::BeginCommandBuffer(cb);
@@ -1445,7 +1268,7 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
         RHI::CmdTextureBarrier(
             cb,
             {{
-                .handle = mTextures[i],
+                .texture = mTextures[i],
                 .oldLayout = RHI::TEXTURE_LAYOUT_UNDEFINED,
                 .newLayout = RHI::TEXTURE_LAYOUT_GENERAL,
                 .dstStageMask = RHI::STAGE_TRANSFER_BIT,
@@ -1523,11 +1346,11 @@ void Renderer::UpdateShadowCascades()
     }
 }
 
-void Renderer::VisibilityBufferPass(RHI::CommandBufferHandle cb, bool cullLate)
+void Renderer::VisibilityBufferPass(RHI::CommandBuffer cb, bool cullLate)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mVisibilityPipeline;
+    const RHI::Pipeline pipeline = mVisibilityPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1587,11 +1410,11 @@ void Renderer::VisibilityBufferPass(RHI::CommandBufferHandle cb, bool cullLate)
     RHI::CmdEndRendering(cb);
 }
 
-void Renderer::CullPass(RHI::CommandBufferHandle cb, bool late)
+void Renderer::CullPass(RHI::CommandBuffer cb, bool late)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = late ? mCullLatePipeline : mCullEarlyPipeline;
+    const RHI::Pipeline pipeline = late ? mCullLatePipeline : mCullEarlyPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1623,11 +1446,11 @@ void Renderer::CullPass(RHI::CommandBufferHandle cb, bool late)
     );
 }
 
-void Renderer::DepthReducePass(RHI::CommandBufferHandle cb)
+void Renderer::DepthReducePass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mDepthReducePipeline;
+    const RHI::Pipeline pipeline = mDepthReducePipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1675,11 +1498,11 @@ void Renderer::DepthReducePass(RHI::CommandBufferHandle cb)
     }
 }
 
-void Renderer::DepthViewQuarterResPass(RHI::CommandBufferHandle cb)
+void Renderer::DepthViewQuarterResPass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mDepthViewQuarterResPipeline;
+    const RHI::Pipeline pipeline = mDepthViewQuarterResPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1696,11 +1519,11 @@ void Renderer::DepthViewQuarterResPass(RHI::CommandBufferHandle cb)
     CmdDispatchOverTextureSize(cb, pipeline, mDepthViewQuarterResTexture);
 }
 
-void Renderer::AmbientOcclusionPass(RHI::CommandBufferHandle cb)
+void Renderer::AmbientOcclusionPass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mAmbientOcclusionPipeline;
+    const RHI::Pipeline pipeline = mAmbientOcclusionPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1726,11 +1549,11 @@ void Renderer::AmbientOcclusionPass(RHI::CommandBufferHandle cb)
     CmdDispatchOverTextureSize(cb, pipeline, mAmbientOcclusionTexture);
 }
 
-void Renderer::ShadowCullPass(RHI::CommandBufferHandle cb)
+void Renderer::ShadowCullPass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mShadowCullPipeline;
+    const RHI::Pipeline pipeline = mShadowCullPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1759,11 +1582,11 @@ void Renderer::ShadowCullPass(RHI::CommandBufferHandle cb)
     );
 }
 
-void Renderer::ShadowPass(RHI::CommandBufferHandle cb)
+void Renderer::ShadowPass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mShadowPipeline;
+    const RHI::Pipeline pipeline = mShadowPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1823,11 +1646,11 @@ void Renderer::ShadowPass(RHI::CommandBufferHandle cb)
     }
 }
 
-void Renderer::FogPass(RHI::CommandBufferHandle cb)
+void Renderer::FogPass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mFogPipeline;
+    const RHI::Pipeline pipeline = mFogPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1846,11 +1669,11 @@ void Renderer::FogPass(RHI::CommandBufferHandle cb)
     CmdDispatchOverTextureSize(cb, pipeline, mFogTexture);
 }
 
-void Renderer::BlurFogPass(RHI::CommandBufferHandle cb, bool horizontal)
+void Renderer::BlurFogPass(RHI::CommandBuffer cb, bool horizontal)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mBlurFogPipeline;
+    const RHI::Pipeline pipeline = mBlurFogPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1870,11 +1693,11 @@ void Renderer::BlurFogPass(RHI::CommandBufferHandle cb, bool horizontal)
     CmdDispatchOverTextureSize(cb, pipeline, mFogBlurredHorizontalTexture);
 }
 
-void Renderer::AmbientOcclusionBlurPass(RHI::CommandBufferHandle cb, bool horizontal)
+void Renderer::AmbientOcclusionBlurPass(RHI::CommandBuffer cb, bool horizontal)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mAmbientOcclusionBlurPipeline;
+    const RHI::Pipeline pipeline = mAmbientOcclusionBlurPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1897,11 +1720,11 @@ void Renderer::AmbientOcclusionBlurPass(RHI::CommandBufferHandle cb, bool horizo
     CmdDispatchOverTextureSize(cb, pipeline, mAmbientOcclusionBlurredHorizontalTexture);
 }
 
-void Renderer::AmbientOcclusionUpsamplePass(RHI::CommandBufferHandle cb)
+void Renderer::AmbientOcclusionUpsamplePass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mAmbientOcclusionUpsamplePipeline;
+    const RHI::Pipeline pipeline = mAmbientOcclusionUpsamplePipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1921,11 +1744,11 @@ void Renderer::AmbientOcclusionUpsamplePass(RHI::CommandBufferHandle cb)
     CmdDispatchOverTextureSize(cb, pipeline, mAmbientOcclusionUpsampledTexture);
 }
 
-void Renderer::RenderPass(RHI::CommandBufferHandle cb)
+void Renderer::RenderPass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mVisibilityRenderPipeline;
+    const RHI::Pipeline pipeline = mVisibilityRenderPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1961,11 +1784,11 @@ void Renderer::RenderPass(RHI::CommandBufferHandle cb)
     CmdDispatchOverTextureSize(cb, pipeline, mRenderTexture);
 }
 
-void Renderer::TaaResolvePass(RHI::CommandBufferHandle cb)
+void Renderer::TaaResolvePass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
-    const RHI::PipelineHandle pipeline = mTaaResolvePipeline;
+    const RHI::Pipeline pipeline = mTaaResolvePipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -1987,7 +1810,7 @@ void Renderer::TaaResolvePass(RHI::CommandBufferHandle cb)
     CmdDispatchOverTextureSize(cb, pipeline, mFrame[mFrameIdx].resolvedRenderTexture);
 }
 
-void Renderer::DebugDrawPass(RHI::CommandBufferHandle cb)
+void Renderer::DebugDrawPass(RHI::CommandBuffer cb)
 {
     DEBUG_ASSERT(cb);
 
@@ -2049,12 +1872,12 @@ void Renderer::DebugDrawPass(RHI::CommandBufferHandle cb)
     RHI::CmdEndRendering(cb);
 }
 
-void Renderer::FullscreenPass(RHI::CommandBufferHandle cb, RHI::TextureHandle swapchainTexture)
+void Renderer::FullscreenPass(RHI::CommandBuffer cb, RHI::Texture swapchainTexture)
 {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(swapchainTexture);
 
-    const RHI::PipelineHandle pipeline = mFullscreenPipeline;
+    const RHI::Pipeline pipeline = mFullscreenPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -2094,15 +1917,15 @@ void Renderer::FullscreenPass(RHI::CommandBufferHandle cb, RHI::TextureHandle sw
 }
 
 void Renderer::DebugDrawGradErrorPass(
-    RHI::CommandBufferHandle cb,
+    RHI::CommandBuffer cb,
     bool cullLate,
-    RHI::TextureHandle swapchainTexture
+    RHI::Texture swapchainTexture
 )
 {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(swapchainTexture);
 
-    const RHI::PipelineHandle pipeline = mDebugGradErrorPipeline;
+    const RHI::Pipeline pipeline = mDebugGradErrorPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
 
@@ -2159,11 +1982,11 @@ void Renderer::DebugDrawGradErrorPass(
     RHI::CmdEndRendering(cb);
 }
 
-bool Renderer::RecordAndSubmitDebugGradError(RHI::TextureHandle swapchainTexture)
+void Renderer::RecordAndSubmitDebugGradError(RHI::Texture swapchainTexture)
 {
     DEBUG_ASSERT(swapchainTexture);
 
-    const RHI::CommandBufferHandle cb = mFrame[mFrameIdx].startCommandBuffer;
+    const RHI::CommandBuffer cb = mFrame[mFrameIdx].startCommandBuffer;
 
     RHI::BeginCommandBuffer(cb);
 
@@ -2261,10 +2084,7 @@ bool Renderer::RecordAndSubmitDebugGradError(RHI::TextureHandle swapchainTexture
 
     DebugDrawGradErrorPass(cb, true, swapchainTexture);
 
-    if (!mImguiRenderer.UpdateVertexIndexBuffers(static_cast<u32>(mFrameIdx)))
-    {
-        return false;
-    }
+    mImguiRenderer.UpdateVertexIndexBuffers(u32(mFrameIdx));
 
     // TODO: separate pass.
     if (mEnableUI)
@@ -2281,10 +2101,7 @@ bool Renderer::RecordAndSubmitDebugGradError(RHI::TextureHandle swapchainTexture
             }},
         });
 
-        if (!mImguiRenderer.Render(cb, u32(mFrameIdx)))
-        {
-            return false;
-        }
+        mImguiRenderer.Render(cb, u32(mFrameIdx));
 
         RHI::CmdEndRendering(cb);
     }
@@ -2315,15 +2132,13 @@ bool Renderer::RecordAndSubmitDebugGradError(RHI::TextureHandle swapchainTexture
             },
         }}
     );
-
-    return true;
 }
 
-bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
+void Renderer::RecordAndSubmitVisibility(RHI::Texture swapchainTexture)
 {
     Frame& frame = mFrame[mFrameIdx];
 
-    const RHI::CommandBufferHandle cbStart = frame.startCommandBuffer;
+    const RHI::CommandBuffer cbStart = frame.startCommandBuffer;
     RHI::BeginCommandBuffer(cbStart);
 
     RHI::CmdTextureInvalidateBarrier(
@@ -2438,7 +2253,7 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
         }}
     );
 
-    const RHI::CommandBufferHandle cbSSAO = frame.ssaoCommandBuffer;
+    const RHI::CommandBuffer cbSSAO = frame.ssaoCommandBuffer;
     RHI::BeginCommandBuffer(cbSSAO);
 
     DepthViewQuarterResPass(cbSSAO);
@@ -2498,7 +2313,7 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
         }}
     );
 
-    const RHI::CommandBufferHandle cbShadow = frame.shadowCommandBuffer;
+    const RHI::CommandBuffer cbShadow = frame.shadowCommandBuffer;
     RHI::BeginCommandBuffer(cbShadow);
 
     RHI::CmdFillBuffer(cbShadow, mDrawCountBuffer, 0, sizeof(u32), 0);
@@ -2538,7 +2353,7 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
         }}
     );
 
-    const RHI::CommandBufferHandle cbEnd = frame.endCommandBuffer;
+    const RHI::CommandBuffer cbEnd = frame.endCommandBuffer;
     RHI::BeginCommandBuffer(cbEnd);
 
     FogPass(cbEnd);
@@ -2603,10 +2418,7 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
 
     FullscreenPass(cbEnd, swapchainTexture);
 
-    if (!mImguiRenderer.UpdateVertexIndexBuffers(static_cast<u32>(mFrameIdx)))
-    {
-        return false;
-    }
+    mImguiRenderer.UpdateVertexIndexBuffers(u32(mFrameIdx));
 
     if (mEnableUI)
     {
@@ -2622,10 +2434,7 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
             }},
         });
 
-        if (!mImguiRenderer.Render(cbEnd, u32(mFrameIdx)))
-        {
-            return false;
-        }
+        mImguiRenderer.Render(cbEnd, u32(mFrameIdx));
 
         RHI::CmdEndRendering(cbEnd);
     }
@@ -2659,11 +2468,9 @@ bool Renderer::RecordAndSubmitVisibility(RHI::TextureHandle swapchainTexture)
             },
         }}
     );
-
-    return true;
 }
 
-bool Renderer::CreateSwapchain(U32Vec2 size)
+void Renderer::CreateSwapchain(U32Vec2 size)
 {
     RHI::DeviceWaitIdle();
 
@@ -2685,19 +2492,10 @@ bool Renderer::CreateSwapchain(U32Vec2 size)
     mUniformData.worldToClip = mUniformData.viewToClip * mUniformData.worldToView;
     mUniformData.clipToWorld = Inverse(mUniformData.worldToClip);
 
-    if (!CreateColorResources())
-    {
-        return false;
-    }
-
-    if (!CreateDepthResources())
-    {
-        return false;
-    }
+    CreateColorResources();
+    CreateDepthResources();
 
     mSwapchainRecreated = true;
-
-    return true;
 }
 
 void Renderer::CleanupSwapchain()
@@ -2705,7 +2503,7 @@ void Renderer::CleanupSwapchain()
     RHI::DestroySwapchain();
 }
 
-bool Renderer::CreateColorResources()
+void Renderer::CreateColorResources()
 {
     const U32Vec2 swapchainSize = RHI::GetTextureDimensions(RHI::GetSwapchainTexture(0)).XY();
     const U32Vec3 renderDimensions
@@ -2718,10 +2516,6 @@ bool Renderer::CreateColorResources()
             | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "RenderTexture",
     });
-    if (!mRenderTexture)
-    {
-        return false;
-    }
 
     mUniformData.renderWidth = renderDimensions.x;
     mUniformData.renderHeight = renderDimensions.y;
@@ -2735,10 +2529,6 @@ bool Renderer::CreateColorResources()
         .usage = RHI::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "VisibilityTexture",
     });
-    if (!mVisibilityTexture)
-    {
-        return false;
-    }
 
     const U32Vec3 aoDimensions = {renderDimensions.x / 2, renderDimensions.y / 2, 1};
 
@@ -2753,10 +2543,6 @@ bool Renderer::CreateColorResources()
         .usage = RHI::TEXTURE_USAGE_STORAGE_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "AmbientOcclusionTexture",
     });
-    if (!mAmbientOcclusionTexture)
-    {
-        return false;
-    }
 
     mAmbientOcclusionBlurredHorizontalTexture = RHI::CreateTexture({
         .format = RHI::GetTextureFormat(mAmbientOcclusionTexture),
@@ -2764,10 +2550,6 @@ bool Renderer::CreateColorResources()
         .usage = RHI::TEXTURE_USAGE_STORAGE_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "AmbientOcclusionBlurredHorizontalTexture",
     });
-    if (!mAmbientOcclusionBlurredHorizontalTexture)
-    {
-        return false;
-    }
 
     mAmbientOcclusionBlurredVerticalTexture = RHI::CreateTexture({
         .format = RHI::GetTextureFormat(mAmbientOcclusionTexture),
@@ -2775,10 +2557,6 @@ bool Renderer::CreateColorResources()
         .usage = RHI::TEXTURE_USAGE_STORAGE_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "AmbientOcclusionBlurredVerticalTexture",
     });
-    if (!mAmbientOcclusionBlurredVerticalTexture)
-    {
-        return false;
-    }
 
     mAmbientOcclusionUpsampledTexture = RHI::CreateTexture({
         .format = RHI::GetTextureFormat(mAmbientOcclusionTexture),
@@ -2786,10 +2564,6 @@ bool Renderer::CreateColorResources()
         .usage = RHI::TEXTURE_USAGE_STORAGE_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "AmbientOcclusionBlurredUpsampledTexture",
     });
-    if (!mAmbientOcclusionUpsampledTexture)
-    {
-        return false;
-    }
 
     mFogTexture = RHI::CreateTexture({
         .format = RHI::FORMAT_R16_SFLOAT,
@@ -2797,10 +2571,6 @@ bool Renderer::CreateColorResources()
         .usage = RHI::TEXTURE_USAGE_STORAGE_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "FogTexture",
     });
-    if (!mFogTexture)
-    {
-        return false;
-    }
 
     mFogBlurredHorizontalTexture = RHI::CreateTexture({
         .format = RHI::GetTextureFormat(mFogTexture),
@@ -2808,10 +2578,6 @@ bool Renderer::CreateColorResources()
         .usage = RHI::TEXTURE_USAGE_STORAGE_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "FogBlurredHorizontalTexture",
     });
-    if (!mFogBlurredHorizontalTexture)
-    {
-        return false;
-    }
 
     mFogBlurredVerticalTexture = RHI::CreateTexture({
         .format = RHI::GetTextureFormat(mFogTexture),
@@ -2819,10 +2585,6 @@ bool Renderer::CreateColorResources()
         .usage = RHI::TEXTURE_USAGE_STORAGE_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "FogBlurredVerticalTexture",
     });
-    if (!mFogBlurredVerticalTexture)
-    {
-        return false;
-    }
 
     for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
     {
@@ -2833,10 +2595,6 @@ bool Renderer::CreateColorResources()
                 | RHI::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT,
             .debugName = "ResolvedRenderTexture",
         });
-        if (!mFrame[i].resolvedRenderTexture)
-        {
-            return false;
-        }
     }
 
     mVelocityTexture = RHI::CreateTexture({
@@ -2846,12 +2604,6 @@ bool Renderer::CreateColorResources()
             | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "VelocityTexture",
     });
-    if (!mVelocityTexture)
-    {
-        return false;
-    }
-
-    return true;
 }
 
 void Renderer::CleanupColorResources()
@@ -2872,7 +2624,7 @@ void Renderer::CleanupColorResources()
     RHI::DestroyTexture(mVelocityTexture);
 }
 
-bool Renderer::CreateDepthResources()
+void Renderer::CreateDepthResources()
 {
     const U32Vec3 renderDimensions = RHI::GetTextureDimensions(mRenderTexture);
 
@@ -2882,10 +2634,6 @@ bool Renderer::CreateDepthResources()
         .usage = RHI::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "DepthTexture",
     });
-    if (!mDepthTexture)
-    {
-        return false;
-    }
 
     mDepthViewQuarterResTexture = RHI::CreateTexture({
         .format = RHI::FORMAT_R16_SFLOAT,
@@ -2893,10 +2641,6 @@ bool Renderer::CreateDepthResources()
         .usage = RHI::TEXTURE_USAGE_STORAGE_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "DepthViewQuarterResTexture",
     });
-    if (!mDepthViewQuarterResTexture)
-    {
-        return false;
-    }
 
     const U32Vec2 depthPyramidSize
         = {PreviousPow2(renderDimensions.x), PreviousPow2(renderDimensions.y)};
@@ -2910,10 +2654,6 @@ bool Renderer::CreateDepthResources()
         .usage = RHI::TEXTURE_USAGE_STORAGE_BIT | RHI::TEXTURE_USAGE_SAMPLED_BIT,
         .debugName = "DepthPyramidTexture",
     });
-    if (!mDepthPyramidTexture)
-    {
-        return false;
-    }
 
     mUniformData.depthPyramidWidth = f32(depthPyramidSize.x);
     mUniformData.depthPyramidHeight = f32(depthPyramidSize.y);
@@ -2923,19 +2663,13 @@ bool Renderer::CreateDepthResources()
     for (size_t i = 0; i < mDepthPyramidMipTextureDescriptors.size(); ++i)
     {
         mDepthPyramidMipTextureDescriptors[i] = RHI::CreateTextureDescriptor({
-            .textureHandle = mDepthPyramidTexture,
+            .texture = mDepthPyramidTexture,
             .type = RHI::TEXTURE_TYPE_2D,
             .baseMip = u32(i),
             .mipCount = 1,
             .layerCount = 1,
         });
-        if (!mDepthPyramidMipTextureDescriptors[i])
-        {
-            return false;
-        }
     }
-
-    return true;
 }
 
 void Renderer::CleanupDepthResources()
@@ -2943,7 +2677,7 @@ void Renderer::CleanupDepthResources()
     RHI::DestroyTexture(mDepthTexture);
     RHI::DestroyTexture(mDepthViewQuarterResTexture);
     RHI::DestroyTexture(mDepthPyramidTexture);
-    for (RHI::TextureDescriptorHandle h : mDepthPyramidMipTextureDescriptors)
+    for (RHI::TextureDescriptor h : mDepthPyramidMipTextureDescriptors)
     {
         RHI::DestroyTextureDescriptor(h);
     }

@@ -7,9 +7,9 @@
 
 TEST("RHI Pool")
 {
-    Pool<RHI::TextureHandle, u32> pool;
+    Pool<RHI::Texture, u32> pool;
 
-    RHI::TextureHandle h[3]{};
+    RHI::Texture h[3]{};
     u32* ptr{};
 
     h[0] = pool.CreateHandle(0);

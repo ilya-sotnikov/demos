@@ -66,30 +66,18 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
         .usage = RHI::TEXTURE_USAGE_SAMPLED_BIT | RHI::TEXTURE_USAGE_TRANSFER_DST_BIT,
         .debugName = "FontTexture",
     });
-    if (!mFontTexture)
-    {
-        return false;
-    }
 
     // Uploading buffer data to font texture.
     {
-        RHI::BufferHandle stagingBuffer = RHI::CreateBuffer({
+        RHI::Buffer stagingBuffer = RHI::CreateBuffer({
             .size = uploadSize,
             .debugName = "StagingBuffer",
         });
-        if (!stagingBuffer)
-        {
-            return false;
-        }
         DEFER(RHI::DestroyBuffer(stagingBuffer));
 
         memcpy(RHI::GetBufferHostPtr(stagingBuffer), fontData, uploadSize);
 
-        const RHI::CommandBufferHandle cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
-        if (!cb)
-        {
-            return false;
-        }
+        const RHI::CommandBuffer cb = RHI::CreateCommandBuffer(RHI::QUEUE_GRAPHICS);
         DEFER(RHI::DestroyCommandBuffer(cb));
 
         RHI::BeginCommandBuffer(cb);
@@ -132,10 +120,6 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
     }
 
     mFontSampler = RHI::CreateSampler({});
-    if (!mFontSampler)
-    {
-        return false;
-    }
 
     // Pipeline.
     {
@@ -187,14 +171,14 @@ void ImguiRenderer::Cleanup()
     RHI::DestroyTexture(mFontTexture);
 }
 
-bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
+void ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
 {
     ImGui::Render();
 
     const ImDrawData* const drawData = ImGui::GetDrawData();
     if (!drawData)
     {
-        return true;
+        return;
     }
 
     u64 vertexBufferSize = u64(drawData->TotalVtxCount) * sizeof(ImDrawVert);
@@ -202,7 +186,7 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
 
     if (vertexBufferSize == 0 || indexBufferSize == 0)
     {
-        return true;
+        return;
     }
 
     Frame& frame = mFrame[frameIndex];
@@ -222,10 +206,6 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
             .size = vertexBufferSize,
             .debugName = "ImGuiVertexBuffer",
         });
-        if (!frame.vertexBuffer)
-        {
-            return false;
-        }
         frame.vertexCount = drawData->TotalVtxCount;
         frame.vertexBufferSize = vertexBufferSize;
     }
@@ -240,10 +220,6 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
             .size = indexBufferSize,
             .debugName = "ImGuiIndexBuffer",
         });
-        if (!frame.indexBuffer)
-        {
-            return false;
-        }
         frame.indexCount = drawData->TotalIdxCount;
         frame.indexBufferSize = indexBufferSize;
     }
@@ -263,8 +239,6 @@ bool ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
         vertexDst += cmdList->VtxBuffer.Size;
         indexDst += cmdList->IdxBuffer.Size;
     }
-
-    return true;
 }
 
 void ImguiRenderer::StartNewFrame() const
@@ -273,7 +247,7 @@ void ImguiRenderer::StartNewFrame() const
     ImGui::NewFrame();
 }
 
-bool ImguiRenderer::Render(RHI::CommandBufferHandle cb, u32 frameIndex)
+void ImguiRenderer::Render(RHI::CommandBuffer cb, u32 frameIndex)
 {
     const ImDrawData* const drawData = ImGui::GetDrawData();
     i32 vertexOffset = 0;
@@ -281,14 +255,14 @@ bool ImguiRenderer::Render(RHI::CommandBufferHandle cb, u32 frameIndex)
 
     if (!drawData || drawData->CmdListsCount == 0)
     {
-        return true;
+        return;
     }
 
     Frame& frame = mFrame[frameIndex];
 
     if (!frame.vertexBuffer || !frame.indexBuffer)
     {
-        return true;
+        return;
     }
 
     const ImGuiIO& io = ImGui::GetIO();
@@ -338,6 +312,4 @@ bool ImguiRenderer::Render(RHI::CommandBufferHandle cb, u32 frameIndex)
         }
         vertexOffset += cmdList->VtxBuffer.Size;
     }
-
-    return true;
 }
