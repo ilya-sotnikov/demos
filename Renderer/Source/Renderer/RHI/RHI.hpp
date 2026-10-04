@@ -49,6 +49,9 @@ inline constexpr u32 INVALID_HANDLE = UINT32_MAX;
 inline constexpr int FRAMES_IN_FLIGHT = 2;
 inline constexpr u32 MAX_BINDLESS_DESCRIPTOR_COUNT = 16384;
 inline constexpr int PUSH_CONSTANTS_MAX_SIZE_BYTES = 128;
+inline constexpr int UNIFORM_BUFFER_MAX_SIZE_BYTES = 16384;
+inline constexpr u64 WHOLE_SIZE = UINT64_MAX;
+inline constexpr u64 MAX_PHYSICAL_DEVICE_NAME_SIZE = 256;
 
 RHI_HANDLE(Pipeline);
 RHI_HANDLE(Buffer);
@@ -257,6 +260,13 @@ inline constexpr u32 ALL_LAYERS = (~0U);
 // TODO: for now just enabling the needed for this project features.
 void Create(SDL_Window* window);
 void Destroy();
+
+struct DeviceProperties
+{
+    u64 minUniformBufferOffsetAlignment;
+    char name[MAX_PHYSICAL_DEVICE_NAME_SIZE];
+};
+const DeviceProperties& GetDeviceProperties();
 
 // -----------------------------------------------------------------------------
 // Buffer.
@@ -480,6 +490,7 @@ struct DescriptorInfo
 {
     enum Type
     {
+        TYPE_NONE,
         TYPE_TEXTURE,
         TYPE_TEXTURE_DESCRIPTOR,
         TYPE_SAMPLER,
@@ -493,8 +504,16 @@ struct DescriptorInfo
         Texture texture;
         TextureDescriptor textureDescriptor;
         Sampler sampler;
-        Buffer buffer;
+
+        struct BufferInfo
+        {
+            Buffer buffer;
+            u64 offset;
+            u64 range;
+        } buffer;
     } resource;
+
+    DescriptorInfo() : type{TYPE_NONE}, resource{.buffer{}} { }
 
     DescriptorInfo(Texture texture) : type{TYPE_TEXTURE}, resource{.texture = texture} { }
 
@@ -505,7 +524,10 @@ struct DescriptorInfo
 
     DescriptorInfo(Sampler sampler) : type{TYPE_SAMPLER}, resource{.sampler = sampler} { }
 
-    DescriptorInfo(Buffer buffer) : type{TYPE_BUFFER}, resource{.buffer = buffer} { }
+    DescriptorInfo(Buffer buffer, u64 offset = 0, u64 range = WHOLE_SIZE)
+        : type{TYPE_BUFFER}
+        , resource{.buffer = {buffer, offset, range}}
+    { }
 };
 
 void CmdPushDescriptors(

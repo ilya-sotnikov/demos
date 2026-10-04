@@ -2,6 +2,7 @@
 #include "Math.hlsli"
 
 ConstantBuffer<UniformData> uniformBuffer;
+ConstantBuffer<ShadowPassData> shadowUniformBuffer;
 
 SamplerState nearestSampler;
 Texture2D<float> depthTexture;
@@ -35,7 +36,7 @@ float CalcShadow(float3 posWorld)
     // TODO: for now just taking the largest cascade.
     const int CASCADE_IDX = RENDERER_SHADOW_MAP_CASCADE_COUNT - 1;
     float3 posShadow = mul(
-        uniformBuffer.shadow.worldToClip[CASCADE_IDX],
+        shadowUniformBuffer.worldToClip[CASCADE_IDX],
         float4(posWorld, 1.0)
     ).xyz;
     posShadow.xy = posShadow.xy * 0.5 + 0.5;

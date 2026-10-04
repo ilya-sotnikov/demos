@@ -212,21 +212,16 @@ bool Renderer::Init()
 
     CreateSwapchain({u32(width), u32(height)});
 
+    for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
+    {
+        mFrame[i].uniformBufferManager.Init(
+            16'000,
+            int(RHI::GetDeviceProperties().minUniformBufferOffsetAlignment)
+        );
+    }
+
     // Buffers.
     {
-        for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
-        {
-            // NOTE: creating a host visible, coherent, device local buffer.
-            // Should be always legal even on discrete GPUs if total allocated
-            // size is less than 200 MB or so. But I don't care about the size,
-            // since resizable BAR is somewhat widely supported.
-            mFrame[i].uniformBuffer = RHI::CreateBuffer({
-                .type = RHI::MEMORY_TYPE_DEFAULT_UNIFORM,
-                .size = sizeof(UniformData),
-                .debugName = "UniformBuffer",
-            });
-        }
-
         mDrawCountBuffer = RHI::CreateBuffer({
             .type = RHI::MEMORY_TYPE_DEVICE,
             .size = sizeof(u32),
@@ -559,14 +554,14 @@ bool Renderer::Init()
     mUniformData.enableSSAO = true;
     mUniformData.enableFog = true;
 
-    mUniformData.shadow.enablePcf = 1;
-    mUniformData.shadow.pcfKernelScale = 3.0f;
-    mUniformData.shadow.pcfKernelCascadeScales[0] = 1.0f;
-    mUniformData.shadow.pcfKernelCascadeScales[1] = 0.40f;
-    mUniformData.shadow.pcfKernelCascadeScales[2] = 0.0f;
-    mUniformData.shadow.pcfKernelCascadeScales[3] = 0.0f;
-    mUniformData.shadow.normalOffset = 1.0f;
-    mUniformData.shadow.constantOffset = 0.00003f;
+    mShadowPassData.enablePcf = 1;
+    mShadowPassData.pcfKernelScale = 3.0f;
+    mShadowPassData.pcfKernelCascadeScales[0] = 1.0f;
+    mShadowPassData.pcfKernelCascadeScales[1] = 0.40f;
+    mShadowPassData.pcfKernelCascadeScales[2] = 0.0f;
+    mShadowPassData.pcfKernelCascadeScales[3] = 0.0f;
+    mShadowPassData.normalOffset = 1.0f;
+    mShadowPassData.constantOffset = 0.00003f;
 
     // TODO: try SDSM? In theory, due to 2-pass occlusion culling we have a depth pyramid
     // of last visible objects (just add a max sampler too), not sure if it's ok to use it,
@@ -621,7 +616,7 @@ void Renderer::Cleanup()
     RHI::DestroyBuffer(mDrawCmdBuffer1);
     for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
     {
-        RHI::DestroyBuffer(mFrame[i].uniformBuffer);
+        mFrame[i].uniformBufferManager.Cleanup();
     }
     RHI::DestroySemaphore(mFrameSemaphore);
     for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
@@ -785,7 +780,10 @@ bool Renderer::Render(f32 deltaTime)
 
     UpdateShadowCascades();
 
-    memcpy(RHI::GetBufferHostPtr(frame.uniformBuffer), &mUniformData, sizeof(mUniformData));
+    frame.uniformBufferManager.OnNewFrame();
+    mUniformBufferDescriptor = frame.uniformBufferManager.Push(&mUniformData, sizeof(mUniformData));
+    mShadowPassUniformBufferDescriptor
+        = frame.uniformBufferManager.Push(&mShadowPassData, sizeof(mShadowPassData));
 
     switch (mUniformData.renderMode)
     {
@@ -1341,8 +1339,8 @@ void Renderer::UpdateShadowCascades()
         };
         // clang-format on
 
-        mUniformData.shadow.texelSizes[i] = sphereDiameter / RENDERER_SHADOW_MAP_DIMENSIONS;
-        mUniformData.shadow.worldToClip[i] = lightProjectionMatrix * lightViewMatrix;
+        mShadowPassData.texelSizes[i] = sphereDiameter / RENDERER_SHADOW_MAP_DIMENSIONS;
+        mShadowPassData.worldToClip[i] = lightProjectionMatrix * lightViewMatrix;
     }
 }
 
@@ -1358,7 +1356,7 @@ void Renderer::VisibilityBufferPass(RHI::CommandBuffer cb, bool cullLate)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             cullLate ? mDrawIndicesLateBuffer : mDrawIndicesEarlyBuffer,
             mDrawDataBuffer,
             mVertexBuffer,
@@ -1422,7 +1420,7 @@ void Renderer::CullPass(RHI::CommandBuffer cb, bool late)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             mDrawDataBuffer,
             mDrawCountBuffer,
             mDrawCmdBuffer1,
@@ -1510,7 +1508,7 @@ void Renderer::DepthViewQuarterResPass(RHI::CommandBuffer cb)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             mDepthTexture,
             mDepthViewQuarterResTexture,
         }
@@ -1531,7 +1529,7 @@ void Renderer::AmbientOcclusionPass(RHI::CommandBuffer cb)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             mDrawIndicesEarlyBuffer,
             mDrawIndicesLateBuffer,
             mDrawCmdEarlyBuffer2,
@@ -1567,7 +1565,7 @@ void Renderer::ShadowCullPass(RHI::CommandBuffer cb)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             mDrawDataBuffer,
             mDrawCountBuffer,
             mDrawCmdBuffer1,
@@ -1594,7 +1592,8 @@ void Renderer::ShadowPass(RHI::CommandBuffer cb)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
+            mShadowPassUniformBufferDescriptor,
             mDrawIndicesShadowBuffer,
             mDrawDataBuffer,
             mVertexBuffer,
@@ -1658,7 +1657,8 @@ void Renderer::FogPass(RHI::CommandBuffer cb)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
+            mShadowPassUniformBufferDescriptor,
             mNearestSampler,
             mDepthTexture,
             mShadowTexture,
@@ -1681,7 +1681,7 @@ void Renderer::BlurFogPass(RHI::CommandBuffer cb, bool horizontal)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             horizontal ? mFogTexture : mFogBlurredHorizontalTexture,
             horizontal ? mFogBlurredHorizontalTexture : mFogBlurredVerticalTexture,
         }
@@ -1705,7 +1705,7 @@ void Renderer::AmbientOcclusionBlurPass(RHI::CommandBuffer cb, bool horizontal)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             mDepthViewQuarterResTexture,
             horizontal ? mAmbientOcclusionTexture : mAmbientOcclusionBlurredHorizontalTexture,
             horizontal ? mAmbientOcclusionBlurredHorizontalTexture
@@ -1732,7 +1732,7 @@ void Renderer::AmbientOcclusionUpsamplePass(RHI::CommandBuffer cb)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             mNearestSampler,
             mDepthTexture,
             mDepthViewQuarterResTexture,
@@ -1756,7 +1756,8 @@ void Renderer::RenderPass(RHI::CommandBuffer cb)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
+            mShadowPassUniformBufferDescriptor,
             mDrawIndicesEarlyBuffer,
             mDrawIndicesLateBuffer,
             mDrawCmdEarlyBuffer2,
@@ -1796,7 +1797,7 @@ void Renderer::TaaResolvePass(RHI::CommandBuffer cb)
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             mRenderTexture,
             mDepthTexture,
             mVelocityTexture,
@@ -1841,7 +1842,7 @@ void Renderer::DebugDrawPass(RHI::CommandBuffer cb)
         cb,
         mDebugDrawRectPipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             mDebugDrawCountBuffer,
             mDebugDrawRectBuffer,
         }
@@ -1933,7 +1934,7 @@ void Renderer::DebugDrawGradErrorPass(
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].uniformBuffer,
+            mUniformBufferDescriptor,
             cullLate ? mDrawIndicesLateBuffer : mDrawIndicesEarlyBuffer,
             cullLate ? mDrawCmdLateBuffer2 : mDrawCmdEarlyBuffer2,
             mDrawDataBuffer,
@@ -2121,6 +2122,7 @@ void Renderer::RecordAndSubmitDebugGradError(RHI::Texture swapchainTexture)
 
     RHI::EndCommandBuffer(cb);
 
+    mFrame[mFrameIdx].uniformBufferManager.Flush();
     RHI::QueueSubmit(
         RHI::QUEUE_GRAPHICS,
         {{
@@ -2242,6 +2244,7 @@ void Renderer::RecordAndSubmitVisibility(RHI::Texture swapchainTexture)
     RHI::EndCommandBuffer(cbStart);
 
     // TODO: I don't see why can't I use 2 submits per frame (1 for each queue).
+    frame.uniformBufferManager.Flush();
     RHI::QueueSubmit(
         RHI::QUEUE_GRAPHICS,
         {{
@@ -2300,6 +2303,7 @@ void Renderer::RecordAndSubmitVisibility(RHI::Texture swapchainTexture)
 
     RHI::EndCommandBuffer(cbSSAO);
 
+    frame.uniformBufferManager.Flush();
     RHI::QueueSubmit(
         RHI::QUEUE_COMPUTE,
         {{
@@ -2340,6 +2344,7 @@ void Renderer::RecordAndSubmitVisibility(RHI::Texture swapchainTexture)
 
     RHI::EndCommandBuffer(cbShadow);
 
+    frame.uniformBufferManager.Flush();
     RHI::QueueSubmit(
         RHI::QUEUE_GRAPHICS,
         {{
@@ -2454,6 +2459,7 @@ void Renderer::RecordAndSubmitVisibility(RHI::Texture swapchainTexture)
 
     RHI::EndCommandBuffer(cbEnd);
 
+    frame.uniformBufferManager.Flush();
     RHI::QueueSubmit(
         RHI::QUEUE_GRAPHICS,
         {{

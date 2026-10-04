@@ -179,7 +179,7 @@ struct ContextImpl
     SwapchainImpl swapchain{};
     int frameIdx{};
     u32 imageIdx{};
-    char deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE]{};
+    RHI::DeviceProperties deviceProperties{};
 };
 
 // I don't see any situation where duplicating this stuff would be useful in practice.
@@ -747,8 +747,15 @@ void RHI::Create(SDL_Window* window)
         };
         vkGetPhysicalDeviceProperties2(sCtx.physicalDevice, &properties);
 
-        Utils::strlcpy(sCtx.deviceName, properties.properties.deviceName, sizeof(sCtx.deviceName));
-        printf("GPU: %s\n", sCtx.deviceName);
+        Utils::strlcpy(
+            sCtx.deviceProperties.name,
+            properties.properties.deviceName,
+            sizeof(sCtx.deviceProperties.name)
+        );
+        printf("GPU: %s\n", sCtx.deviceProperties.name);
+
+        sCtx.deviceProperties.minUniformBufferOffsetAlignment
+            = properties.properties.limits.minUniformBufferOffsetAlignment;
     }
 
     // Logical device, queue.
@@ -1040,6 +1047,11 @@ void RHI::Destroy()
     vkDestroySurfaceKHR(sCtx.instance, sCtx.surface, nullptr);
     vkDestroyInstance(sCtx.instance, nullptr);
     volkFinalize();
+}
+
+const RHI::DeviceProperties& RHI::GetDeviceProperties()
+{
+    return sCtx.deviceProperties;
 }
 
 RHI::Buffer RHI::CreateBuffer(const BufferDesc&& desc)
@@ -2326,6 +2338,9 @@ void RHI::CmdPushDescriptors(
         const RHI::DescriptorInfo& d = descriptors[i];
         switch (d.type)
         {
+        case RHI::DescriptorInfo::TYPE_NONE:
+            ASSERT(0);
+            break;
         case RHI::DescriptorInfo::TYPE_TEXTURE:
             infos[i] = {sCtx.textures.GetPtr(d.resource.texture)->view};
             break;
@@ -2336,8 +2351,11 @@ void RHI::CmdPushDescriptors(
             infos[i] = {*sCtx.samplers.GetPtr(d.resource.sampler)};
             break;
         case RHI::DescriptorInfo::TYPE_BUFFER:
-            infos[i] = {sCtx.buffers.GetPtr(d.resource.buffer)->buffer};
+        {
+            const auto& info = d.resource.buffer;
+            infos[i] = {sCtx.buffers.GetPtr(info.buffer)->buffer, info.offset, info.range};
             break;
+        }
         }
     }
 

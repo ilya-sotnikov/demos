@@ -18,7 +18,7 @@ void Main(
         QuatRotate(drawData.orientation, pos) * drawData.scale + drawData.position;
 
     output.positionClip = mul(
-        uniformBuffer.shadow.worldToClip[pushConstants.shadowCascadeIdx],
+        shadowUniformBuffer.worldToClip[pushConstants.shadowCascadeIdx],
         float4(positionWorld, 1.0)
     );
 }

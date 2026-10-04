@@ -11,7 +11,7 @@ static bool IsPowerOfTwo(ptrdiff_t x)
 
 static ptrdiff_t AlignForward(ptrdiff_t ptr, ptrdiff_t align)
 {
-    assert(IsPowerOfTwo(align));
+    DEBUG_ASSERT(IsPowerOfTwo(align));
     (void)IsPowerOfTwo(0);
 
     ptrdiff_t alignedPtr = ptr;
@@ -27,8 +27,8 @@ static ptrdiff_t AlignForward(ptrdiff_t ptr, ptrdiff_t align)
 
 void Arena::Init(void* backingBuffer, ptrdiff_t size, const char* name)
 {
-    assert(backingBuffer);
-    assert(size > 0);
+    DEBUG_ASSERT(backingBuffer);
+    DEBUG_ASSERT(size > 0);
 
     mBuffer = static_cast<uchar*>(backingBuffer);
     mBufferSize = size;
@@ -39,7 +39,7 @@ void Arena::Init(void* backingBuffer, ptrdiff_t size, const char* name)
 
 void Arena::Init(ptrdiff_t size, const char* name)
 {
-    assert(size > 0);
+    DEBUG_ASSERT(size > 0);
 
     mBuffer = static_cast<uchar*>(Utils::xmalloc(size_t(size)));
     mBufferSize = size;

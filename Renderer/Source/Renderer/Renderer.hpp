@@ -3,6 +3,7 @@
 #include "../Common.hpp"
 #include "../Arena.hpp"
 #include "RHI/RHI.hpp"
+#include "UniformBufferManager.hpp"
 #include "ImguiRenderer.hpp"
 #include "Scene.hpp"
 #include "../Math/Types.hpp"
@@ -38,6 +39,7 @@ struct Renderer
 
     struct Frame
     {
+        UniformBufferManager uniformBufferManager;
         Semaphore startSemaphore;
         Semaphore shadowSemaphore;
         Semaphore ssaoSemaphore;
@@ -45,12 +47,13 @@ struct Renderer
         RHI::CommandBuffer shadowCommandBuffer;
         RHI::CommandBuffer ssaoCommandBuffer;
         RHI::CommandBuffer endCommandBuffer;
-        RHI::Buffer uniformBuffer;
         RHI::Texture resolvedRenderTexture;
     };
 
     Arena mScratchArena;
     SDL_Window* mWindow;
+    RHI::DescriptorInfo mUniformBufferDescriptor;
+    RHI::DescriptorInfo mShadowPassUniformBufferDescriptor;
     RHI::Semaphore mFrameSemaphore;
     RHI::Texture mVisibilityTexture;
     RHI::Texture mRenderTexture;
@@ -119,6 +122,7 @@ struct Renderer
     u32 mTaaJitterIdx;
     u32 mTaaJitterMaxIdx;
     UniformData mUniformData;
+    ShadowPassData mShadowPassData;
     bool mNewFrameStarted;
     bool mRenderingPaused;
     bool mSwapchainNeedsRecreating;

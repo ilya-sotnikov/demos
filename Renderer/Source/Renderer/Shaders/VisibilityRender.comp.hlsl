@@ -6,6 +6,7 @@
 // https://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
 
 ConstantBuffer<UniformData> uniformBuffer;
+ConstantBuffer<ShadowPassData> shadowUniformBuffer;
 StructuredBuffer<uint32_t> drawIndicesEarlyBuffer;
 StructuredBuffer<uint32_t> drawIndicesLateBuffer;
 StructuredBuffer<DrawIndexedIndirectCommand> drawCmdEarlyBuffer;
@@ -248,7 +249,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     // TODO: better offsetting.
     const float normalOffsetScale =
         saturate(1.0 - dot(-uniformBuffer.sunDirectionWorld, normalWorld))
-        * uniformBuffer.shadow.normalOffset;
+        * shadowUniformBuffer.normalOffset;
     const float3 scaledNormalWorld = normalWorld * normalOffsetScale;
     int cascadeIdx = -1;
     for (int i = 0; i < RENDERER_SHADOW_MAP_CASCADE_COUNT; ++i)
@@ -258,14 +259,14 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         const float MAX_VALUE = 0.99;
 
         const float4 shadowOffset = float4(
-            scaledNormalWorld * uniformBuffer.shadow.texelSizes[i],
+            scaledNormalWorld * shadowUniformBuffer.texelSizes[i],
             0.0
         );
         positionShadow = mul(
-            uniformBuffer.shadow.worldToClip[i],
+            shadowUniformBuffer.worldToClip[i],
             float4(pixelWorld, 1.0) + shadowOffset
         ).xyz;
-        positionShadow.z += uniformBuffer.shadow.constantOffset / uniformBuffer.shadow.texelSizes[i];
+        positionShadow.z += shadowUniformBuffer.constantOffset / shadowUniformBuffer.texelSizes[i];
         positionShadow.xy = positionShadow.xy * 0.5 + 0.5;
 
         const float minCoord = Min(positionShadow);
@@ -280,9 +281,9 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
     const float shadow = cascadeIdx == -1 ? 1.0 :
         CalcShadow(
-            uniformBuffer.shadow.enablePcf,
-            uniformBuffer.shadow.pcfKernelScale,
-            uniformBuffer.shadow.pcfKernelCascadeScales[cascadeIdx],
+            shadowUniformBuffer.enablePcf,
+            shadowUniformBuffer.pcfKernelScale,
+            shadowUniformBuffer.pcfKernelCascadeScales[cascadeIdx],
             positionShadow,
             float2(dtid.xy),
             dotNormalLight,

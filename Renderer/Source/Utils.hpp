@@ -59,7 +59,7 @@ struct MemoryDivider
 template <typename T>
 T AlignUpPow2(T val, T alignment)
 {
-    DEBUG_ASSERT(alignment % 2 == 0);
+    DEBUG_ASSERT((alignment & (alignment - 1)) == 0);
     return (val + alignment - 1) & ~(alignment - 1);
 }
 

@@ -51,6 +51,7 @@ set(SOURCES
     Source/Renderer/RHI/Vulkan/RHI.cpp
     Source/Renderer/RHI/Vulkan/TypeConvert.cpp
     Source/Renderer/Renderer.cpp
+    Source/Renderer/UniformBufferManager.cpp
     Source/Renderer/Scene.cpp
     Source/Renderer/ImguiRenderer.cpp
     Source/Extern.cpp
