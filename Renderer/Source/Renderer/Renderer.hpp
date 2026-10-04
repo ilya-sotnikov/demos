@@ -1,20 +1,19 @@
 #pragma once
 
-#include "../Common.hpp"
 #include "../Arena.hpp"
-#include "RHI/RHI.hpp"
-#include "UniformBufferManager.hpp"
-#include "ImguiRenderer.hpp"
-#include "Scene.hpp"
+#include "../Common.hpp"
 #include "../Math/Types.hpp"
 #include "../Math/Utils.hpp"
+#include "ImguiRenderer.hpp"
+#include "RHI/RHI.hpp"
+#include "Scene.hpp"
 #include "Shaders/SharedConfig.hlsli"
 #include "Shaders/SharedDef.hlsli"
+#include "UniformBufferManager.hpp"
 
 struct SDL_Window;
 
-struct Renderer
-{
+struct Renderer {
     static constexpr f32 FOV_Y_RAD = Radians(70.0f);
     static constexpr int MAX_DRAW_CALLS = 4096;
     static constexpr u32 MAX_DESCRIPTOR_COUNT = 16384;
@@ -26,19 +25,16 @@ struct Renderer
 
     static_assert(sizeof(UniformData) <= UNIFORM_BUFFER_MAX_SIZE_BYTES);
 
-    struct Semaphore
-    {
+    struct Semaphore {
         RHI::Semaphore semaphore;
         u64 value;
 
-        u64 Inc()
-        {
+        u64 Inc() {
             return ++value;
         }
     };
 
-    struct Frame
-    {
+    struct Frame {
         UniformBufferManager uniformBufferManager;
         Semaphore startSemaphore;
         Semaphore shadowSemaphore;
@@ -169,11 +165,8 @@ private:
     void DebugDrawPass(RHI::CommandBuffer cb);
     void FullscreenPass(RHI::CommandBuffer cb, RHI::Texture swapchainTexture);
 
-    void DebugDrawGradErrorPass(
-        RHI::CommandBuffer cb,
-        bool cullLate,
-        RHI::Texture swapchainTexture
-    );
+    void
+    DebugDrawGradErrorPass(RHI::CommandBuffer cb, bool cullLate, RHI::Texture swapchainTexture);
 
     void RecordAndSubmitDebugGradError(RHI::Texture swapchainTexture);
     void RecordAndSubmitVisibility(RHI::Texture swapchainTexture);

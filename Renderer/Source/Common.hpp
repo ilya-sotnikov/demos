@@ -1,8 +1,8 @@
 #pragma once
 
-#include <stdint.h>
-#include <stddef.h>
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #define DEBUG_ASSERT(expr) assert(expr)
 
@@ -23,87 +23,81 @@ using ulong = unsigned long;
 using ulonglong = unsigned long long;
 using longlong = long long;
 
-struct U32Vec2
-{
+struct U32Vec2 {
     u32 x, y;
 };
 
-struct U32Vec3
-{
+struct U32Vec3 {
     u32 x, y, z;
 
-    U32Vec2 XY() const
-    {
+    U32Vec2 XY() const {
         return {x, y};
     }
 };
 
-struct I32Vec2
-{
+struct I32Vec2 {
     i32 x, y;
 };
 
-struct I32Vec3
-{
+struct I32Vec3 {
     i32 x, y, z;
 
-    I32Vec2 XY() const
-    {
+    I32Vec2 XY() const {
         return {x, y};
     }
 };
 
 // Stole from GNU libc since it's non-standard.
 #ifndef M_Ef
-#define M_Ef 2.7182818284590452354f // e
+    #define M_Ef 2.7182818284590452354f // e
 #endif
 
 #ifndef M_LOG2Ef
-#define M_LOG2Ef 1.4426950408889634074f // log_2
+    #define M_LOG2Ef 1.4426950408889634074f // log_2
 #endif
 
 #ifndef M_LOG10Ef
-#define M_LOG10Ef 0.43429448190325182765f // log_10 e
+    #define M_LOG10Ef 0.43429448190325182765f // log_10 e
 #endif
 
 #ifndef M_LN2f
-#define M_LN2f 0.69314718055994530942f // log_e 2
+    #define M_LN2f 0.69314718055994530942f // log_e 2
 #endif
 
 #ifndef M_LN10f
-#define M_LN10f 2.30258509299404568402f // log_e 10
+    #define M_LN10f 2.30258509299404568402f // log_e 10
 #endif
 
 #ifndef M_PIf
-#define M_PIf 3.14159265358979323846f // pi
+    #define M_PIf 3.14159265358979323846f // pi
 #endif
 
 #ifndef M_PI_2f
-#define M_PI_2f 1.57079632679489661923f // pi / 2
+    #define M_PI_2f 1.57079632679489661923f // pi / 2
 #endif
 
 #ifndef M_PI_4f
-#define M_PI_4f 0.78539816339744830962f // pi / 4
+    #define M_PI_4f 0.78539816339744830962f // pi / 4
 #endif
 
 #ifndef M_1_PIf
-#define M_1_PIf 0.31830988618379067154f // 1 / pi
+    #define M_1_PIf 0.31830988618379067154f // 1 / pi
 #endif
 
 #ifndef M_2_PIf
-#define M_2_PIf 0.63661977236758134308f // 2 / pi
+    #define M_2_PIf 0.63661977236758134308f // 2 / pi
 #endif
 
 #ifndef M_2_SQRTPIf
-#define M_2_SQRTPIf 1.12837916709551257390f // 2 / sqrt(pi)
+    #define M_2_SQRTPIf 1.12837916709551257390f // 2 / sqrt(pi)
 #endif
 
 #ifndef M_SQRT2f
-#define M_SQRT2f 1.41421356237309504880f // sqrt(2)
+    #define M_SQRT2f 1.41421356237309504880f // sqrt(2)
 #endif
 
 #ifndef M_SQRT1_2f
-#define M_SQRT1_2f 0.70710678118654752440f // 1 / sqrt(2)
+    #define M_SQRT1_2f 0.70710678118654752440f // 1 / sqrt(2)
 #endif
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -111,83 +105,68 @@ struct I32Vec3
 #define VEC_SIZE_BYTES(vec) ((vec).size() * sizeof((vec)[0]))
 
 #define COPY_ARRAY_TO_ARRAY(dst, src) \
-    do \
-    { \
+    do { \
         static_assert(sizeof(dst) == sizeof(src)); \
         static_assert(ARRAY_SIZE(dst) == ARRAY_SIZE(src)); \
         memcpy(dst, src, sizeof(dst)); \
-    } \
-    while (0)
+    } while (0)
 
-template <typename T>
-struct Slice
-{
+template<typename T>
+struct Slice {
     T* data;
     int count;
 
-    Slice(T* arr, int size)
-    {
+    Slice(T* arr, int size) {
         data = arr;
         count = size;
     }
 
-    template <int N>
-    Slice(const T (&arr)[N])
-    {
+    template<int N>
+    Slice(const T (&arr)[N]) {
         data = arr;
         count = N;
     }
 
-    int GetSizeBytes() const
-    {
+    int GetSizeBytes() const {
         return count * int(sizeof(T));
     }
 
     // For range-based for loops.
-    T* begin()
-    {
+    T* begin() {
         return data;
     }
 
-    const T* begin() const
-    {
+    const T* begin() const {
         return data;
     }
 
-    T* end()
-    {
+    T* end() {
         return data + count;
     }
 
-    const T* end() const
-    {
+    const T* end() const {
         return data + count;
     }
 
-    T& operator[](int i)
-    {
+    T& operator[](int i) {
         return data[i];
     }
 
-    const T& operator[](int i) const
-    {
+    const T& operator[](int i) const {
         return data[i];
     }
 };
 
-struct MemorySlice
-{
+struct MemorySlice {
     void* data;
     ptrdiff_t count;
 };
 
-template <typename Function>
-struct ScopedDefer
-{
+template<typename Function>
+struct ScopedDefer {
     Function function;
-    explicit ScopedDefer(Function f) : function(f) { }
-    ~ScopedDefer()
-    {
+    explicit ScopedDefer(Function f): function(f) {}
+    ~ScopedDefer() {
         function();
     }
 };

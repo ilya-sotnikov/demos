@@ -44,10 +44,13 @@ target_link_libraries(imgui PUBLIC volk SDL3::SDL3)
 
 set(SOURCES
     Source/Arena.cpp
-    Source/Utils.cpp
+    Source/utils.hpp
+    Source/utils.cpp
     Source/Math/Utils.cpp
-    Source/TimeMeter.cpp
-    Source/Camera.cpp
+    Source/time_meter.hpp
+    Source/time_meter.cpp
+    Source/camera.hpp
+    Source/camera.cpp
     Source/Renderer/RHI/Vulkan/RHI.cpp
     Source/Renderer/RHI/Vulkan/TypeConvert.cpp
     Source/Renderer/Renderer.cpp
@@ -76,12 +79,13 @@ add_executable(${PROJECT_NAME}
     ${SOURCES}
     Source/Main.cpp
 )
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 
 add_executable(${PROJECT_NAME}Test
     ${SOURCES}
     Source/Test/Test.cpp
 )
-target_include_directories(${PROJECT_NAME}Test PRIVATE Source)
+target_include_directories(${PROJECT_NAME}Test PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 target_link_libraries(${PROJECT_NAME}Test PRIVATE ${LIBS})
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
@@ -153,8 +157,6 @@ set(SHADER_SOURCE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Fog.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/BlurFog.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityRender.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/ForwardRender.vert.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/ForwardRender.frag.hlsl
     ${SHADER_SOURCE_DIRECTORY}/TaaResolve.comp.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.vert.hlsl
     ${SHADER_SOURCE_DIRECTORY}/VisibilityBuffer.frag.hlsl
@@ -168,7 +170,6 @@ set(SHADER_INCLUDE_FILES
     ${SHADER_SOURCE_DIRECTORY}/Common.hlsli
     ${SHADER_SOURCE_DIRECTORY}/DebugGradError.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Shadow.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/ForwardRender.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Fullscreen.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Imgui.hlsli
     ${SHADER_SOURCE_DIRECTORY}/Math.hlsli
@@ -215,7 +216,7 @@ foreach(shader ${SHADER_SOURCE_FILES})
             -fvk-use-scalar-layout
             -enable-16bit-types
             -Zpc
-            -E Main
+            -E main
             -fspv-target-env=vulkan1.3
             -fspv-preserve-bindings
             #-fspv-extension=SPV_EXT_mesh_shader

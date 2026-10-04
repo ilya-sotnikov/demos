@@ -8,7 +8,7 @@ Texture2D<float> inTexture;
 RWTexture2D<float> outTextureRW;
 
 [numthreads(RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_X, RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_Y, 1)]
-void Main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 dtid : SV_DispatchThreadID)
 {
     if (dtid.x >= pushConstants.width || dtid.y >= pushConstants.height)
     {

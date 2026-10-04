@@ -7,7 +7,7 @@
 [[vk::push_constant]]
 PushConstantsVisibilityBuffer pushConstants;
 
-void Main(
+void main(
     uint vertexId : SV_VertexID,
     // Dummy semantics just to please the compiler.
     [[vk::builtin("DrawIndex")]] uint rawDrawIdx : DrawIndex,

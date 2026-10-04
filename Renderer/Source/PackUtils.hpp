@@ -1,20 +1,18 @@
 #pragma once
 
 #include "Common.hpp"
-#include "Utils.hpp"
 #include "Math/Utils.hpp"
 #include "Math/Vec2.hpp"
 #include "Math/Vec3.hpp"
+#include "Utils.hpp"
 
-inline f32 PackToF32(u8 x, u8 y, u8 z)
-{
+inline f32 PackToF32(u8 x, u8 y, u8 z) {
     const u32 packedU32 = (u32(x) << 16) | (u32(y) << 8) | u32(z);
     const f64 packedF64 = f64(packedU32) / (1U << 24);
     return f32(packedF64);
 }
 
-inline f32 PackToF32(Vec3 value)
-{
+inline f32 PackToF32(Vec3 value) {
     value *= 255.0f;
     const u8 x = u8(value.X());
     const u8 y = u8(value.Y());
@@ -24,8 +22,7 @@ inline f32 PackToF32(Vec3 value)
     return f32(packedF64);
 }
 
-inline Vec3 UnpackToVec3(f32 value)
-{
+inline Vec3 UnpackToVec3(f32 value) {
     Vec3 result{};
     result.R() = Fract(value);
     result.G() = Fract(value * 256.0f);
@@ -34,11 +31,9 @@ inline Vec3 UnpackToVec3(f32 value)
 }
 
 // https://www.elopezr.com/the-art-of-packing-data/
-inline Vec2 PackNormalOctahedral(Vec3 normal)
-{
+inline Vec2 PackNormalOctahedral(Vec3 normal) {
     normal /= fabsf(normal.X()) + fabsf(normal.Y()) + fabsf(normal.Z());
-    if (normal.Z() < 0.0f)
-    {
+    if (normal.Z() < 0.0f) {
         const f32 x = normal.X();
         const f32 y = normal.Y();
         normal.X() = (1.0f - fabsf(y)) * (x >= 0.0f ? 1.0f : -1.0f);
@@ -49,8 +44,7 @@ inline Vec2 PackNormalOctahedral(Vec3 normal)
     return {normal.X(), normal.Y()};
 }
 
-inline Vec3 UnpackNormalOctahedral(Vec2 packed)
-{
+inline Vec3 UnpackNormalOctahedral(Vec2 packed) {
     packed = packed * 2.0f - Vec2{1.0f};
 
     Vec3 n = {packed.X(), packed.Y(), 1.0f - fabsf(packed.X()) - fabsf(packed.Y())};
@@ -60,20 +54,18 @@ inline Vec3 UnpackNormalOctahedral(Vec2 packed)
     return Normalize(n);
 }
 
-inline u16 PackFloat2ToRG8Snorm(Vec2 value)
-{
+inline u16 PackFloat2ToRG8Snorm(Vec2 value) {
     DEBUG_ASSERT(value.X() >= -1.0f);
     DEBUG_ASSERT(value.X() <= 1.0f);
     DEBUG_ASSERT(value.Y() >= -1.0f);
     DEBUG_ASSERT(value.Y() <= 1.0f);
 
-    const u8 byteX = Utils::BitCast<u8>(i8(roundf(value.X() * 127.0f)));
-    const u8 byteY = Utils::BitCast<u8>(i8(roundf(value.Y() * 127.0f)));
+    const u8 byteX = utils::bit_cast<u8>(i8(roundf(value.X() * 127.0f)));
+    const u8 byteY = utils::bit_cast<u8>(i8(roundf(value.Y() * 127.0f)));
     return u16(byteY << 8) | byteX;
 }
 
-inline Vec2 UnpackRG8SnormToFloat2(u16 packed)
-{
+inline Vec2 UnpackRG8SnormToFloat2(u16 packed) {
     const i32 intX = i32(packed << 24) >> 24;
     const i32 intY = i32(packed << 16) >> 24;
     return {f32(intX) / 127.0f, f32(intY) / 127.0f};

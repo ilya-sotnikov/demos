@@ -3,7 +3,7 @@
 #include "Math.hlsli"
 #include "DebugDrawRect.hlsli"
 
-float4 Main(VertexOutput input) : SV_Target
+float4 main(VertexOutput input) : SV_Target
 {
     const float WIDTH_PIXELS = 2.0;
 

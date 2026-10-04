@@ -6,7 +6,7 @@ struct FragmentOutput
     uint2 visibilityData : SV_Target0;
 };
 
-void Main(
+void main(
     VertexOutput input,
     uint primitiveId : SV_PrimitiveID,
     out FragmentOutput output

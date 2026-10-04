@@ -4,7 +4,7 @@ ByteAddressBuffer countBuffer;
 RWStructuredBuffer<DrawIndirectCommand> cmdBuffer;
 
 [numthreads(1, 1, 1)]
-void Main()
+void main()
 {
     const uint count = countBuffer.Load(0);
 

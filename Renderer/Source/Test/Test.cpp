@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 // https://www.reddit.com/r/C_Programming/comments/vfm3s7/comment/icwsoac/
 
@@ -11,17 +11,13 @@
 #define TEST(name) testName = name;
 
 #define TEST_ASSERT(x) \
-    do \
-    { \
+    do { \
         testAssertion = #x; \
         testFile = __FILE__; \
         testLine = __LINE__; \
-        if (x) \
-        { \
+        if (x) { \
             putchar('.'); \
-        } \
-        else \
-        { \
+        } else { \
             printf( \
                 "\ntest failed at %s:%d\n    %s: %s\n", \
                 testFile, \
@@ -31,11 +27,9 @@
             ); \
             exit(1); \
         } \
-    } \
-    while (0)
+    } while (0)
 
-int main(void)
-{
+int main(void) {
     const char* testName = "";
     const char* testAssertion = "";
     const char* testFile = "";

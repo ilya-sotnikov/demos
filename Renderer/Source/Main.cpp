@@ -1,12 +1,12 @@
-#include "Common.hpp"
-#include "TimeMeter.hpp"
-#include "Utils.hpp"
-#include "Renderer/Renderer.hpp"
 #include "Camera.hpp"
+#include "Common.hpp"
 #include "Math/Vec3.hpp"
+#include "Renderer/Renderer.hpp"
+#include "Utils.hpp"
+#include "time_meter.hpp"
 
-#include <imgui_impl_sdl3.h>
 #include <SDL3/SDL.h>
+#include <imgui_impl_sdl3.h>
 
 #include <stdio.h>
 
@@ -19,21 +19,18 @@ static bool sFullscreen = true;
 static bool sCullCameraFrozen = false;
 static RenderMode sRenderMode = RENDER_MODE_VISIBILITY;
 
-static bool SaveCamera(const Camera& camera, const char* path = "Camera.bin")
-{
+static bool SaveCamera(const Camera& camera, const char* path = "Camera.bin") {
     DEBUG_ASSERT(path);
 
     FILE* const fp = fopen(path, "wb");
-    if (!fp)
-    {
+    if (!fp) {
         fprintf(stderr, "%s: fopen %s failed: %s\n", __func__, path, strerror(errno));
         return false;
     }
     DEFER(fclose(fp));
 
     // TODO: very hacky but should be ok for POD.
-    if (fwrite(&camera, sizeof(camera), 1, fp) != 1)
-    {
+    if (fwrite(&camera, sizeof(camera), 1, fp) != 1) {
         fprintf(stderr, "%s: fwrite %s failed: %s\n", __func__, path, strerror(errno));
         return false;
     }
@@ -41,14 +38,12 @@ static bool SaveCamera(const Camera& camera, const char* path = "Camera.bin")
     return true;
 }
 
-static bool LoadCamera(Camera& camera, SDL_Window* window, const char* path = "Camera.bin")
-{
+static bool LoadCamera(Camera& camera, SDL_Window* window, const char* path = "Camera.bin") {
     DEBUG_ASSERT(window);
     DEBUG_ASSERT(path);
 
     FILE* const fp = fopen(path, "rb");
-    if (!fp)
-    {
+    if (!fp) {
         fprintf(stderr, "%s: fopen %s failed: %s\n", __func__, path, strerror(errno));
         return false;
     }
@@ -56,14 +51,10 @@ static bool LoadCamera(Camera& camera, SDL_Window* window, const char* path = "C
 
     Camera newCamera{};
     // TODO: very hacky but should be ok for POD.
-    if (fread(&newCamera, sizeof(newCamera), 1, fp) != 1)
-    {
-        if (feof(fp))
-        {
+    if (fread(&newCamera, sizeof(newCamera), 1, fp) != 1) {
+        if (feof(fp)) {
             fprintf(stderr, "%s: fread %s failed: EOF\n", __func__, path);
-        }
-        else if (ferror(fp))
-        {
+        } else if (ferror(fp)) {
             fprintf(stderr, "%s: fread %s failed: %s\n", __func__, path, strerror(errno));
         }
         return false;
@@ -73,13 +64,12 @@ static bool LoadCamera(Camera& camera, SDL_Window* window, const char* path = "C
 
     SDL_SetWindowRelativeMouseMode(window, true);
     sMouseRelativeMode = true;
-    sCamera.mLockDirection = false;
+    sCamera.m_lock_direction = false;
 
     return true;
 }
 
-static void ProcessMouse(SDL_Window* window)
-{
+static void ProcessMouse(SDL_Window* window) {
     assert(window);
 
     f32 x{};
@@ -88,181 +78,152 @@ static void ProcessMouse(SDL_Window* window)
 
     static bool sFirst = true;
 
-    if (sFirst)
-    {
+    if (sFirst) {
         sFirst = false;
         return;
     }
 
-    sCamera.ChangeDirection(x, -y);
+    sCamera.change_direction(x, -y);
 
-    if (sMouseRelativeMode)
-    {
+    if (sMouseRelativeMode) {
         SDL_WarpMouseInWindow(window, 0.0f, 0.0f);
     }
 
     sNeedUpdateViewMatrix = true;
 }
 
-static void ProcessEvent(SDL_Window* window, const SDL_Event& event, Renderer& renderer)
-{
+static void ProcessEvent(SDL_Window* window, const SDL_Event& event, Renderer& renderer) {
     DEBUG_ASSERT(window);
 
     ImGui_ImplSDL3_ProcessEvent(&event);
 
-    switch (event.type)
-    {
-    case SDL_EVENT_QUIT:
-        sWindowShouldClose = true;
-        break;
-    case SDL_EVENT_KEY_DOWN:
-        sKeys[event.key.scancode] = 1;
-        break;
-    case SDL_EVENT_KEY_UP:
-        sKeys[event.key.scancode] = 0;
-        break;
-    case SDL_EVENT_MOUSE_MOTION:
-        ProcessMouse(window);
-        break;
-    case SDL_EVENT_WINDOW_MINIMIZED:
-        renderer.PauseRendering(true);
-        break;
-    case SDL_EVENT_WINDOW_RESTORED:
-        renderer.PauseRendering(false);
-        break;
+    switch (event.type) {
+        case SDL_EVENT_QUIT:
+            sWindowShouldClose = true;
+            break;
+        case SDL_EVENT_KEY_DOWN:
+            sKeys[event.key.scancode] = 1;
+            break;
+        case SDL_EVENT_KEY_UP:
+            sKeys[event.key.scancode] = 0;
+            break;
+        case SDL_EVENT_MOUSE_MOTION:
+            ProcessMouse(window);
+            break;
+        case SDL_EVENT_WINDOW_MINIMIZED:
+            renderer.PauseRendering(true);
+            break;
+        case SDL_EVENT_WINDOW_RESTORED:
+            renderer.PauseRendering(false);
+            break;
     }
 }
 
-static void ProcessInput(SDL_Window* window, f32 deltaTime, Renderer& renderer)
-{
+static void ProcessInput(SDL_Window* window, f32 deltaTime, Renderer& renderer) {
     DEBUG_ASSERT(window);
 
-    if (sKeys[SDL_SCANCODE_W])
-    {
-        sCamera.Move(Camera::MoveDirection::Forward, deltaTime);
+    if (sKeys[SDL_SCANCODE_W]) {
+        sCamera.move(Camera::MoveDirection::FORWARD, deltaTime);
         sNeedUpdateViewMatrix = true;
     }
-    if (sKeys[SDL_SCANCODE_S])
-    {
-        sCamera.Move(Camera::MoveDirection::Backward, deltaTime);
+    if (sKeys[SDL_SCANCODE_S]) {
+        sCamera.move(Camera::MoveDirection::BACKWARD, deltaTime);
         sNeedUpdateViewMatrix = true;
     }
-    if (sKeys[SDL_SCANCODE_D])
-    {
-        sCamera.Move(Camera::MoveDirection::Right, deltaTime);
+    if (sKeys[SDL_SCANCODE_D]) {
+        sCamera.move(Camera::MoveDirection::RIGHT, deltaTime);
         sNeedUpdateViewMatrix = true;
     }
-    if (sKeys[SDL_SCANCODE_A])
-    {
-        sCamera.Move(Camera::MoveDirection::Left, deltaTime);
+    if (sKeys[SDL_SCANCODE_A]) {
+        sCamera.move(Camera::MoveDirection::LEFT, deltaTime);
         sNeedUpdateViewMatrix = true;
     }
-    if (sKeys[SDL_SCANCODE_Z])
-    {
-        sCamera.Move(Camera::MoveDirection::Down, deltaTime);
+    if (sKeys[SDL_SCANCODE_Z]) {
+        sCamera.move(Camera::MoveDirection::DOWN, deltaTime);
         sNeedUpdateViewMatrix = true;
     }
-    if (sKeys[SDL_SCANCODE_X])
-    {
-        sCamera.Move(Camera::MoveDirection::Up, deltaTime);
+    if (sKeys[SDL_SCANCODE_X]) {
+        sCamera.move(Camera::MoveDirection::UP, deltaTime);
         sNeedUpdateViewMatrix = true;
     }
 
-    if (sKeys[SDL_SCANCODE_PERIOD])
-    {
+    if (sKeys[SDL_SCANCODE_PERIOD]) {
         sKeys[SDL_SCANCODE_PERIOD] = 0;
         sFullscreen ^= true;
         SDL_SetWindowFullscreen(window, sFullscreen);
     }
 
-    if (sKeys[SDL_SCANCODE_ESCAPE])
-    {
+    if (sKeys[SDL_SCANCODE_ESCAPE]) {
         sKeys[SDL_SCANCODE_ESCAPE] = 0;
         sWindowShouldClose = true;
     }
 
-    if (sKeys[SDL_SCANCODE_M])
-    {
+    if (sKeys[SDL_SCANCODE_M]) {
         sKeys[SDL_SCANCODE_M] = 0;
-        if (sMouseRelativeMode)
-        {
+        if (sMouseRelativeMode) {
             SDL_SetWindowRelativeMouseMode(window, false);
             sMouseRelativeMode = false;
-            sCamera.mLockDirection = true;
-        }
-        else
-        {
+            sCamera.m_lock_direction = true;
+        } else {
             SDL_SetWindowRelativeMouseMode(window, true);
             sMouseRelativeMode = true;
-            sCamera.mLockDirection = false;
+            sCamera.m_lock_direction = false;
         }
     }
 
-    if (sKeys[SDL_SCANCODE_U])
-    {
+    if (sKeys[SDL_SCANCODE_U]) {
         sKeys[SDL_SCANCODE_U] = 0;
         renderer.mEnableUI ^= true;
     }
 
-    if (sKeys[SDL_SCANCODE_C])
-    {
+    if (sKeys[SDL_SCANCODE_C]) {
         sKeys[SDL_SCANCODE_C] = 0;
         sCullCameraFrozen ^= true;
         renderer.FreezeCullCamera(sCullCameraFrozen);
     }
 
-    if (sKeys[SDL_SCANCODE_R])
-    {
+    if (sKeys[SDL_SCANCODE_R]) {
         sKeys[SDL_SCANCODE_R] = 0;
-        if (!renderer.RecompilePipelines())
-        {
+        if (!renderer.RecompilePipelines()) {
             fprintf(stderr, "renderer: pipeline recompilation failed\n");
         }
     }
 
-    if (sKeys[SDL_SCANCODE_1])
-    {
+    if (sKeys[SDL_SCANCODE_1]) {
         sKeys[SDL_SCANCODE_1] = 0;
         sRenderMode = RENDER_MODE_VISIBILITY;
     }
 
-    if (sKeys[SDL_SCANCODE_2])
-    {
+    if (sKeys[SDL_SCANCODE_2]) {
         sKeys[SDL_SCANCODE_2] = 0;
         sRenderMode = RENDER_MODE_GRAD_ERROR;
     }
 
-    if (sKeys[SDL_SCANCODE_3])
-    {
+    if (sKeys[SDL_SCANCODE_3]) {
         sKeys[SDL_SCANCODE_3] = 0;
         sRenderMode = RENDER_MODE_AMBIENT_OCCLUSION;
     }
 }
 
-static void ImguiCheckbox(const char* label, u32& value)
-{
+static void ImguiCheckbox(const char* label, u32& value) {
     bool boolValue = value;
     ImGui::Checkbox(label, &boolValue);
     value = boolValue;
 }
 
-static void DirToYawPitchDeg(f32& yaw, f32& pitch, Vec3 dir)
-{
+static void DirToYawPitchDeg(f32& yaw, f32& pitch, Vec3 dir) {
     yaw = atan2f(dir.X(), dir.Z());
-    if (yaw < 0.0f)
-    {
+    if (yaw < 0.0f) {
         yaw += 2.0f * M_PIf;
     }
     yaw = Degrees(yaw);
     pitch = Degrees(asinf(-dir.Y()));
 }
 
-int main()
-{
+int main() {
     Renderer renderer{};
 
-    if (!renderer.Init())
-    {
+    if (!renderer.Init()) {
         fprintf(stderr, "renderer initialization failed\n");
         return 1;
     }
@@ -282,42 +243,38 @@ int main()
     renderer.mTaaPassData.enable = 1;
     renderer.ChangeRenderMode(sRenderMode);
 
-    sCamera.mPosition = {9.4f, 7.4f, 0.8f};
-    sCamera.mYaw = Radians(-85.0f);
-    sCamera.mPitch = Radians(0.0f);
-    sCamera.mWorldUp = WORLD_Y;
-    sCamera.mSpeed = 10.0f;
-    sCamera.mMouseSensitivity = 0.002f;
-    sCamera.mPitchClamp = Radians(89.0f);
-    if (enableCameraLoading)
-    {
-        if (!LoadCamera(sCamera, renderer.mWindow))
-        {
+    sCamera.m_position = {9.4f, 7.4f, 0.8f};
+    sCamera.m_yaw = Radians(-85.0f);
+    sCamera.m_pitch = Radians(0.0f);
+    sCamera.m_world_up = WORLD_Y;
+    sCamera.m_speed = 10.0f;
+    sCamera.m_mouse_sensitivity = 0.002f;
+    sCamera.m_pitch_clamp = Radians(89.0f);
+    if (enableCameraLoading) {
+        if (!LoadCamera(sCamera, renderer.mWindow)) {
             fprintf(stderr, "camera loading failed\n");
         }
     }
-    sCamera.UpdateVectors();
-    renderer.UpdateCamera(sCamera.mPosition, sCamera.GetViewMatrix());
+    sCamera.update_vectors();
+    renderer.UpdateCamera(sCamera.m_position, sCamera.get_view_matrix());
 
     u64 performanceCounter = SDL_GetPerformanceCounter();
     const f64 performancePeriod = 1.0 / f64(SDL_GetPerformanceFrequency());
     u64 lastPerformanceCounter = performanceCounter;
 
-    // To prevent a very big first measurement since mStartTime == 0
+    // To prevent a very big first measurement since m_start_time == 0
     // and it uses MeasureBetween function.
-    gTimeMeters[TimeMeter::Frame].Start();
+    g_time_meters[TimeMeter::FRAME].start();
 
-    while (!sWindowShouldClose)
-    {
+    while (!sWindowShouldClose) {
         lastPerformanceCounter = performanceCounter;
         performanceCounter = SDL_GetPerformanceCounter();
         const f64 deltaTime = f64(performanceCounter - lastPerformanceCounter) * performancePeriod;
 
-        gTimeMeters[TimeMeter::Frame].MeasureBetween();
+        g_time_meters[TimeMeter::FRAME].measure_between();
 
         SDL_Event event{};
-        while (SDL_PollEvent(&event))
-        {
+        while (SDL_PollEvent(&event)) {
             ProcessEvent(renderer.mWindow, event, renderer);
         }
         ProcessInput(renderer.mWindow, f32(deltaTime), renderer);
@@ -328,8 +285,7 @@ int main()
 
         ImGui::Begin("Main");
 
-        if (ImGui::BeginTable("Info", 2))
-        {
+        if (ImGui::BeginTable("Info", 2)) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::SeparatorText("Camera");
@@ -340,9 +296,9 @@ int main()
             ImGui::TableNextColumn();
             ImGui::Text(
                 "%.1f %.1f %.1f",
-                sCamera.mPosition.X(),
-                sCamera.mPosition.Y(),
-                sCamera.mPosition.Z()
+                sCamera.m_position.X(),
+                sCamera.m_position.Y(),
+                sCamera.m_position.Z()
             );
 
             ImGui::TableNextRow();
@@ -351,30 +307,26 @@ int main()
             ImGui::TableNextColumn();
             ImGui::Text(
                 "%.1f %.1f %.1f",
-                sCamera.mDirection.X(),
-                sCamera.mDirection.Y(),
-                sCamera.mDirection.Z()
+                sCamera.m_direction.X(),
+                sCamera.m_direction.Y(),
+                sCamera.m_direction.Z()
             );
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            if (ImGui::Button("Save"))
-            {
-                if (!SaveCamera(sCamera))
-                {
+            if (ImGui::Button("Save")) {
+                if (!SaveCamera(sCamera)) {
                     fprintf(stderr, "camera saving failed\n");
                 }
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Load"))
-            {
-                if (!LoadCamera(sCamera, renderer.mWindow))
-                {
+            if (ImGui::Button("Load")) {
+                if (!LoadCamera(sCamera, renderer.mWindow)) {
                     fprintf(stderr, "camera loading failed\n");
                 }
-                sCamera.UpdateVectors();
-                renderer.UpdateCamera(sCamera.mPosition, sCamera.GetViewMatrix());
+                sCamera.update_vectors();
+                renderer.UpdateCamera(sCamera.m_position, sCamera.get_view_matrix());
             }
 
             ImGui::TableNextRow();
@@ -483,10 +435,9 @@ int main()
 
         ImGui::End();
 
-        if (sNeedUpdateViewMatrix)
-        {
+        if (sNeedUpdateViewMatrix) {
             sNeedUpdateViewMatrix = false;
-            renderer.UpdateCamera(sCamera.mPosition, sCamera.GetViewMatrix());
+            renderer.UpdateCamera(sCamera.m_position, sCamera.get_view_matrix());
         }
 
         const bool result = renderer.Render(f32(deltaTime));

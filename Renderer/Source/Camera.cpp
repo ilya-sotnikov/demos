@@ -1,62 +1,56 @@
-#include "Camera.hpp"
+#include "camera.hpp"
 
+#include "Math/Mat4.hpp"
 #include "Math/Utils.hpp"
 #include "Math/Vec3.hpp"
-#include "Math/Mat4.hpp"
 
-void Camera::Move(MoveDirection move, f32 deltaTime)
-{
-    const f32 deltaPos = mSpeed * deltaTime;
+void Camera::move(MoveDirection move, f32 delta_time) {
+    const f32 delta_pos = m_speed * delta_time;
 
-    switch (move)
-    {
-    case MoveDirection::Forward:
-        mPosition += mDirection * deltaPos;
-        break;
-    case MoveDirection::Backward:
-        mPosition -= mDirection * deltaPos;
-        break;
-    case MoveDirection::Right:
-        mPosition += mRight * deltaPos;
-        break;
-    case MoveDirection::Left:
-        mPosition -= mRight * deltaPos;
-        break;
-    case MoveDirection::Up:
-        mPosition += mWorldUp * deltaPos;
-        break;
-    case MoveDirection::Down:
-        mPosition -= mWorldUp * deltaPos;
-        break;
+    switch (move) {
+        case MoveDirection::FORWARD:
+            m_position += m_direction * delta_pos;
+            break;
+        case MoveDirection::BACKWARD:
+            m_position -= m_direction * delta_pos;
+            break;
+        case MoveDirection::RIGHT:
+            m_position += m_right * delta_pos;
+            break;
+        case MoveDirection::LEFT:
+            m_position -= m_right * delta_pos;
+            break;
+        case MoveDirection::UP:
+            m_position += m_world_up * delta_pos;
+            break;
+        case MoveDirection::DOWN:
+            m_position -= m_world_up * delta_pos;
+            break;
     }
 }
 
-void Camera::ChangeDirection(f32 deltaX, f32 deltaY)
-{
-    if (mLockDirection)
-    {
+void Camera::change_direction(f32 delta_x, f32 delta_y) {
+    if (m_lock_direction) {
         return;
     }
 
-    mYaw += deltaX * mMouseSensitivity;
-    mPitch += deltaY * mMouseSensitivity;
+    m_yaw += delta_x * m_mouse_sensitivity;
+    m_pitch += delta_y * m_mouse_sensitivity;
 
-    mPitch = Clamp(mPitch, -mPitchClamp, mPitchClamp);
+    m_pitch = Clamp(m_pitch, -m_pitch_clamp, m_pitch_clamp);
 
-    UpdateVectors();
+    update_vectors();
 }
 
-void Camera::UpdateVectors()
-{
-    mDirection[0] = sinf(mYaw) * cosf(mPitch);
-    mDirection[1] = sinf(mPitch);
-    mDirection[2] = -cosf(mYaw) * cosf(mPitch);
-    mDirection = Normalize(mDirection);
+void Camera::update_vectors() {
+    m_direction[0] = sinf(m_yaw) * cosf(m_pitch);
+    m_direction[1] = sinf(m_pitch);
+    m_direction[2] = -cosf(m_yaw) * cosf(m_pitch);
+    m_direction = Normalize(m_direction);
 
-    mRight = Normalize(Cross(mDirection, mWorldUp));
+    m_right = Normalize(Cross(m_direction, m_world_up));
 }
 
-Mat4 Camera::GetViewMatrix() const
-{
-    return LookAt(mPosition, mPosition + mDirection, mWorldUp);
+Mat4 Camera::get_view_matrix() const {
+    return LookAt(m_position, m_position + m_direction, m_world_up);
 }

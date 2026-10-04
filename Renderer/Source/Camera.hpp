@@ -3,35 +3,26 @@
 #include "Common.hpp"
 #include "Math/Types.hpp"
 
-struct Camera
-{
-    enum class MoveDirection
-    {
-        Left,
-        Right,
-        Forward,
-        Backward,
-        Down,
-        Up
-    };
+struct Camera {
+    enum class MoveDirection { LEFT, RIGHT, FORWARD, BACKWARD, DOWN, UP };
 
-    void Move(MoveDirection move, f32 deltaTime);
-    void UpdateVectors();
-    void ChangeDirection(f32 deltaX, f32 deltaY);
-    Mat4 GetViewMatrix() const;
+    void move(MoveDirection move, f32 delta_time);
+    void update_vectors();
+    void change_direction(f32 delta_x, f32 delta_y);
+    Mat4 get_view_matrix() const;
 
-    Vec3 mPosition;
-    Vec3 mDirection;
-    Vec3 mRight;
-    Vec3 mWorldUp;
+    Vec3 m_position;
+    Vec3 m_direction;
+    Vec3 m_right;
+    Vec3 m_world_up;
 
-    f32 mYaw;
-    f32 mPitch;
+    f32 m_yaw;
+    f32 m_pitch;
 
-    f32 mSpeed;
-    f32 mMouseSensitivity;
+    f32 m_speed;
+    f32 m_mouse_sensitivity;
 
-    f32 mPitchClamp;
+    f32 m_pitch_clamp;
 
-    bool mLockDirection;
+    bool m_lock_direction;
 };

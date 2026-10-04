@@ -31,7 +31,7 @@ SamplerState linearSampler;
 // TODO: now that we have a visibility buffer, is it useful for history rejection?
 
 [numthreads(RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_X, RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_Y, 1)]
-void Main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 dtid : SV_DispatchThreadID)
 {
     int2 renderTextureSize = int2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 

@@ -2,7 +2,7 @@
 #include "Math.hlsli"
 #include "DebugGradError.hlsli"
 
-float4 Main(VertexOutput input, uint primitiveId : SV_PrimitiveID) : SV_Target
+float4 main(VertexOutput input, uint primitiveId : SV_PrimitiveID) : SV_Target
 {
     const uint rawDrawIdx = input.rawDrawIdx;
     const uint triangleIdx = primitiveId;

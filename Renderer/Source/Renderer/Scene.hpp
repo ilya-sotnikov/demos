@@ -1,23 +1,21 @@
 #pragma once
 
-#include "../Math/Types.hpp"
 #include "../Common.hpp"
+#include "../Math/Types.hpp"
 #include "RHI/RHI.hpp"
 #include "Shaders/SharedDef.hlsli"
 
-#include <vector>
 #include <string>
+#include <vector>
 
-struct Mesh
-{
+struct Mesh {
     size_t primitiveIdx;
     size_t primitiveCount;
 };
 
 struct cgltf_material;
 
-struct MeshPrimitive
-{
+struct MeshPrimitive {
     Vec3 sphereCenter;
     f32 sphereRadius;
 

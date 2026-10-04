@@ -2,7 +2,7 @@
 #include "Math.hlsli"
 #include "DebugDrawRect.hlsli"
 
-void Main(uint vertexId : SV_VertexID, out VertexOutput output)
+void main(uint vertexId : SV_VertexID, out VertexOutput output)
 {
     const uint rectVertexId = vertexId % 6;
     const uint rectId = vertexId / 6;

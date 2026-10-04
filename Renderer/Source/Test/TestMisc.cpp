@@ -1,11 +1,10 @@
 #if defined(TEST_HEADERS)
 
-#include "PackUtils.hpp"
+    #include "PackUtils.hpp"
 
 #elif defined(TEST_SOURCE)
 
-TEST("Pack 3 bytes to f32, unpack f32 to Vec3")
-{
+TEST("Pack 3 bytes to f32, unpack f32 to Vec3") {
     constexpr f32 tolerance = 0.005f;
 
     TEST_ASSERT(AlmostEqual(UnpackToVec3(PackToF32(0, 0, 0)), {0.0f, 0.0f, 0.0f}, tolerance));
@@ -18,8 +17,7 @@ TEST("Pack 3 bytes to f32, unpack f32 to Vec3")
     TEST_ASSERT(AlmostEqual(UnpackToVec3(PackToF32(255, 255, 255)), {1.0f, 1.0f, 1.0f}, tolerance));
 }
 
-TEST("Normal octahedral encoding")
-{
+TEST("Normal octahedral encoding") {
     Vec3 v{};
 
     v = {1.0f, 0.0f, 0.0f};
@@ -50,8 +48,7 @@ TEST("Normal octahedral encoding")
     TEST_ASSERT(AlmostEqual(UnpackNormalOctahedral(PackNormalOctahedral(v)), v));
 
     u32 lfsr = 1337;
-    for (int i = 0; i < 1000; ++i)
-    {
+    for (int i = 0; i < 1000; ++i) {
         const f32 tolerance = 1e-6f;
         const f32 r0 = LfsrNextGetFloat(lfsr, 1.0f);
         const f32 r1 = LfsrNextGetFloat(lfsr, 1.0f);
@@ -61,8 +58,7 @@ TEST("Normal octahedral encoding")
     }
 }
 
-TEST("Snorm packing")
-{
+TEST("Snorm packing") {
     Vec2 v{};
 
     v = {0.0f, 0.0f};
@@ -81,8 +77,7 @@ TEST("Snorm packing")
     TEST_ASSERT(AlmostEqual(UnpackRG8SnormToFloat2(PackFloat2ToRG8Snorm(v)), v));
 
     u32 lfsr = 1337;
-    for (int i = 0; i < 1000; ++i)
-    {
+    for (int i = 0; i < 1000; ++i) {
         const f32 tolerance = 1e-2f;
         const f32 v0 = LfsrNextGetFloat(lfsr, 1.0f);
         const f32 v1 = LfsrNextGetFloat(lfsr, 1.0f);

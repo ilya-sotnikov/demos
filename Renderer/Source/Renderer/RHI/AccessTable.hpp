@@ -1,7 +1,7 @@
 // For usage examples check out FormatTable.hpp.
 
 // clang-format off
-//          RHI                                        Bit        V ulkan
+//          RHI                                        Bit         Vulkan
 RHI_XACCESS(ACCESS_NONE,                               (1U << 0),  VK_ACCESS_2_NONE)
 RHI_XACCESS(ACCESS_INDIRECT_COMMAND_READ_BIT,          (1U << 1),  VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT)
 RHI_XACCESS(ACCESS_INDEX_READ_BIT,                     (1U << 2),  VK_ACCESS_2_INDEX_READ_BIT)

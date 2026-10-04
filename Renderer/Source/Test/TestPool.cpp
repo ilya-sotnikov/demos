@@ -1,12 +1,11 @@
 #if defined(TEST_HEADERS)
 
-#include "Renderer/RHI/RHI.hpp"
-#include "Renderer/RHI/Pool.hpp"
+    #include "Renderer/RHI/Pool.hpp"
+    #include "Renderer/RHI/RHI.hpp"
 
 #elif defined(TEST_SOURCE)
 
-TEST("RHI Pool")
-{
+TEST("RHI Pool") {
     Pool<RHI::Texture, u32> pool;
 
     RHI::Texture h[3]{};

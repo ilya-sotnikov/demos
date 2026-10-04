@@ -22,7 +22,7 @@ static float GAUSS_WEIGHTS[] =
 
 // Gaussian blur with 2 passes (vertical and horizontal).
 [numthreads(RENDERER_FOG_BLUR_WORKGROUP_SIZE_X, RENDERER_FOG_BLUR_WORKGROUP_SIZE_Y, 1)]
-void Main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 dtid : SV_DispatchThreadID)
 {
     const uint2 textureSize = uint2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 

@@ -12,7 +12,7 @@ RWStructuredBuffer<uint32_t> drawIndicesBuffer;
 PushConstantsShadow pushConstants;
 
 [numthreads(RENDERER_CULL_WORKGROUP_SIZE, 1, 1)]
-void Main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 dtid : SV_DispatchThreadID)
 {
     const uint drawIdx = dtid.x;
 

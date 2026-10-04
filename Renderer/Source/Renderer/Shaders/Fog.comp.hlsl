@@ -68,7 +68,7 @@ float PhaseHenyeyGreenstein(float marchDir_dot_lightDir, float scatterFactor)
 }
 
 [numthreads(RENDERER_FOG_WORKGROUP_SIZE_X, RENDERER_FOG_WORKGROUP_SIZE_Y, 1)]
-void Main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 dtid : SV_DispatchThreadID)
 {
     const uint2 textureSize = uint2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 

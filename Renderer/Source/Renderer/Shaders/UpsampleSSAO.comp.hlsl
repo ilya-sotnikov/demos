@@ -14,7 +14,7 @@ RWTexture2D<float> outTexture;
 
 // Bilinear depth-aware upsampling.
 [numthreads(RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_X, RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_Y, 1)]
-void Main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 dtid : SV_DispatchThreadID)
 {
     const uint2 textureSize = uint2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 

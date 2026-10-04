@@ -1,58 +1,47 @@
-#include "Utils.hpp"
+#include "utils.hpp"
 
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
-#include <errno.h>
+#include <string.h>
 
-Utils::FileData Utils::FileRead(const char* path)
-{
+utils::FileData utils::file_read(const char* path) {
     DEBUG_ASSERT(path);
 
     FileData result{};
 
     FILE* const fp = fopen(path, "rb");
-    if (!fp)
-    {
+    if (!fp) {
         fprintf(stderr, "%s: fopen %s failed: %s\n", __func__, path, strerror(errno));
         return result;
     }
     DEFER(fclose(fp));
 
-    if (fseek(fp, 0, SEEK_END))
-    {
+    if (fseek(fp, 0, SEEK_END)) {
         fprintf(stderr, "%s: fseek SEEK_END %s failed: %s\n", __func__, path, strerror(errno));
         return result;
     }
-    const long fileSize = ftell(fp);
-    if (fileSize == -1)
-    {
+    const long file_size = ftell(fp);
+    if (file_size == -1) {
         fprintf(stderr, "%s: ftell %s failed: %s\n", __func__, path, strerror(errno));
         return result;
     }
-    if (fseek(fp, 0, SEEK_SET))
-    {
+    if (fseek(fp, 0, SEEK_SET)) {
         fprintf(stderr, "%s: fseek SEEK_SET %s failed: %s\n", __func__, path, strerror(errno));
         return result;
     }
 
-    void* const res = malloc(size_t((fileSize + 1)) * sizeof(u8));
-    if (!res)
-    {
-        fprintf(stderr, "%s: malloc failed (size %ld): %s\n", __func__, fileSize, strerror(errno));
+    void* const res = malloc(size_t((file_size + 1)) * sizeof(u8));
+    if (!res) {
+        fprintf(stderr, "%s: malloc failed (size %ld): %s\n", __func__, file_size, strerror(errno));
         return result;
     }
 
-    if (fread(res, sizeof(u8), size_t(fileSize), fp) != size_t(fileSize))
-    {
-
-        if (feof(fp))
-        {
+    if (fread(res, sizeof(u8), size_t(file_size), fp) != size_t(file_size)) {
+        if (feof(fp)) {
             fprintf(stderr, "%s: fread %s failed: EOF\n", __func__, path);
-        }
-        else if (ferror(fp))
-        {
+        } else if (ferror(fp)) {
             fprintf(stderr, "%s: fread %s failed: %s\n", __func__, path, strerror(errno));
         }
         free(res);
@@ -60,28 +49,24 @@ Utils::FileData Utils::FileRead(const char* path)
     }
 
     result.data = res;
-    result.size = fileSize;
+    result.size = file_size;
 
     return result;
 }
 
-void* Utils::xmalloc(size_t size)
-{
+void* utils::xmalloc(size_t size) {
     void* const ret = malloc(size);
-    if (!ret)
-    {
+    if (!ret) {
         fprintf(stderr, "malloc failed (size = %zu)\n", size);
         exit(1);
     }
     return ret;
 }
 
-void* Utils::xrealloc(void* ptr, size_t newSize)
-{
-    void* const ret = realloc(ptr, newSize);
-    if (!ret)
-    {
-        fprintf(stderr, "realloc failed (newSize = %zu)\n", newSize);
+void* utils::xrealloc(void* ptr, size_t new_size) {
+    void* const ret = realloc(ptr, new_size);
+    if (!ret) {
+        fprintf(stderr, "realloc failed (new_size = %zu)\n", new_size);
         exit(1);
     }
     return ret;
@@ -92,24 +77,20 @@ void* Utils::xrealloc(void* ptr, size_t newSize)
  * chars will be copied.  Always NUL terminates (unless dsize == 0).
  * Returns strlen(src); if retval >= dsize, truncation occurred.
  */
-size_t Utils::strlcpy(char* dst, const char* src, size_t dsize)
-{
+size_t utils::strlcpy(char* dst, const char* src, size_t dsize) {
     const char* osrc = src;
     size_t nleft = dsize;
 
     /* Copy as many bytes as will fit. */
-    if (nleft != 0)
-    {
-        while (--nleft != 0)
-        {
+    if (nleft != 0) {
+        while (--nleft != 0) {
             if ((*dst++ = *src++) == '\0')
                 break;
         }
     }
 
     /* Not enough room in dst, add NUL and traverse rest of src. */
-    if (nleft == 0)
-    {
+    if (nleft == 0) {
         if (dsize != 0)
             *dst = '\0'; /* NUL-terminate dst */
         while (*src++)
@@ -126,8 +107,7 @@ size_t Utils::strlcpy(char* dst, const char* src, size_t dsize)
  * Returns strlen(src) + MIN(dsize, strlen(initial dst)).
  * If retval >= dsize, truncation occurred.
  */
-size_t Utils::strlcat(char* dst, const char* src, size_t dsize)
-{
+size_t utils::strlcat(char* dst, const char* src, size_t dsize) {
     const char* odst = dst;
     const char* osrc = src;
     size_t n = dsize;
@@ -141,10 +121,8 @@ size_t Utils::strlcat(char* dst, const char* src, size_t dsize)
 
     if (n-- == 0)
         return (dlen + strlen(src));
-    while (*src != '\0')
-    {
-        if (n != 0)
-        {
+    while (*src != '\0') {
+        if (n != 0) {
             *dst++ = *src;
             n--;
         }
@@ -155,75 +133,66 @@ size_t Utils::strlcat(char* dst, const char* src, size_t dsize)
     return (dlen + size_t(src - osrc)); /* count does not include NUL */
 }
 
-void Utils::FpsCounter::Update(f64& fps, f64 time)
-{
-    const f64 elapsedTime = time - mPrevTime;
+void utils::FpsCounter::update(f64& fps, f64 time) {
+    const f64 elapsed_time = time - m_prev_time;
 
-    if (elapsedTime > 0.25)
-    {
-        mPrevTime = time;
-        fps = f64(mFrameCount) / elapsedTime;
-        mFrameCount = 0;
+    if (elapsed_time > 0.25) {
+        m_prev_time = time;
+        fps = f64(m_frame_count) / elapsed_time;
+        m_frame_count = 0;
     }
 
-    ++mFrameCount;
+    ++m_frame_count;
 }
 
-void Utils::MemoryDivider::Init(void* memory, ptrdiff_t size)
-{
-    mMemory = memory;
-    mSize = size;
-    mCurrentOffset = 0;
+void utils::MemoryDivider::init(void* memory, ptrdiff_t size) {
+    m_memory = memory;
+    m_size = size;
+    m_current_offset = 0;
 }
 
-MemorySlice Utils::MemoryDivider::Take(ptrdiff_t bytes)
-{
-    DEBUG_ASSERT(mSize > 0);
-    DEBUG_ASSERT(mMemory);
-    DEBUG_ASSERT(mCurrentOffset < mSize);
+MemorySlice utils::MemoryDivider::take(ptrdiff_t bytes) {
+    DEBUG_ASSERT(m_size > 0);
+    DEBUG_ASSERT(m_memory);
+    DEBUG_ASSERT(m_current_offset < m_size);
 
     MemorySlice result{};
 
-    const ptrdiff_t available = mSize - mCurrentOffset;
-    if (bytes <= available)
-    {
+    const ptrdiff_t available = m_size - m_current_offset;
+    if (bytes <= available) {
         result.count = bytes;
-        result.data = static_cast<uchar*>(mMemory) + mCurrentOffset;
-        mCurrentOffset += bytes + 1;
+        result.data = static_cast<uchar*>(m_memory) + m_current_offset;
+        m_current_offset += bytes + 1;
     }
 
     return result;
 }
 
-MemorySlice Utils::MemoryDivider::TakeRest()
-{
-    DEBUG_ASSERT(mSize > 0);
-    DEBUG_ASSERT(mMemory);
-    DEBUG_ASSERT(mCurrentOffset < mSize);
+MemorySlice utils::MemoryDivider::take_rest() {
+    DEBUG_ASSERT(m_size > 0);
+    DEBUG_ASSERT(m_memory);
+    DEBUG_ASSERT(m_current_offset < m_size);
 
     MemorySlice result{};
-    result.count = mSize - mCurrentOffset - 1;
-    result.data = static_cast<uchar*>(mMemory) + mCurrentOffset;
-    mCurrentOffset += result.count + 1;
-    DEBUG_ASSERT(mCurrentOffset == mSize);
+    result.count = m_size - m_current_offset - 1;
+    result.data = static_cast<uchar*>(m_memory) + m_current_offset;
+    m_current_offset += result.count + 1;
+    DEBUG_ASSERT(m_current_offset == m_size);
 
     return result;
 }
 
-f32 Utils::LinearToSrgb(f32 color, f32 gamma)
-{
+f32 utils::linear_to_srgb(f32 color, f32 gamma) {
     DEBUG_ASSERT(gamma > 0.0f);
     return powf(color, 1.0f / gamma);
 }
 
-f32 Utils::SrgbToLinear(f32 color, f32 gamma)
-{
+f32 utils::srgb_to_linear(f32 color, f32 gamma) {
     DEBUG_ASSERT(gamma > 0.0f);
     return powf(color, gamma);
 }
 
-Vec3 Utils::LinearToSrgb(Vec3 color, f32 gamma)
-{
+Vec3 utils::linear_to_srgb(Vec3 color, f32 gamma) {
     DEBUG_ASSERT(gamma > 0.0f);
     f32 inverseGamma = 1.0f / gamma;
     return {
@@ -233,8 +202,7 @@ Vec3 Utils::LinearToSrgb(Vec3 color, f32 gamma)
     };
 }
 
-Vec3 Utils::SrgbToLinear(Vec3 color, f32 gamma)
-{
+Vec3 utils::srgb_to_linear(Vec3 color, f32 gamma) {
     DEBUG_ASSERT(gamma > 0.0f);
     return {powf(color.val[0], gamma), powf(color.val[1], gamma), powf(color.val[2], gamma)};
 }

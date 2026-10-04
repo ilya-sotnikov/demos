@@ -26,7 +26,7 @@ static float GAUSS_WEIGHTS[] =
 // Bilateral depth-aware filter with 2 passes (vertical and horizontal).
 // NOTE: although bilateral filters are not separable, it's mostly fine and definitely faster.
 [numthreads(RENDERER_SSAO_BLUR_WORKGROUP_SIZE_X, RENDERER_SSAO_BLUR_WORKGROUP_SIZE_Y, 1)]
-void Main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 dtid : SV_DispatchThreadID)
 {
     const uint2 textureSize = uint2(pushConstants.width, pushConstants.height);
 

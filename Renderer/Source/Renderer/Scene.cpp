@@ -1,41 +1,39 @@
 #include "Scene.hpp"
 
-#include "../Utils.hpp"
-#include "../Math/Vec3.hpp"
 #include "../Math/Mat4.hpp"
+#include "../Math/Vec3.hpp"
 #include "../PackUtils.hpp"
+#include "../Utils.hpp"
 
 #include <cgltf.h>
 #include <meshoptimizer.h>
 
 // TODO: more error handling.
 
-static const char* cgltf_result_to_string(cgltf_result result)
-{
-    switch (result)
-    {
-    case cgltf_result_success:
-        return "success";
-    case cgltf_result_data_too_short:
-        return "data too short";
-    case cgltf_result_unknown_format:
-        return "unknown format";
-    case cgltf_result_invalid_json:
-        return "invalid json";
-    case cgltf_result_invalid_gltf:
-        return "invalid gltf";
-    case cgltf_result_invalid_options:
-        return "invalid options";
-    case cgltf_result_file_not_found:
-        return "file not found";
-    case cgltf_result_io_error:
-        return "io error";
-    case cgltf_result_out_of_memory:
-        return "out of memory";
-    case cgltf_result_legacy_gltf:
-        return "legacy gltf";
-    case cgltf_result_max_enum:
-        return "max enum (invalid enum value)";
+static const char* cgltf_result_to_string(cgltf_result result) {
+    switch (result) {
+        case cgltf_result_success:
+            return "success";
+        case cgltf_result_data_too_short:
+            return "data too short";
+        case cgltf_result_unknown_format:
+            return "unknown format";
+        case cgltf_result_invalid_json:
+            return "invalid json";
+        case cgltf_result_invalid_gltf:
+            return "invalid gltf";
+        case cgltf_result_invalid_options:
+            return "invalid options";
+        case cgltf_result_file_not_found:
+            return "file not found";
+        case cgltf_result_io_error:
+            return "io error";
+        case cgltf_result_out_of_memory:
+            return "out of memory";
+        case cgltf_result_legacy_gltf:
+            return "legacy gltf";
+        case cgltf_result_max_enum:
+            return "max enum (invalid enum value)";
     }
 
     return "unhandled enum value";
@@ -43,13 +41,8 @@ static const char* cgltf_result_to_string(cgltf_result result)
 
 // Stole from niagara:
 // https://github.com/zeux/niagara
-static void DecomposeTransform(
-    f32 translation[3],
-    f32 rotation[4],
-    f32 scale[3],
-    const f32 transform[16]
-)
-{
+static void
+DecomposeTransform(f32 translation[3], f32 rotation[4], f32 scale[3], const f32 transform[16]) {
     DEBUG_ASSERT(translation);
     DEBUG_ASSERT(rotation);
     DEBUG_ASSERT(scale);
@@ -106,8 +99,7 @@ static void LoadGeometry(
     std::vector<MeshPrimitive>& meshPrimitives,
     std::vector<RHI::DrawIndexedIndirectCommand>& drawCmds,
     const cgltf_data* cgltfData
-)
-{
+) {
     DEBUG_ASSERT(vertices.empty());
     DEBUG_ASSERT(indices.empty());
     DEBUG_ASSERT(meshes.empty());
@@ -121,14 +113,12 @@ static void LoadGeometry(
     std::vector<Vec3> primPositions;
     std::vector<u32> remap;
 
-    for (cgltf_size mi = 0; mi < cgltfData->meshes_count; ++mi)
-    {
+    for (cgltf_size mi = 0; mi < cgltfData->meshes_count; ++mi) {
         const cgltf_mesh& mesh = cgltfData->meshes[mi];
 
         meshes.push_back({drawCmds.size(), mesh.primitives_count});
 
-        for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi)
-        {
+        for (cgltf_size pi = 0; pi < mesh.primitives_count; ++pi) {
             const cgltf_primitive& prim = mesh.primitives[pi];
             ASSERT(prim.type == cgltf_primitive_type_triangles);
             ASSERT(prim.indices);
@@ -142,16 +132,15 @@ static void LoadGeometry(
 
             tmp.resize(primVertexCount * 4);
 
-            if (const cgltf_accessor* const pos
-                = cgltf_find_accessor(&prim, cgltf_attribute_type_position, 0))
+            if (const cgltf_accessor* const pos =
+                    cgltf_find_accessor(&prim, cgltf_attribute_type_position, 0))
             {
                 ASSERT(cgltf_num_components(pos->type) == 3);
-                const cgltf_size size
-                    = cgltf_accessor_unpack_floats(pos, tmp.data(), primVertexCount * 3);
+                const cgltf_size size =
+                    cgltf_accessor_unpack_floats(pos, tmp.data(), primVertexCount * 3);
                 ASSERT(size == primVertexCount * 3);
 
-                for (cgltf_size vi = 0; vi < primVertexCount; ++vi)
-                {
+                for (cgltf_size vi = 0; vi < primVertexCount; ++vi) {
                     primVertices[vi].px = meshopt_quantizeHalf(tmp[vi * 3 + 0]);
                     primVertices[vi].py = meshopt_quantizeHalf(tmp[vi * 3 + 1]);
                     primVertices[vi].pz = meshopt_quantizeHalf(tmp[vi * 3 + 2]);
@@ -160,51 +149,47 @@ static void LoadGeometry(
                 }
             }
 
-            if (const cgltf_accessor* const norm
-                = cgltf_find_accessor(&prim, cgltf_attribute_type_normal, 0))
+            if (const cgltf_accessor* const norm =
+                    cgltf_find_accessor(&prim, cgltf_attribute_type_normal, 0))
             {
                 ASSERT(cgltf_num_components(norm->type) == 3);
-                const cgltf_size size
-                    = cgltf_accessor_unpack_floats(norm, tmp.data(), primVertexCount * 3);
+                const cgltf_size size =
+                    cgltf_accessor_unpack_floats(norm, tmp.data(), primVertexCount * 3);
                 ASSERT(size == primVertexCount * 3);
 
-                for (cgltf_size ni = 0; ni < primVertexCount; ++ni)
-                {
+                for (cgltf_size ni = 0; ni < primVertexCount; ++ni) {
                     const Vec3 normal = {tmp[ni * 3 + 0], tmp[ni * 3 + 1], tmp[ni * 3 + 2]};
                     const Vec2 packed = PackNormalOctahedral(normal);
                     primVertices[ni].normal = PackFloat2ToRG8Snorm(packed);
                 }
             }
 
-            if (const cgltf_accessor* const tangent
-                = cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0))
+            if (const cgltf_accessor* const tangent =
+                    cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0))
             {
                 ASSERT(cgltf_num_components(tangent->type) == 4);
-                const cgltf_size size
-                    = cgltf_accessor_unpack_floats(tangent, tmp.data(), primVertexCount * 4);
+                const cgltf_size size =
+                    cgltf_accessor_unpack_floats(tangent, tmp.data(), primVertexCount * 4);
                 ASSERT(size == primVertexCount * 4);
 
-                for (cgltf_size ti = 0; ti < primVertexCount; ++ti)
-                {
+                for (cgltf_size ti = 0; ti < primVertexCount; ++ti) {
                     const Vec3 t = {tmp[ti * 4 + 0], tmp[ti * 4 + 1], tmp[ti * 4 + 2]};
                     const u32 bitangentSign = tmp[ti * 4 + 3] == 1.0f ? 1 : 0;
 
-                    primVertices[ti].tangent = u32(
-                        (bitangentSign << 31) | PackFloat2ToRG8Snorm(PackNormalOctahedral(t))
-                    );
+                    primVertices[ti].tangent =
+                        u32((bitangentSign << 31) | PackFloat2ToRG8Snorm(PackNormalOctahedral(t)));
                 }
             }
 
-            if (const cgltf_accessor* const tex
-                = cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord, 0))
+            if (const cgltf_accessor* const tex =
+                    cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord, 0))
             {
                 ASSERT(cgltf_num_components(tex->type) == 2);
-                const cgltf_size size
-                    = cgltf_accessor_unpack_floats(tex, tmp.data(), primVertexCount * 2);
+                const cgltf_size size =
+                    cgltf_accessor_unpack_floats(tex, tmp.data(), primVertexCount * 2);
                 ASSERT(size == primVertexCount * 2);
 
-                for (cgltf_size ti = 0; ti < primVertexCount; ++ti)
-                {
+                for (cgltf_size ti = 0; ti < primVertexCount; ++ti) {
                     primVertices[ti].u = meshopt_quantizeHalf(tmp[ti * 2 + 0]);
                     primVertices[ti].v = meshopt_quantizeHalf(tmp[ti * 2 + 1]);
                 }
@@ -292,14 +277,12 @@ static void LoadGeometry(
         }
     }
 
-    for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
-    {
+    for (size_t pi = 0; pi < meshPrimitives.size(); ++pi) {
         Vec3 sphereCenter{};
 
         const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
 
-        for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
-        {
+        for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi) {
             // TODO: implement a better algorithm.
             sphereCenter += Vec3{
                 meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
@@ -313,14 +296,12 @@ static void LoadGeometry(
         meshPrimitives[pi].sphereCenter = sphereCenter;
     }
 
-    for (size_t pi = 0; pi < meshPrimitives.size(); ++pi)
-    {
+    for (size_t pi = 0; pi < meshPrimitives.size(); ++pi) {
         f32 sphereRadius = 0.0f;
 
         const size_t vertexOffset = size_t(drawCmds[pi].vertexOffset);
 
-        for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi)
-        {
+        for (size_t vi = 0; vi < meshPrimitives[pi].vertexCount; ++vi) {
             // TODO: implement a better algorithm.
             const Vec3 v = Vec3{
                 meshopt_dequantizeHalf(vertices[vertexOffset + vi].px),
@@ -341,8 +322,7 @@ static void LoadMaterials(
     const std::vector<Mesh>& meshes,
     const std::vector<MeshPrimitive>& meshPrimitives,
     const cgltf_data* cgltfData
-)
-{
+) {
     DEBUG_ASSERT(drawData.empty());
     DEBUG_ASSERT(materials.empty());
     DEBUG_ASSERT(!meshes.empty());
@@ -351,21 +331,18 @@ static void LoadMaterials(
 
     const u32 materialOffset = 1;
 
-    for (cgltf_size ni = 0; ni < cgltfData->nodes_count; ++ni)
-    {
+    for (cgltf_size ni = 0; ni < cgltfData->nodes_count; ++ni) {
         const cgltf_node& node = cgltfData->nodes[ni];
 
-        if (node.mesh)
-        {
+        if (node.mesh) {
             f32 localToWorld[16]{};
             cgltf_node_transform_world(&node, localToWorld);
 
             const Mesh mesh = meshes[cgltf_mesh_index(cgltfData, node.mesh)];
 
-            for (size_t pi = 0; pi < mesh.primitiveCount; ++pi)
-            {
-                const cgltf_material* const material
-                    = meshPrimitives[mesh.primitiveIdx + pi].material;
+            for (size_t pi = 0; pi < mesh.primitiveCount; ++pi) {
+                const cgltf_material* const material =
+                    meshPrimitives[mesh.primitiveIdx + pi].material;
                 DrawData d{};
 
                 f32 scale[3]{};
@@ -375,8 +352,7 @@ static void LoadMaterials(
                 ASSERT(scale[0] > 0.0f);
                 d.scale = Max(scale[0], Max(scale[1], scale[2]));
 
-                if (material)
-                {
+                if (material) {
                     d.materialIdx = materialOffset + u32(cgltf_material_index(cgltfData, material));
                     d.renderPassFlags = material->alpha_mode == cgltf_alpha_mode_opaque
                         ? RENDER_PASS_OPAQUE_BIT
@@ -388,8 +364,7 @@ static void LoadMaterials(
             }
         }
 
-        if (node.light && (node.light->type == cgltf_light_type_directional))
-        {
+        if (node.light && (node.light->type == cgltf_light_type_directional)) {
             Mat4 localToWorld{};
             cgltf_node_transform_world(&node, &localToWorld.col[0].val[0]);
 
@@ -403,16 +378,13 @@ static void LoadMaterials(
 
     materials.resize(1); // Dummy index.
 
-    for (cgltf_size i = 0; i < cgltfData->materials_count; ++i)
-    {
+    for (cgltf_size i = 0; i < cgltfData->materials_count; ++i) {
         const cgltf_material& mat = cgltfData->materials[i];
 
         Material material{};
 
-        if (mat.has_pbr_metallic_roughness)
-        {
-            if (mat.pbr_metallic_roughness.base_color_texture.texture)
-            {
+        if (mat.has_pbr_metallic_roughness) {
+            if (mat.pbr_metallic_roughness.base_color_texture.texture) {
                 material.albedoTexIdx = u32(cgltf_texture_index(
                     cgltfData,
                     mat.pbr_metallic_roughness.base_color_texture.texture
@@ -424,8 +396,7 @@ static void LoadMaterials(
                 mat.pbr_metallic_roughness.base_color_factor
             );
 
-            if (mat.pbr_metallic_roughness.metallic_roughness_texture.texture)
-            {
+            if (mat.pbr_metallic_roughness.metallic_roughness_texture.texture) {
                 material.metallicRoughnessTexIdx = u32(cgltf_texture_index(
                     cgltfData,
                     mat.pbr_metallic_roughness.metallic_roughness_texture.texture
@@ -436,8 +407,7 @@ static void LoadMaterials(
             material.roughnessFactor = mat.pbr_metallic_roughness.roughness_factor;
         }
 
-        if (mat.normal_texture.texture)
-        {
+        if (mat.normal_texture.texture) {
             material.normalTexIdx = u32(cgltf_texture_index(cgltfData, mat.normal_texture.texture));
         }
 
@@ -449,25 +419,20 @@ static void LoadTexturePaths(
     std::vector<std::string>& texturePaths,
     const std::string& gltfPath,
     const cgltf_data* cgltfData
-)
-{
+) {
     DEBUG_ASSERT(texturePaths.empty());
     DEBUG_ASSERT(!gltfPath.empty());
     DEBUG_ASSERT(cgltfData);
 
     std::string basePath;
     const size_t lastSeparatorPos = gltfPath.find_last_of("/\\");
-    if (lastSeparatorPos == std::string::npos)
-    {
+    if (lastSeparatorPos == std::string::npos) {
         basePath = "";
-    }
-    else
-    {
+    } else {
         basePath = gltfPath.substr(0, lastSeparatorPos + 1);
     }
 
-    for (cgltf_size i = 0; i < cgltfData->textures_count; ++i)
-    {
+    for (cgltf_size i = 0; i < cgltfData->textures_count; ++i) {
         const cgltf_texture& tex = cgltfData->textures[i];
         ASSERT(tex.image);
 
@@ -478,8 +443,7 @@ static void LoadTexturePaths(
         uri.resize(cgltf_decode_uri(uri.data()));
 
         const std::string::size_type dotPos = uri.find_last_of('.');
-        if (dotPos != std::string::npos)
-        {
+        if (dotPos != std::string::npos) {
             uri.replace(dotPos, uri.size() - dotPos, ".ktx2");
         }
 
@@ -499,8 +463,7 @@ bool LoadScene(
     std::vector<std::string>& texturePaths,
     Vec3& sunDirectionWorld,
     const std::string& gltfPath
-)
-{
+) {
     DEBUG_ASSERT(vertices.empty());
     DEBUG_ASSERT(indices.empty());
     DEBUG_ASSERT(meshPrimitives.empty());
@@ -513,23 +476,20 @@ bool LoadScene(
     cgltf_options options{};
     cgltf_data* cgltfData{};
     cgltf_result cgltfResult = cgltf_parse_file(&options, gltfPath.c_str(), &cgltfData);
-    if (cgltfResult != cgltf_result_success)
-    {
+    if (cgltfResult != cgltf_result_success) {
         fprintf(stderr, "gltf loading failed: %s\n", cgltf_result_to_string(cgltfResult));
         return false;
     }
     DEFER(cgltf_free(cgltfData));
 
     cgltfResult = cgltf_load_buffers(&options, cgltfData, gltfPath.c_str());
-    if (cgltfResult != cgltf_result_success)
-    {
+    if (cgltfResult != cgltf_result_success) {
         fprintf(stderr, "gltf buffer loading failed: %s\n", cgltf_result_to_string(cgltfResult));
         return false;
     }
 
     cgltfResult = cgltf_validate(cgltfData);
-    if (cgltfResult != cgltf_result_success)
-    {
+    if (cgltfResult != cgltf_result_success) {
         fprintf(stderr, "gltf validation failed: %s\n", cgltf_result_to_string(cgltfResult));
         return false;
     }

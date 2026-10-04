@@ -53,7 +53,7 @@ float3 CalcPosView(float2 uv)
 }
 
 [numthreads(RENDERER_SSAO_WORKGROUP_SIZE_X, RENDERER_SSAO_WORKGROUP_SIZE_Y, 1)]
-void Main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 dtid : SV_DispatchThreadID)
 {
     const uint2 textureSize = uint2(pushConstants.width, pushConstants.height);
 

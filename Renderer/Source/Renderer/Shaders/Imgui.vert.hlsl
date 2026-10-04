@@ -5,7 +5,7 @@
 [[vk::push_constant]]
 PushConstantsImgui pushConstants;
 
-void Main(uint vertexId : SV_VertexID, out VertexOutput output)
+void main(uint vertexId : SV_VertexID, out VertexOutput output)
 {
     const ImguiVertex vertex = vertexBuffer[vertexId];
     output.position =

@@ -5,5 +5,5 @@
 
 #include "Utils.hpp"
 
-#include <math.h>
 #include <float.h>
+#include <math.h>

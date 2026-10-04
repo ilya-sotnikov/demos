@@ -1,6 +1,6 @@
 #include "Shadow.hlsli"
 
-void Main(VertexOutput input)
+void main(VertexOutput input)
 {
     // Empty.
 }

@@ -14,10 +14,8 @@
 // https://stackoverflow.com/a/75418614
 // NOTE: another thing is that, according to the spec, malloc doesn't even start a lifetime before
 // C++20, so it's UB, once again, compilers don't break the code.
-struct Arena
-{
-    enum
-    {
+struct Arena {
+    enum {
         FlagNone = 0,
         FlagNoZero = (1 << 0),
     };
@@ -34,14 +32,12 @@ struct Arena
     void FreeAll();
     void FreeBuffer();
 
-    template <typename T>
-    T* Alloc(ptrdiff_t count, int flags = FlagNone)
-    {
+    template<typename T>
+    T* Alloc(ptrdiff_t count, int flags = FlagNone) {
         return static_cast<T*>(Alloc(ptrdiff_t(count) * sizeof(T), alignof(T), flags));
     }
-    template <typename T>
-    T* AllocOrDie(ptrdiff_t count, int flags = FlagNone)
-    {
+    template<typename T>
+    T* AllocOrDie(ptrdiff_t count, int flags = FlagNone) {
         return static_cast<T*>(AllocOrDie(count * ptrdiff_t(sizeof(T)), alignof(T), flags));
     }
 };

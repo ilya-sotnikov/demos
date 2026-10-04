@@ -1,19 +1,17 @@
 #pragma once
 
 #include "../Common.hpp"
+#include "../Math/Types.hpp"
 #include "RHI/RHI.hpp"
 #include "Shaders/SharedConfig.hlsli"
-#include "../Math/Types.hpp"
 #include "Shaders/SharedDef.hlsli"
 
 #include "../Math/Types.hpp"
 
 struct SDL_Window;
 
-struct ImguiRenderer
-{
-    struct PushConstantBlock
-    {
+struct ImguiRenderer {
+    struct PushConstantBlock {
         Vec2 scale;
         Vec2 translate;
     };
@@ -22,8 +20,7 @@ struct ImguiRenderer
     RHI::Sampler mFontSampler;
     RHI::Pipeline mPipeline;
 
-    struct Frame
-    {
+    struct Frame {
         RHI::Buffer vertexBuffer;
         RHI::Buffer indexBuffer;
         u64 vertexBufferSize;

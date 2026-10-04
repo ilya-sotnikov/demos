@@ -1,7 +1,7 @@
 #include "Common.hlsli"
 #include "Fullscreen.hlsli"
 
-void Main(uint vertexId : SV_VertexID, out VertexOutput output)
+void main(uint vertexId : SV_VertexID, out VertexOutput output)
 {
     // Fullscreen triangle.
     output.uv = float2((vertexId << 1) & 2, vertexId & 2);

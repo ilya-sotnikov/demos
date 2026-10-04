@@ -3,8 +3,8 @@
 #include "../Common.hpp"
 #include "Types.hpp"
 
-#include <math.h>
 #include <float.h>
+#include <math.h>
 
 // returns static data, not thread-safe
 
@@ -30,54 +30,45 @@ u32 LfsrNext(u32 value);
 f32 LfsrNextGetFloatAbs(u32& value, f32 amplitude);
 f32 LfsrNextGetFloat(u32& value, f32 amplitude);
 
-inline f32 Abs(f32 x)
-{
+inline f32 Abs(f32 x) {
     return fabsf(x);
 }
 
-inline f64 Abs(f64 x)
-{
+inline f64 Abs(f64 x) {
     return fabs(x);
 }
 
-inline f32 Sign(f32 x)
-{
+inline f32 Sign(f32 x) {
     return x < 0.0f ? -1.0f : 1.0f;
 }
 
-inline constexpr f32 Degrees(f32 radians)
-{
+inline constexpr f32 Degrees(f32 radians) {
     return 180.0f * radians / M_PIf;
 }
 
-inline constexpr f32 Radians(f32 degrees)
-{
+inline constexpr f32 Radians(f32 degrees) {
     return M_PIf * degrees / 180.0f;
 }
 
-template <typename T>
-T Min(T a, T b)
-{
+template<typename T>
+T Min(T a, T b) {
     return a < b ? a : b;
 }
 
-inline Vec2 Min(Vec2 a, Vec2 b)
-{
+inline Vec2 Min(Vec2 a, Vec2 b) {
     const f32 x = a.val[0] < b.val[0] ? a.val[0] : b.val[0];
     const f32 y = a.val[1] < b.val[1] ? a.val[1] : b.val[1];
     return {x, y};
 }
 
-inline Vec3 Min(Vec3 a, Vec3 b)
-{
+inline Vec3 Min(Vec3 a, Vec3 b) {
     const f32 x = a.val[0] < b.val[0] ? a.val[0] : b.val[0];
     const f32 y = a.val[1] < b.val[1] ? a.val[1] : b.val[1];
     const f32 z = a.val[2] < b.val[2] ? a.val[2] : b.val[2];
     return {x, y, z};
 }
 
-inline Vec4 Min(Vec4 a, Vec4 b)
-{
+inline Vec4 Min(Vec4 a, Vec4 b) {
     const f32 x = a.val[0] < b.val[0] ? a.val[0] : b.val[0];
     const f32 y = a.val[1] < b.val[1] ? a.val[1] : b.val[1];
     const f32 z = a.val[2] < b.val[2] ? a.val[2] : b.val[2];
@@ -85,30 +76,26 @@ inline Vec4 Min(Vec4 a, Vec4 b)
     return {x, y, z, w};
 }
 
-template <typename T>
+template<typename T>
 
-T Max(T a, T b)
-{
+T Max(T a, T b) {
     return a > b ? a : b;
 }
 
-inline Vec2 Max(Vec2 a, Vec2 b)
-{
+inline Vec2 Max(Vec2 a, Vec2 b) {
     const f32 x = a.val[0] > b.val[0] ? a.val[0] : b.val[0];
     const f32 y = a.val[1] > b.val[1] ? a.val[1] : b.val[1];
     return {x, y};
 }
 
-inline Vec3 Max(Vec3 a, Vec3 b)
-{
+inline Vec3 Max(Vec3 a, Vec3 b) {
     const f32 x = a.val[0] > b.val[0] ? a.val[0] : b.val[0];
     const f32 y = a.val[1] > b.val[1] ? a.val[1] : b.val[1];
     const f32 z = a.val[2] > b.val[2] ? a.val[2] : b.val[2];
     return {x, y, z};
 }
 
-inline Vec4 Max(Vec4 a, Vec4 b)
-{
+inline Vec4 Max(Vec4 a, Vec4 b) {
     const f32 x = a.val[0] > b.val[0] ? a.val[0] : b.val[0];
     const f32 y = a.val[1] > b.val[1] ? a.val[1] : b.val[1];
     const f32 z = a.val[2] > b.val[2] ? a.val[2] : b.val[2];
@@ -116,69 +103,58 @@ inline Vec4 Max(Vec4 a, Vec4 b)
     return {x, y, z, w};
 }
 
-template <typename T>
-T Max(T a, T b, T c)
-{
+template<typename T>
+T Max(T a, T b, T c) {
     T result = a;
-    if (b > result)
-    {
+    if (b > result) {
         result = b;
     }
-    if (c > result)
-    {
+    if (c > result) {
         result = c;
     }
     return result;
 }
 
-template <typename Float>
-inline bool AlmostEqual(Float a, Float b, Float absoluteTolerance, Float relativeTolerance)
-{
+template<typename Float>
+inline bool AlmostEqual(Float a, Float b, Float absoluteTolerance, Float relativeTolerance) {
     return Abs(a - b) <= Max(absoluteTolerance, relativeTolerance * Max(Abs(a), Abs(b)));
 }
 
 // When absoluteTolerance == relativeTolerance.
-template <typename Float>
-inline bool AlmostEqual(Float a, Float b, Float tolerance = FLT_EPSILON)
-{
+template<typename Float>
+inline bool AlmostEqual(Float a, Float b, Float tolerance = FLT_EPSILON) {
     return Abs(a - b) <= tolerance * Max(Float(1), Abs(a), Abs(b));
 }
 
 // Not robust but fuck it.
-inline f32 Fract(f32 x)
-{
+inline f32 Fract(f32 x) {
     return x - f32(longlong(x));
 }
 
-template <typename T>
-T Clamp(T x, T min, T max)
-{
+template<typename T>
+T Clamp(T x, T min, T max) {
     return x > max ? max : x < min ? min : x;
 }
 
-template <typename T>
-void Swap(T& a, T& b)
-{
+template<typename T>
+void Swap(T& a, T& b) {
     const T tmp = a;
     a = b;
     b = tmp;
 }
 
-inline f32 Square(f32 x)
-{
+inline f32 Square(f32 x) {
     return x * x;
 }
 
 // https://en.wikipedia.org/wiki/Halton_sequence
-inline f32 HaltonSequence(u32 idx, u32 base)
-{
+inline f32 HaltonSequence(u32 idx, u32 base) {
     DEBUG_ASSERT(idx > 0);
 
     f32 f = 1.0f;
     f32 r = 0.0f;
 
-    while (idx > 0)
-    {
+    while (idx > 0) {
         f /= f32(base);
         r = r + f * f32(idx % base);
         idx = u32(floorf(f32(idx) / f32(base)));
@@ -187,20 +163,17 @@ inline f32 HaltonSequence(u32 idx, u32 base)
     return r;
 }
 
-inline u32 PreviousPow2(u32 x)
-{
+inline u32 PreviousPow2(u32 x) {
     u32 result = 1;
 
-    while (result * 2 < x)
-    {
+    while (result * 2 < x) {
         result *= 2;
     }
 
     return result;
 }
 
-inline Vec3 Exp(Vec3 v)
-{
+inline Vec3 Exp(Vec3 v) {
     return {
         expf(v.val[0]),
         expf(v.val[1]),

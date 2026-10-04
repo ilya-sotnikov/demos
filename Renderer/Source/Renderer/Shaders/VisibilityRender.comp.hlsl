@@ -68,7 +68,7 @@ float4 SampleTex(uint32_t idx, InterpolatedData2D uv)
 }
 
 [numthreads(RENDERER_RENDER_WORKGROUP_SIZE_X, RENDERER_RENDER_WORKGROUP_SIZE_Y, 1)]
-void Main(uint3 dtid : SV_DispatchThreadID)
+void main(uint3 dtid : SV_DispatchThreadID)
 {
     const int2 renderTextureSize = int2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
 

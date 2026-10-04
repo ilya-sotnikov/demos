@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../Common.hpp"
-#include "../../SliceArg.hpp"
+#include "Common.hpp"
+#include "slice_arg.hpp"
 
 // Based on Sebastian Aaltonen's approach with designated initializers:
 // https://youtu.be/m3bW8d4Brec?si=7V8xsxykqCHbskvu&t=2233
@@ -21,16 +21,13 @@
 
 // TODO: 16 bit should be enough.
 #define RHI_HANDLE(type) \
-    struct type \
-    { \
+    struct type { \
         u32 idx = RHI::INVALID_HANDLE; \
         u32 generation; \
-        explicit operator bool() const \
-        { \
+        explicit operator bool() const { \
             return idx != RHI::INVALID_HANDLE; \
         } \
-        static type Invalid() \
-        { \
+        static type Invalid() { \
             return {.idx = RHI::INVALID_HANDLE}; \
         } \
     }
@@ -39,8 +36,7 @@ struct SDL_Window;
 
 // #define RHI_ENABLE_DEBUG_UTILS
 
-namespace RHI
-{
+namespace RHI {
 
 using Flags = u32;
 using Flags64 = u64;
@@ -61,15 +57,13 @@ RHI_HANDLE(Sampler);
 RHI_HANDLE(Semaphore);
 RHI_HANDLE(CommandBuffer);
 
-enum MemoryType
-{
+enum MemoryType {
     MEMORY_TYPE_DEFAULT, // Device-local, host-visible, host-coherent.
     MEMORY_TYPE_DEFAULT_UNIFORM, // Device-local, host-visible, host-coherent, uniform.
     MEMORY_TYPE_DEVICE, // Device-local.
 };
 
-enum Cull
-{
+enum Cull {
     CULL_CCW,
     CULL_CW,
     CULL_ALL,
@@ -85,8 +79,7 @@ enum DepthFlagBits : u32
 using DepthFlags = Flags;
 // clang-format on
 
-enum Op
-{
+enum Op {
     OP_NEVER,
     OP_LESS,
     OP_EQUAL,
@@ -97,8 +90,7 @@ enum Op
     OP_ALWAYS,
 };
 
-enum BlendOp
-{
+enum BlendOp {
     BLEND_OP_ADD,
     BLEND_OP_SUBTRACT,
     BLEND_OP_REVERSE_SUBTRACT,
@@ -106,8 +98,7 @@ enum BlendOp
     BLEND_OP_MAX,
 };
 
-enum BlendFactor
-{
+enum BlendFactor {
     BLEND_FACTOR_ZERO,
     BLEND_FACTOR_ONE,
     BLEND_FACTOR_SRC_COLOR,
@@ -116,8 +107,7 @@ enum BlendFactor
     BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
 };
 
-enum ColorComponentFlagBits : u32
-{
+enum ColorComponentFlagBits : u32 {
     COLOR_COMPONENT_R_BIT = (1U << 0),
     COLOR_COMPONENT_G_BIT = (1U << 1),
     COLOR_COMPONENT_B_BIT = (1U << 2),
@@ -125,38 +115,33 @@ enum ColorComponentFlagBits : u32
 };
 using ColorComponentFlags = Flags;
 
-inline constexpr ColorComponentFlags COLOR_COMPONENT_ALL_BITS
-    = COLOR_COMPONENT_R_BIT | COLOR_COMPONENT_G_BIT | COLOR_COMPONENT_B_BIT | COLOR_COMPONENT_A_BIT;
+inline constexpr ColorComponentFlags COLOR_COMPONENT_ALL_BITS =
+    COLOR_COMPONENT_R_BIT | COLOR_COMPONENT_G_BIT | COLOR_COMPONENT_B_BIT | COLOR_COMPONENT_A_BIT;
 
-enum Topology
-{
+enum Topology {
     TOPOLOGY_TRIANGLE_LIST,
     TOPOLOGY_TRIANGLE_STRIP,
     TOPOLOGY_TRIANGLE_FAN,
 };
 
-enum TextureType
-{
+enum TextureType {
     TEXTURE_TYPE_1D,
     TEXTURE_TYPE_2D,
     TEXTURE_TYPE_3D,
     TEXTURE_TYPE_2D_ARRAY,
 };
 
-enum Filter
-{
+enum Filter {
     FILTER_NEAREST,
     FILTER_LINEAR,
 };
 
-enum SamplerMipmapMode
-{
+enum SamplerMipmapMode {
     SAMPLER_MIPMAP_MODE_NEAREST,
     SAMPLER_MIPMAP_MODE_LINEAR,
 };
 
-enum SamplerAddressMode
-{
+enum SamplerAddressMode {
     SAMPLER_ADDRESS_MODE_REPEAT,
     SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
     SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -164,8 +149,7 @@ enum SamplerAddressMode
     SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
 };
 
-enum CompareOp
-{
+enum CompareOp {
     COMPARE_OP_NEVER,
     COMPARE_OP_LESS,
     COMPARE_OP_EQUAL,
@@ -176,15 +160,13 @@ enum CompareOp
     COMPARE_OP_ALWAYS,
 };
 
-enum SamplerReductionMode
-{
+enum SamplerReductionMode {
     SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE,
     SAMPLER_REDUCTION_MODE_MIN,
     SAMPLER_REDUCTION_MODE_MAX,
 };
 
-enum Format
-{
+enum Format {
 #define RHI_XFMT(rhiFormat, vulkanFormat) rhiFormat,
 #include "FormatTable.hpp"
 };
@@ -202,51 +184,44 @@ enum TextureUsageFlagBits : u32
 using TextureUsageFlags = Flags;
 // clang-format on
 
-enum StageFlagBits : u32
-{
+enum StageFlagBits : u32 {
 #define RHI_XSTAGE(rhi, bit, vulkan) rhi = bit,
 #include "StageTable.hpp"
 };
 using StageFlags = Flags;
 
-enum AccessFlagBits : u32
-{
+enum AccessFlagBits : u32 {
 #define RHI_XACCESS(rhi, bit, vulkan) rhi = bit,
 #include "AccessTable.hpp"
 };
 using AccessFlags = Flags;
 
-enum TextureLayout
-{
+enum TextureLayout {
     TEXTURE_LAYOUT_UNDEFINED,
     TEXTURE_LAYOUT_GENERAL,
     TEXTURE_LAYOUT_PRESENT_SRC,
 };
 
-enum AttachmentLoadOp
-{
+enum AttachmentLoadOp {
     ATTACHMENT_LOAD_OP_LOAD,
     ATTACHMENT_LOAD_OP_CLEAR,
     ATTACHMENT_LOAD_OP_DONT_CARE,
     ATTACHMENT_LOAD_OP_NONE,
 };
 
-enum AttachmentStoreOp
-{
+enum AttachmentStoreOp {
     ATTACHMENT_STORE_OP_STORE,
     ATTACHMENT_STORE_OP_DONT_CARE,
     ATTACHMENT_STORE_OP_NONE,
 };
 
-enum IndexType
-{
+enum IndexType {
     INDEX_TYPE_U8,
     INDEX_TYPE_U16,
     INDEX_TYPE_U32,
 };
 
-enum Queue
-{
+enum Queue {
     QUEUE_GRAPHICS,
     QUEUE_COMPUTE,
 };
@@ -257,12 +232,11 @@ inline constexpr u32 ALL_LAYERS = (~0U);
 // clang-format on
 
 // -----------------------------------------------------------------------------
-// TODO: for now just enabling the needed for this project features.
+// TODO: For now just enabling the needed for this project features.
 void Create(SDL_Window* window);
 void Destroy();
 
-struct DeviceProperties
-{
+struct DeviceProperties {
     u64 minUniformBufferOffsetAlignment;
     char name[MAX_PHYSICAL_DEVICE_NAME_SIZE];
 };
@@ -270,14 +244,13 @@ const DeviceProperties& GetDeviceProperties();
 
 // -----------------------------------------------------------------------------
 // Buffer.
-struct BufferDesc
-{
+struct BufferDesc {
     MemoryType type = MEMORY_TYPE_DEFAULT;
     u64 size;
     u64 minAlignment;
     const char* debugName;
 };
-// TODO: not sure if I should handle double-free explicitly, the pool API returns
+// TODO: Not sure if I should handle double-free explicitly, the pool API returns
 // nullptr and then the RHI segfaults, for now this behavior seems reasonable
 // (and a lot better than freeing some random stuff).
 
@@ -290,8 +263,7 @@ void DestroyBuffer(Buffer buffer);
 
 // -----------------------------------------------------------------------------
 // Texture.
-struct TextureDesc
-{
+struct TextureDesc {
     Format format;
     TextureType type = TEXTURE_TYPE_2D;
     U32Vec3 dimensions;
@@ -305,9 +277,8 @@ struct TextureDesc
 Texture CreateTexture(const TextureDesc&& desc);
 void DestroyTexture(Texture texture);
 
-struct TextureDescriptorDesc
-{
-    // TODO: so far I didn't find having different image/view formats useful.
+struct TextureDescriptorDesc {
+    // TODO: So far I didn't find having different image/view formats useful.
     Texture texture;
     TextureType type = TEXTURE_TYPE_2D;
     u32 baseMip;
@@ -321,14 +292,13 @@ void DestroyTextureDescriptor(TextureDescriptor descriptor);
 Format GetTextureFormat(Texture texture);
 U32Vec3 GetTextureDimensions(Texture texture);
 
-// TODO: kinda retarded, but works for now.
+// TODO: Kinda retarded, but works for now.
 void UpdateTextureDescriptorSet(Texture texture, u32 dstArrayElement);
 
 // -----------------------------------------------------------------------------
 // Sampler.
 
-struct SamplerDesc
-{
+struct SamplerDesc {
     Filter magFilter = FILTER_LINEAR;
     Filter minFilter = FILTER_LINEAR;
     SamplerReductionMode reductionMode = SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE;
@@ -357,10 +327,8 @@ void WaitSemaphore(Semaphore semaphore, u64 value, u64 timeout = 1'000'000'000);
 // -----------------------------------------------------------------------------
 // Command buffer and queue.
 // Command pools are reset in BeginNewFrame.
-struct QueueSubmitDesc
-{
-    struct SemaphoreSubmitDesc
-    {
+struct QueueSubmitDesc {
+    struct SemaphoreSubmitDesc {
         Semaphore semaphore;
         u64 value;
         RHI::StageFlags stageMask = RHI::STAGE_ALL_COMMANDS_BIT;
@@ -373,11 +341,8 @@ struct QueueSubmitDesc
     bool signalReadyToPresent;
     SliceArg<SemaphoreSubmitDesc> signalSemaphores;
 };
-CommandBuffer CreateCommandBuffer(
-    Queue queue,
-    int frameInFlightIdx = 0,
-    const char* debugName = nullptr
-);
+CommandBuffer
+CreateCommandBuffer(Queue queue, int frameInFlightIdx = 0, const char* debugName = nullptr);
 void DestroyCommandBuffer(CommandBuffer cb);
 void BeginCommandBuffer(CommandBuffer cb);
 void EndCommandBuffer(CommandBuffer cb);
@@ -385,16 +350,14 @@ void QueueSubmit(Queue queue, const SliceArg<QueueSubmitDesc>&& desc);
 
 // -----------------------------------------------------------------------------
 // Pipeline.
-struct ComputePipelineDesc
-{
+struct ComputePipelineDesc {
     Slice<u8> bytecode;
     bool usesBindlessTextures;
     const char* debugName;
 };
 Pipeline CreateComputePipeline(const ComputePipelineDesc&& desc);
 
-struct PipelineColorTarget
-{
+struct PipelineColorTarget {
     Format format;
     bool blendEnable;
     BlendOp colorOp = RHI::BLEND_OP_ADD;
@@ -405,8 +368,7 @@ struct PipelineColorTarget
     BlendFactor dstAlphaFactor = RHI::BLEND_FACTOR_ZERO;
     ColorComponentFlags colorComponentMask = RHI::COLOR_COMPONENT_ALL_BITS;
 };
-struct GraphicsPipelineDesc
-{
+struct GraphicsPipelineDesc {
     SliceArg<Slice<u8>> bytecodes;
     bool usesBindlessTextures;
     Topology topology = TOPOLOGY_TRIANGLE_LIST;
@@ -434,8 +396,7 @@ void CmdBarrier(
     AccessFlags dstAccessMask
 );
 
-struct TextureBarrierDesc
-{
+struct TextureBarrierDesc {
     Texture texture;
     TextureLayout oldLayout;
     TextureLayout newLayout;
@@ -458,14 +419,12 @@ void CmdTextureInvalidateBarrier(
     const SliceArg<Texture>&& textures
 );
 
-struct TextureSubresourceLayers
-{
+struct TextureSubresourceLayers {
     u32 mipLevel;
     u32 baseArrayLayer;
     u32 layerCount = 1;
 };
-struct BufferTextureCopy
-{
+struct BufferTextureCopy {
     u64 bufferOffset;
     u32 bufferRowLength;
     u32 bufferTextureHeight;
@@ -486,10 +445,8 @@ void CmdBindPipeline(CommandBuffer cb, Pipeline pipeline);
 
 void CmdDispatch(CommandBuffer cb, U32Vec3 groupCount);
 
-struct DescriptorInfo
-{
-    enum Type
-    {
+struct DescriptorInfo {
+    enum Type {
         TYPE_NONE,
         TYPE_TEXTURE,
         TYPE_TEXTURE_DESCRIPTOR,
@@ -499,35 +456,31 @@ struct DescriptorInfo
 
     Type type;
 
-    union
-    {
+    union {
         Texture texture;
         TextureDescriptor textureDescriptor;
         Sampler sampler;
 
-        struct BufferInfo
-        {
+        struct BufferInfo {
             Buffer buffer;
             u64 offset;
             u64 range;
         } buffer;
     } resource;
 
-    DescriptorInfo() : type{TYPE_NONE}, resource{.buffer{}} { }
+    DescriptorInfo(): type{TYPE_NONE}, resource{.buffer{}} {}
 
-    DescriptorInfo(Texture texture) : type{TYPE_TEXTURE}, resource{.texture = texture} { }
+    DescriptorInfo(Texture texture): type{TYPE_TEXTURE}, resource{.texture = texture} {}
 
-    DescriptorInfo(TextureDescriptor descriptor)
-        : type{TYPE_TEXTURE_DESCRIPTOR}
-        , resource{.textureDescriptor = descriptor}
-    { }
+    DescriptorInfo(TextureDescriptor descriptor):
+        type{TYPE_TEXTURE_DESCRIPTOR},
+        resource{.textureDescriptor = descriptor} {}
 
-    DescriptorInfo(Sampler sampler) : type{TYPE_SAMPLER}, resource{.sampler = sampler} { }
+    DescriptorInfo(Sampler sampler): type{TYPE_SAMPLER}, resource{.sampler = sampler} {}
 
-    DescriptorInfo(Buffer buffer, u64 offset = 0, u64 range = WHOLE_SIZE)
-        : type{TYPE_BUFFER}
-        , resource{.buffer = {buffer, offset, range}}
-    { }
+    DescriptorInfo(Buffer buffer, u64 offset = 0, u64 range = WHOLE_SIZE):
+        type{TYPE_BUFFER},
+        resource{.buffer = {buffer, offset, range}} {}
 };
 
 void CmdPushDescriptors(
@@ -538,8 +491,7 @@ void CmdPushDescriptors(
 
 void CmdPushConstants(CommandBuffer cb, Pipeline pipeline, const void* data);
 
-struct SetViewportDesc
-{
+struct SetViewportDesc {
     CommandBuffer cb;
     f32 x = 0.0f;
     f32 y = 0.0f;
@@ -550,53 +502,45 @@ struct SetViewportDesc
 };
 void CmdSetViewport(const SetViewportDesc&& desc);
 
-struct SetScissorDesc
-{
+struct SetScissorDesc {
     CommandBuffer cb;
     I32Vec2 offset;
     U32Vec2 extent;
 };
 void CmdSetScissor(const SetScissorDesc&& desc);
 
-struct Attachment
-{
-    struct TextureOrDescriptor
-    {
-        enum
-        {
+struct Attachment {
+    struct TextureOrDescriptor {
+        enum {
             TYPE_NONE,
             TYPE_TEXTURE,
             TYPE_TEXTURE_DESCRIPTOR,
         } type;
 
-        union
-        {
+        union {
             Texture texture;
             TextureDescriptor descriptor;
         };
 
-        TextureOrDescriptor() : type{TYPE_NONE} { }
+        TextureOrDescriptor(): type{TYPE_NONE} {}
 
-        TextureOrDescriptor(Texture texture) : type{TYPE_TEXTURE}, texture{texture} { }
+        TextureOrDescriptor(Texture texture): type{TYPE_TEXTURE}, texture{texture} {}
 
-        TextureOrDescriptor(TextureDescriptor descriptor)
-            : type{TYPE_TEXTURE_DESCRIPTOR}
-            , descriptor{descriptor}
-        { }
+        TextureOrDescriptor(TextureDescriptor descriptor):
+            type{TYPE_TEXTURE_DESCRIPTOR},
+            descriptor{descriptor} {}
     };
 
     TextureOrDescriptor attachment;
     AttachmentLoadOp loadOp;
     AttachmentStoreOp storeOp;
 
-    union
-    {
+    union {
         f32 color[3];
         f32 value;
     };
 };
-struct BeginRenderingDesc
-{
+struct BeginRenderingDesc {
     CommandBuffer cb;
     I32Vec2 offset;
     U32Vec2 extent;
@@ -624,8 +568,7 @@ void CmdDrawIndexed(
     u32 firstInstance
 );
 
-struct DrawIndirectCommand
-{
+struct DrawIndirectCommand {
     u32 vertexCount;
     u32 instanceCount;
     u32 firstVertex;
@@ -640,8 +583,7 @@ void CmdDrawIndirect(
     u32 stride = sizeof(DrawIndirectCommand)
 );
 
-struct DrawIndexedIndirectCommand
-{
+struct DrawIndexedIndirectCommand {
     u32 indexCount;
     u32 instanceCount;
     u32 firstIndex;
@@ -659,14 +601,13 @@ void CmdDrawIndexedIndirectCount(
     u32 stride = sizeof(DrawIndexedIndirectCommand)
 );
 
-// TODO: kinda retarded, but works for now.
+// TODO: Kinda retarded, but works for now.
 void CmdBindTextureDescriptorSet(CommandBuffer cb, RHI::Pipeline pipeline);
 
 // -----------------------------------------------------------------------------
 // Swapchain.
-// TODO: swapchain API is rough, but idk.
-enum SwapchainResult
-{
+// TODO: Swapchain API is rough, but idk.
+enum SwapchainResult {
     SWAPCHAIN_SUCCESS,
     SWAPCHAIN_OUT_OF_DATE,
     SWAPCHAIN_SUBOPTIMAL,
@@ -685,6 +626,6 @@ void QueueWaitIdle(Queue queue);
 // TODO: It's not great that I expose these concepts, but it simplifies some
 // stuff so for now it's alright.
 void BeginNewFrame(int frameInFlightIdx);
-}
+} // namespace RHI
 
 #undef RHI_HANDLE

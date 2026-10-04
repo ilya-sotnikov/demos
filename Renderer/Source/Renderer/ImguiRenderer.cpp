@@ -1,7 +1,7 @@
 #include "ImguiRenderer.hpp"
 
-#include "../Utils.hpp"
 #include "../Math/Utils.hpp"
+#include "../Utils.hpp"
 
 #include <SDL3/SDL_video.h>
 #include <imgui.h>
@@ -12,22 +12,18 @@
 // Heavily based on Sascha Willems's vulkan examples:
 // https://github.com/SaschaWillems/Vulkan/blob/master/base/VulkanUIOverlay.h
 
-bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
-{
+bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat) {
     DEBUG_ASSERT(window);
 
-    if (!IMGUI_CHECKVERSION())
-    {
+    if (!IMGUI_CHECKVERSION()) {
         fprintf(stderr, "IMGUI_CHECKVERSION failed\n");
         return false;
     }
-    if (!ImGui::CreateContext())
-    {
+    if (!ImGui::CreateContext()) {
         fprintf(stderr, "ImGui::CreateContext failed\n");
         return false;
     }
-    if (!ImGui_ImplSDL3_InitForVulkan(window))
-    {
+    if (!ImGui_ImplSDL3_InitForVulkan(window)) {
         fprintf(stderr, "ImGui_ImplSDL3_InitForVulkan failed\n");
         return 1;
     }
@@ -44,14 +40,12 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
     ImGui::StyleColorsDark();
 
     const SDL_DisplayID display = SDL_GetPrimaryDisplay();
-    if (display == 0)
-    {
+    if (display == 0) {
         fprintf(stderr, "SDL_GetPrimaryDisplay failed: %s\n", SDL_GetError());
         return false;
     }
     const f32 windowScale = SDL_GetDisplayContentScale(display);
-    if (windowScale == 0.0f)
-    {
+    if (windowScale == 0.0f) {
         fprintf(stderr, "SDL_GetDisplayContentScale failed: %s\n", SDL_GetError());
         return false;
     }
@@ -123,16 +117,17 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
 
     // Pipeline.
     {
-        Utils::FileData vertData = Utils::FileRead("Imgui.vert.hlsl.spv");
+        utils::FileData vertData = utils::file_read("Imgui.vert.hlsl.spv");
         DEFER(free(vertData.data));
-        Utils::FileData fragData = Utils::FileRead("Imgui.frag.hlsl.spv");
+        utils::FileData fragData = utils::file_read("Imgui.frag.hlsl.spv");
         DEFER(free(fragData.data));
 
         mPipeline = RHI::CreateGraphicsPipeline({
-            .bytecodes = {
-                {static_cast<u8*>(vertData.data), int(vertData.size)},
-                {static_cast<u8*>(fragData.data), int(fragData.size)},
-            },
+            .bytecodes =
+                {
+                    {static_cast<u8*>(vertData.data), int(vertData.size)},
+                    {static_cast<u8*>(fragData.data), int(fragData.size)},
+                },
             .stencilFormat = RHI::FORMAT_S8_UINT,
             .colorTargets = {{
                 .format = colorFormat,
@@ -144,8 +139,7 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
             }},
             .debugName = "FullscreenPass",
         });
-        if (!mPipeline)
-        {
+        if (!mPipeline) {
             return false;
         }
     }
@@ -153,15 +147,13 @@ bool ImguiRenderer::Init(SDL_Window* window, RHI::Format colorFormat)
     return true;
 }
 
-void ImguiRenderer::Cleanup()
-{
+void ImguiRenderer::Cleanup() {
     RHI::DeviceWaitIdle();
 
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
 
-    for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i)
-    {
+    for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i) {
         Frame& frame = mFrame[i];
         RHI::DestroyBuffer(frame.vertexBuffer);
         RHI::DestroyBuffer(frame.indexBuffer);
@@ -171,21 +163,18 @@ void ImguiRenderer::Cleanup()
     RHI::DestroyTexture(mFontTexture);
 }
 
-void ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
-{
+void ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex) {
     ImGui::Render();
 
     const ImDrawData* const drawData = ImGui::GetDrawData();
-    if (!drawData)
-    {
+    if (!drawData) {
         return;
     }
 
     u64 vertexBufferSize = u64(drawData->TotalVtxCount) * sizeof(ImDrawVert);
     u64 indexBufferSize = u64(drawData->TotalIdxCount) * sizeof(ImDrawIdx);
 
-    if (vertexBufferSize == 0 || indexBufferSize == 0)
-    {
+    if (vertexBufferSize == 0 || indexBufferSize == 0) {
         return;
     }
 
@@ -196,10 +185,9 @@ void ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
     vertexBufferSize = ((vertexBufferSize + chunkSize - 1) / chunkSize) * chunkSize;
     indexBufferSize = ((indexBufferSize + chunkSize - 1) / chunkSize) * chunkSize;
 
-    const bool shouldRecreateVertexBuffer
-        = !frame.vertexBuffer || (frame.vertexBufferSize < vertexBufferSize);
-    if (shouldRecreateVertexBuffer)
-    {
+    const bool shouldRecreateVertexBuffer =
+        !frame.vertexBuffer || (frame.vertexBufferSize < vertexBufferSize);
+    if (shouldRecreateVertexBuffer) {
         RHI::DestroyBuffer(frame.vertexBuffer);
 
         frame.vertexBuffer = RHI::CreateBuffer({
@@ -210,10 +198,9 @@ void ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
         frame.vertexBufferSize = vertexBufferSize;
     }
 
-    const bool shouldRecreateIndexBuffer
-        = !frame.indexBuffer || (frame.indexBufferSize < indexBufferSize);
-    if (shouldRecreateIndexBuffer)
-    {
+    const bool shouldRecreateIndexBuffer =
+        !frame.indexBuffer || (frame.indexBufferSize < indexBufferSize);
+    if (shouldRecreateIndexBuffer) {
         RHI::DestroyBuffer(frame.indexBuffer);
 
         frame.indexBuffer = RHI::CreateBuffer({
@@ -227,8 +214,7 @@ void ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
     // Upload data.
     ImDrawVert* vertexDst = static_cast<ImDrawVert*>(RHI::GetBufferHostPtr(frame.vertexBuffer));
     ImDrawIdx* indexDst = static_cast<ImDrawIdx*>(RHI::GetBufferHostPtr(frame.indexBuffer));
-    for (int i = 0; i < drawData->CmdListsCount; ++i)
-    {
+    for (int i = 0; i < drawData->CmdListsCount; ++i) {
         const ImDrawList* const cmdList = drawData->CmdLists[i];
         memcpy(
             vertexDst,
@@ -241,27 +227,23 @@ void ImguiRenderer::UpdateVertexIndexBuffers(u32 frameIndex)
     }
 }
 
-void ImguiRenderer::StartNewFrame() const
-{
+void ImguiRenderer::StartNewFrame() const {
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 }
 
-void ImguiRenderer::Render(RHI::CommandBuffer cb, u32 frameIndex)
-{
+void ImguiRenderer::Render(RHI::CommandBuffer cb, u32 frameIndex) {
     const ImDrawData* const drawData = ImGui::GetDrawData();
     i32 vertexOffset = 0;
     u32 indexOffset = 0;
 
-    if (!drawData || drawData->CmdListsCount == 0)
-    {
+    if (!drawData || drawData->CmdListsCount == 0) {
         return;
     }
 
     Frame& frame = mFrame[frameIndex];
 
-    if (!frame.vertexBuffer || !frame.indexBuffer)
-    {
+    if (!frame.vertexBuffer || !frame.indexBuffer) {
         return;
     }
 
@@ -293,11 +275,9 @@ void ImguiRenderer::Render(RHI::CommandBuffer cb, u32 frameIndex)
         .height = io.DisplaySize.y,
     });
 
-    for (int i = 0; i < drawData->CmdListsCount; ++i)
-    {
+    for (int i = 0; i < drawData->CmdListsCount; ++i) {
         const ImDrawList* const cmdList = drawData->CmdLists[i];
-        for (int j = 0; j < cmdList->CmdBuffer.Size; ++j)
-        {
+        for (int j = 0; j < cmdList->CmdBuffer.Size; ++j) {
             const ImDrawCmd& imCmd = cmdList->CmdBuffer[j];
             const ImVec4 rect = imCmd.ClipRect;
 
