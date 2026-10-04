@@ -123,6 +123,9 @@ struct Renderer
     u32 mTaaJitterMaxIdx;
     UniformData mUniformData;
     ShadowPassData mShadowPassData;
+    PushConstantsCull mCullPassData;
+    PushConstantsSSAO mSsaoPassData;
+    PushConstantsTAA mTaaPassData;
     bool mNewFrameStarted;
     bool mRenderingPaused;
     bool mSwapchainNeedsRecreating;

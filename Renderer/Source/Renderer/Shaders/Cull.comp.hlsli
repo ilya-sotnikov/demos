@@ -5,6 +5,9 @@
 // Heavily based on from niagara:
 // https://github.com/zeux/niagara
 
+[[vk::push_constant]]
+PushConstantsCull cullPassData;
+
 ConstantBuffer<UniformData> uniformBuffer;
 StructuredBuffer<DrawData> drawDataBuffer;
 RWByteAddressBuffer drawCountBuffer;
@@ -91,11 +94,11 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float sphereRadius = drawData.scale * drawData.sphereRadius;
 
     // View frustum is symmetrical, therefore we can cull against two opposite planes simultaneously.
-    visible = visible && sphereCenterView.z * uniformBuffer.cullFrustumPlaneXZ -
-        abs(sphereCenterView.x) * uniformBuffer.cullFrustumPlaneXX > -sphereRadius;
+    visible = visible && sphereCenterView.z * cullPassData.frustumPlaneXZ -
+        abs(sphereCenterView.x) * cullPassData.frustumPlaneXX > -sphereRadius;
 
-    visible = visible && sphereCenterView.z * uniformBuffer.cullFrustumPlaneYZ -
-        abs(sphereCenterView.y) * uniformBuffer.cullFrustumPlaneYY > -sphereRadius;
+    visible = visible && sphereCenterView.z * cullPassData.frustumPlaneYZ -
+        abs(sphereCenterView.y) * cullPassData.frustumPlaneYY > -sphereRadius;
 
     visible = visible && sphereCenterView.z - sphereRadius < -RENDERER_NEAR_PLANE;
 
@@ -110,8 +113,8 @@ void Main(uint3 dtid : SV_DispatchThreadID)
             uniformBuffer.viewToClip[1][1],
             aabb))
         {
-            const float width = (aabb.z - aabb.x) * uniformBuffer.depthPyramidWidth;
-            const float height = (aabb.w - aabb.y) * uniformBuffer.depthPyramidHeight;
+            const float width = (aabb.z - aabb.x) * cullPassData.depthPyramidWidth;
+            const float height = (aabb.w - aabb.y) * cullPassData.depthPyramidHeight;
 
             const float mipLevel = ceil(log2(max(width, height)));
 
@@ -122,7 +125,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
 
             visible = visible && depthSphere > depth;
 
-            if (uniformBuffer.drawCullAABB)
+            if (cullPassData.drawCullAABB)
             {
                 DebugDrawRect(
                     aabb * float4(

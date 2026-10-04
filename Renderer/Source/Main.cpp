@@ -279,7 +279,7 @@ int main()
     sunPitch = 57.38f;
 
     renderer.mEnableUI = true;
-    renderer.mUniformData.taaEnable = 1;
+    renderer.mTaaPassData.enable = 1;
     renderer.ChangeRenderMode(sRenderMode);
 
     sCamera.mPosition = {9.4f, 7.4f, 0.8f};
@@ -421,7 +421,7 @@ int main()
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImguiCheckbox("Draw cull AABB", renderer.mUniformData.drawCullAABB);
+            ImguiCheckbox("Draw cull AABB", renderer.mCullPassData.drawCullAABB);
 
             // TODO: shadow stuff.
 
@@ -456,7 +456,7 @@ int main()
             ImGui::SeparatorText("TAA");
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImguiCheckbox("Enable", renderer.mUniformData.taaEnable);
+            ImguiCheckbox("Enable", renderer.mTaaPassData.enable);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -470,7 +470,7 @@ int main()
             ImGui::TableNextColumn();
             ImGui::SliderFloat(
                 "##TaaBlendWeight",
-                &renderer.mUniformData.taaBlendWeight,
+                &renderer.mTaaPassData.blendWeight,
                 0.01f,
                 1.0f,
                 "%.2f"

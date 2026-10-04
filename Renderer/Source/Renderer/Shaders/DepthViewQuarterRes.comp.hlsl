@@ -1,6 +1,7 @@
 #include "Common.hlsli"
 
-ConstantBuffer<UniformData> uniformBuffer;
+[[vk::push_constant]]
+PushConstantsSSAO pushConstants;
 
 Texture2D<float> inTexture;
 [[vk::image_format("r16f")]]
@@ -9,8 +10,7 @@ RWTexture2D<float> outTextureRW;
 [numthreads(RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_X, RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    if (dtid.x >= uniformBuffer.ambientOcclusionWidth ||
-        dtid.y >= uniformBuffer.ambientOcclusionHeight)
+    if (dtid.x >= pushConstants.width || dtid.y >= pushConstants.height)
     {
         return;
     }

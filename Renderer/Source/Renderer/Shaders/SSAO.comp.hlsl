@@ -6,6 +6,9 @@
 // https://www.4rknova.com/blog/2017/01/01/vogel
 // https://research.nvidia.com/sites/default/files/pubs/2011-08_The-Alchemy-Screen-space/paper.pdf
 
+[[vk::push_constant]]
+PushConstantsSSAO pushConstants;
+
 ConstantBuffer<UniformData> uniformBuffer;
 StructuredBuffer<uint32_t> drawIndicesEarlyBuffer;
 StructuredBuffer<uint32_t> drawIndicesLateBuffer;
@@ -52,10 +55,7 @@ float3 CalcPosView(float2 uv)
 [numthreads(RENDERER_SSAO_WORKGROUP_SIZE_X, RENDERER_SSAO_WORKGROUP_SIZE_Y, 1)]
 void Main(uint3 dtid : SV_DispatchThreadID)
 {
-    const uint2 textureSize = uint2(
-        uniformBuffer.ambientOcclusionWidth,
-        uniformBuffer.ambientOcclusionHeight
-    );
+    const uint2 textureSize = uint2(pushConstants.width, pushConstants.height);
 
     if (dtid.x >= textureSize.x || dtid.y >= textureSize.y)
     {
@@ -132,7 +132,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float4 posClip1 = mul(uniformBuffer.worldToClip, float4(posWorld1, 1.0));
     const float4 posClip2 = mul(uniformBuffer.worldToClip, float4(posWorld2, 1.0));
 
-    const float2 textureSizeInv = uniformBuffer.ambientOcclusionTextureSizeInv;
+    const float2 textureSizeInv = pushConstants.textureSizeInv;
 
     const float2 pixelUV = (dtid.xy + 0.5) * textureSizeInv;
     float2 pixelNdc = pixelUV * 2.0 - 1.0;

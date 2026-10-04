@@ -1,6 +1,9 @@
 #include "Common.hlsli"
 #include "Math.hlsli"
 
+[[vk::push_constant]]
+PushConstantsTAA pushConstants;
+
 ConstantBuffer<UniformData> uniformBuffer;
 Texture2D renderTexture;
 Texture2D depthTexture;
@@ -37,7 +40,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
         return;
     }
 
-    if (uniformBuffer.taaEnable == 0)
+    if (pushConstants.enable == 0)
     {
         resolvedRenderTextureRW[dtid.xy] = renderTexture[dtid.xy].rgb;
         return;
@@ -121,7 +124,7 @@ void Main(uint3 dtid : SV_DispatchThreadID)
     const float currLuminance = Luminance(currCompressed);
     const float prevLuminance = Luminance(prevCompressed);
 
-    float currWeight = uniformBuffer.taaBlendWeight;
+    float currWeight = pushConstants.blendWeight;
     float prevWeight = 1.0 - currWeight;
     currWeight *= 1.0 / (1.0 + currLuminance);
     prevWeight *= 1.0 / (1.0 + prevLuminance);

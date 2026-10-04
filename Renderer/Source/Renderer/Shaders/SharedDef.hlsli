@@ -43,29 +43,17 @@ struct UniformData
     FLOAT_2 prevTaaJitter;
     FLOAT_2 viewToClipInv0011;
     FLOAT_2 renderTextureSizeInv;
-    FLOAT_2 ambientOcclusionTextureSizeInv;
-    float taaBlendWeight;
-    float cullFrustumPlaneXX;
-    float cullFrustumPlaneXZ;
-    float cullFrustumPlaneYY;
-    float cullFrustumPlaneYZ;
     float deltaTime;
     float sunIntensity;
     float ambientIntensity;
     float gradErrorMax;
-    float depthPyramidWidth;
-    float depthPyramidHeight;
     float aspect;
     uint64_t frameCount;
     uint32_t swapchainWidth;
     uint32_t swapchainHeight;
     uint32_t renderWidth;
     uint32_t renderHeight;
-    uint32_t ambientOcclusionWidth;
-    uint32_t ambientOcclusionHeight;
     uint32_t drawCount;
-    uint32_t taaEnable;
-    uint32_t drawCullAABB;
     uint32_t renderMode;
     uint32_t enableSSAO;
     uint32_t enableFog;
@@ -86,6 +74,61 @@ struct ShadowPassData
     float pcfKernelScale;
     uint32_t enableCascadeColor;
     uint32_t enablePcf;
+};
+
+struct PushConstantsCull
+{
+    float frustumPlaneXX;
+    float frustumPlaneXZ;
+    float frustumPlaneYY;
+    float frustumPlaneYZ;
+    float depthPyramidWidth;
+    float depthPyramidHeight;
+    uint32_t drawCullAABB;
+};
+
+struct PushConstantsSSAO
+{
+    FLOAT_2 textureSizeInv;
+    uint32_t width;
+    uint32_t height;
+    int32_t pixelOffsetX;
+    int32_t pixelOffsetY;
+};
+
+struct PushConstantsTAA
+{
+    float blendWeight;
+    uint32_t enable;
+};
+
+struct PushConstantsImgui
+{
+    FLOAT_2 scale;
+    FLOAT_2 translate;
+};
+
+struct PushConstantsVisibilityBuffer
+{
+    uint32_t cullLate;
+};
+
+struct PushConstantsDepthReduce
+{
+    uint32_t mipLevel;
+    uint32_t outWidth;
+    uint32_t outHeight;
+};
+
+struct PushConstantsShadow
+{
+    int32_t shadowCascadeIdx;
+    uint32_t renderPassFlags;
+};
+
+struct PushConstantsFogBlur
+{
+    uint32_t horizontal;
 };
 
 struct Vertex
@@ -125,41 +168,6 @@ struct DebugDrawRectData
 {
     FLOAT_4 lbrtScreen;
     uint32_t color;
-};
-
-struct PushConstantsImgui
-{
-    FLOAT_2 scale;
-    FLOAT_2 translate;
-};
-
-struct PushConstantsVisibilityBuffer
-{
-    uint32_t cullLate;
-};
-
-struct PushConstantsDepthReduce
-{
-    uint32_t mipLevel;
-    uint32_t outWidth;
-    uint32_t outHeight;
-};
-
-struct PushConstantsShadow
-{
-    int32_t shadowCascadeIdx;
-    uint32_t renderPassFlags;
-};
-
-struct PushConstantsSsaoBlur
-{
-    int32_t pixelOffsetX;
-    int32_t pixelOffsetY;
-};
-
-struct PushConstantsFogBlur
-{
-    uint32_t horizontal;
 };
 
 enum RenderPassFlagBits

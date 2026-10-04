@@ -547,7 +547,7 @@ bool Renderer::Init()
 
     mSwapchainNeedsRecreating = true;
     mTaaJitterMaxIdx = 8;
-    mUniformData.taaBlendWeight = 0.1f;
+    mTaaPassData.blendWeight = 0.1f;
     mUniformData.ambientIntensity = 0.04f;
     mUniformData.sunIntensity = 1.0f;
     mUniformData.gradErrorMax = 0.01f;
@@ -733,7 +733,7 @@ bool Renderer::Render(f32 deltaTime)
 
     mUniformData.deltaTime = deltaTime;
 
-    if ((mUniformData.taaEnable == 1) && (mUniformData.renderMode != RENDER_MODE_GRAD_ERROR))
+    if ((mTaaPassData.enable == 1) && (mUniformData.renderMode != RENDER_MODE_GRAD_ERROR))
     {
         const f32 haltonX = 2.0f * HaltonSequence(mTaaJitterIdx + 1, 2) - 1.0f;
         const f32 haltonY = 2.0f * HaltonSequence(mTaaJitterIdx + 1, 3) - 1.0f;
@@ -770,10 +770,10 @@ bool Renderer::Render(f32 deltaTime)
         // -w <= y; y + w >= 0
         const Vec4 frustumPlaneY = NormalizePlane(viewToClipT.col[1] + viewToClipT.col[3]);
 
-        mUniformData.cullFrustumPlaneXX = frustumPlaneX.X();
-        mUniformData.cullFrustumPlaneXZ = frustumPlaneX.Z();
-        mUniformData.cullFrustumPlaneYY = frustumPlaneY.Y();
-        mUniformData.cullFrustumPlaneYZ = frustumPlaneY.Z();
+        mCullPassData.frustumPlaneXX = frustumPlaneX.X();
+        mCullPassData.frustumPlaneXZ = frustumPlaneX.Z();
+        mCullPassData.frustumPlaneYY = frustumPlaneY.Y();
+        mCullPassData.frustumPlaneYZ = frustumPlaneY.Z();
 
         mUniformData.cullWorldToView = mUniformData.worldToView;
     }
@@ -1416,6 +1416,8 @@ void Renderer::CullPass(RHI::CommandBuffer cb, bool late)
 
     RHI::CmdBindPipeline(cb, pipeline);
 
+    RHI::CmdPushConstants(cb, pipeline, &mCullPassData);
+
     RHI::CmdPushDescriptors(
         cb,
         pipeline,
@@ -1504,11 +1506,12 @@ void Renderer::DepthViewQuarterResPass(RHI::CommandBuffer cb)
 
     RHI::CmdBindPipeline(cb, pipeline);
 
+    RHI::CmdPushConstants(cb, pipeline, &mSsaoPassData);
+
     RHI::CmdPushDescriptors(
         cb,
         pipeline,
         {
-            mUniformBufferDescriptor,
             mDepthTexture,
             mDepthViewQuarterResTexture,
         }
@@ -1524,6 +1527,8 @@ void Renderer::AmbientOcclusionPass(RHI::CommandBuffer cb)
     const RHI::Pipeline pipeline = mAmbientOcclusionPipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
+
+    RHI::CmdPushConstants(cb, pipeline, &mSsaoPassData);
 
     RHI::CmdPushDescriptors(
         cb,
@@ -1701,11 +1706,12 @@ void Renderer::AmbientOcclusionBlurPass(RHI::CommandBuffer cb, bool horizontal)
 
     RHI::CmdBindPipeline(cb, pipeline);
 
+    RHI::CmdPushConstants(cb, pipeline, &mSsaoPassData);
+
     RHI::CmdPushDescriptors(
         cb,
         pipeline,
         {
-            mUniformBufferDescriptor,
             mDepthViewQuarterResTexture,
             horizontal ? mAmbientOcclusionTexture : mAmbientOcclusionBlurredHorizontalTexture,
             horizontal ? mAmbientOcclusionBlurredHorizontalTexture
@@ -1713,9 +1719,9 @@ void Renderer::AmbientOcclusionBlurPass(RHI::CommandBuffer cb, bool horizontal)
         }
     );
 
-    const PushConstantsSsaoBlur pushConstants
-        = horizontal ? PushConstantsSsaoBlur{1, 0} : PushConstantsSsaoBlur{0, 1};
-    RHI::CmdPushConstants(cb, pipeline, &pushConstants);
+    mSsaoPassData.pixelOffsetX = horizontal ? 1 : 0;
+    mSsaoPassData.pixelOffsetY = horizontal ? 0 : 1;
+    RHI::CmdPushConstants(cb, pipeline, &mSsaoPassData);
 
     CmdDispatchOverTextureSize(cb, pipeline, mAmbientOcclusionBlurredHorizontalTexture);
 }
@@ -1792,6 +1798,8 @@ void Renderer::TaaResolvePass(RHI::CommandBuffer cb)
     const RHI::Pipeline pipeline = mTaaResolvePipeline;
 
     RHI::CmdBindPipeline(cb, pipeline);
+
+    RHI::CmdPushConstants(cb, pipeline, &mTaaPassData);
 
     RHI::CmdPushDescriptors(
         cb,
@@ -2538,10 +2546,9 @@ void Renderer::CreateColorResources()
 
     const U32Vec3 aoDimensions = {renderDimensions.x / 2, renderDimensions.y / 2, 1};
 
-    mUniformData.ambientOcclusionWidth = aoDimensions.x;
-    mUniformData.ambientOcclusionHeight = aoDimensions.y;
-    mUniformData.ambientOcclusionTextureSizeInv
-        = {1.0f / f32(aoDimensions.x), 1.0f / f32(aoDimensions.y)};
+    mSsaoPassData.width = aoDimensions.x;
+    mSsaoPassData.height = aoDimensions.y;
+    mSsaoPassData.textureSizeInv = {1.0f / f32(aoDimensions.x), 1.0f / f32(aoDimensions.y)};
 
     mAmbientOcclusionTexture = RHI::CreateTexture({
         .format = RHI::FORMAT_R8_UNORM,
@@ -2661,8 +2668,8 @@ void Renderer::CreateDepthResources()
         .debugName = "DepthPyramidTexture",
     });
 
-    mUniformData.depthPyramidWidth = f32(depthPyramidSize.x);
-    mUniformData.depthPyramidHeight = f32(depthPyramidSize.y);
+    mCullPassData.depthPyramidWidth = f32(depthPyramidSize.x);
+    mCullPassData.depthPyramidHeight = f32(depthPyramidSize.y);
 
     mDepthPyramidMipTextureDescriptors.resize(depthPyramidMipLevels);
 
