@@ -4,15 +4,15 @@
 #include "Math/Utils.hpp"
 #include "Math/Vec2.hpp"
 #include "Math/Vec3.hpp"
-#include "Utils.hpp"
+#include "utils.hpp"
 
-inline f32 PackToF32(u8 x, u8 y, u8 z) {
+inline f32 pack_to_f32(u8 x, u8 y, u8 z) {
     const u32 packedU32 = (u32(x) << 16) | (u32(y) << 8) | u32(z);
     const f64 packedF64 = f64(packedU32) / (1U << 24);
     return f32(packedF64);
 }
 
-inline f32 PackToF32(Vec3 value) {
+inline f32 pack_to_f32(Vec3 value) {
     value *= 255.0f;
     const u8 x = u8(value.X());
     const u8 y = u8(value.Y());

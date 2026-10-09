@@ -2,8 +2,8 @@
 
 #include "../Math/Mat4.hpp"
 #include "../Math/Vec3.hpp"
-#include "../PackUtils.hpp"
 #include "../Utils.hpp"
+#include "pack_utils.hpp"
 
 #include <cgltf.h>
 #include <meshoptimizer.h>

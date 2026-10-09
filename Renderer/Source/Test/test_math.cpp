@@ -228,16 +228,16 @@ TEST("Mat2 operators") {
 
     {
         const Vec2 v = {2.0f, -3.0f};
-        Vec2 vRes{};
-        Vec2 vCmp{};
+        Vec2 v_res{};
+        Vec2 v_cmp{};
 
-        vRes = m1 * v;
-        vCmp = {-8.0f, -9.0f};
-        TEST_ASSERT(AlmostEqual(vRes, vCmp));
+        v_res = m1 * v;
+        v_cmp = {-8.0f, -9.0f};
+        TEST_ASSERT(AlmostEqual(v_res, v_cmp));
 
-        vRes = TMul(m1, v);
-        vCmp = Transpose(m1) * v;
-        TEST_ASSERT(AlmostEqual(vRes, vCmp));
+        v_res = TMul(m1, v);
+        v_cmp = Transpose(m1) * v;
+        TEST_ASSERT(AlmostEqual(v_res, v_cmp));
     }
 
     res = m1 * m2;
@@ -433,16 +433,16 @@ TEST("Mat4 operators") {
 
     {
         const Vec4 v = {2.0f, -3.0f, 5.0f, -1.0f};
-        Vec4 vRes{};
-        Vec4 vCmp{};
+        Vec4 v_res{};
+        Vec4 v_cmp{};
 
-        vRes = m1 * v;
-        vCmp = {24.0f, 37.0f, 34.0f, -3.0f};
-        TEST_ASSERT(AlmostEqual(vRes, vCmp));
+        v_res = m1 * v;
+        v_cmp = {24.0f, 37.0f, 34.0f, -3.0f};
+        TEST_ASSERT(AlmostEqual(v_res, v_cmp));
 
-        vRes = TMul(m1, v);
-        vCmp = Transpose(m1) * v;
-        TEST_ASSERT(AlmostEqual(vRes, vCmp));
+        v_res = TMul(m1, v);
+        v_cmp = Transpose(m1) * v;
+        TEST_ASSERT(AlmostEqual(v_res, v_cmp));
     }
 
     res = m1 * m2;

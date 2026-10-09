@@ -9,7 +9,7 @@
 #include "Scene.hpp"
 #include "Shaders/SharedConfig.hlsli"
 #include "Shaders/SharedDef.hlsli"
-#include "UniformBufferManager.hpp"
+#include "uniform_buffer_manager.hpp"
 
 struct SDL_Window;
 

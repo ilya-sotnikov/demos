@@ -43,7 +43,8 @@ target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
 target_link_libraries(imgui PUBLIC volk SDL3::SDL3)
 
 set(SOURCES
-    Source/Arena.cpp
+    Source/arena.hpp
+    Source/arena.cpp
     Source/utils.hpp
     Source/utils.cpp
     Source/Math/Utils.cpp
@@ -54,11 +55,13 @@ set(SOURCES
     Source/Renderer/RHI/Vulkan/RHI.cpp
     Source/Renderer/RHI/Vulkan/TypeConvert.cpp
     Source/Renderer/Renderer.cpp
-    Source/Renderer/UniformBufferManager.cpp
+    Source/Renderer/uniform_buffer_manager.hpp
+    Source/Renderer/uniform_buffer_manager.cpp
+    Source/Renderer/Scene.hpp
     Source/Renderer/Scene.cpp
     Source/Renderer/ImguiRenderer.cpp
-    Source/Extern.cpp
-    Source/Extern.c
+    Source/extern.cpp
+    Source/extern.c
 
     Source/Renderer/Shaders/SharedDef.hlsli
     Source/Renderer/Shaders/SharedConfig.hlsli
@@ -83,7 +86,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 
 add_executable(${PROJECT_NAME}Test
     ${SOURCES}
-    Source/Test/Test.cpp
+    Source/test/test.cpp
 )
 target_include_directories(${PROJECT_NAME}Test PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 target_link_libraries(${PROJECT_NAME}Test PRIVATE ${LIBS})

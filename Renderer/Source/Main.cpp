@@ -2,8 +2,8 @@
 #include "Common.hpp"
 #include "Math/Vec3.hpp"
 #include "Renderer/Renderer.hpp"
-#include "Utils.hpp"
 #include "time_meter.hpp"
+#include "utils.hpp"
 
 #include <SDL3/SDL.h>
 #include <imgui_impl_sdl3.h>

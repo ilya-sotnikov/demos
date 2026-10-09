@@ -16,28 +16,28 @@
 // C++20, so it's UB, once again, compilers don't break the code.
 struct Arena {
     enum {
-        FlagNone = 0,
-        FlagNoZero = (1 << 0),
+        FLAG_NONE = 0,
+        FLAG_NO_ZERO = (1 << 0),
     };
-    uchar* mBuffer;
-    ptrdiff_t mBufferSize;
-    ptrdiff_t mCurrentOffset; // Relative to &mBuffer[0].
-    ptrdiff_t mMaxOffset;
-    char mName[32];
+    uchar* m_buffer;
+    ptrdiff_t m_buffer_size;
+    ptrdiff_t m_current_offset; // Relative to &m_buffer[0].
+    ptrdiff_t m_max_offset;
+    char m_name[32];
 
-    void Init(void* backingBuffer, ptrdiff_t size, const char* name = nullptr);
-    void Init(ptrdiff_t size, const char* name = nullptr); // Exits on allocation failure.
-    void* Alloc(ptrdiff_t size, ptrdiff_t align, int flags = FlagNone);
-    void* AllocOrDie(ptrdiff_t size, ptrdiff_t align, int flags = FlagNone);
-    void FreeAll();
-    void FreeBuffer();
+    void init(void* backing_buffer, ptrdiff_t size, const char* name = nullptr);
+    void init(ptrdiff_t size, const char* name = nullptr); // Exits on allocation failure.
+    void* alloc(ptrdiff_t size, ptrdiff_t align, int flags = FLAG_NONE);
+    void* alloc_or_die(ptrdiff_t size, ptrdiff_t align, int flags = FLAG_NONE);
+    void free_all();
+    void free_buffer();
 
     template<typename T>
-    T* Alloc(ptrdiff_t count, int flags = FlagNone) {
-        return static_cast<T*>(Alloc(ptrdiff_t(count) * sizeof(T), alignof(T), flags));
+    T* alloc(ptrdiff_t count, int flags = FLAG_NONE) {
+        return static_cast<T*>(alloc(ptrdiff_t(count) * sizeof(T), alignof(T), flags));
     }
     template<typename T>
-    T* AllocOrDie(ptrdiff_t count, int flags = FlagNone) {
-        return static_cast<T*>(AllocOrDie(count * ptrdiff_t(sizeof(T)), alignof(T), flags));
+    T* alloc_or_die(ptrdiff_t count, int flags = FLAG_NONE) {
+        return static_cast<T*>(alloc_or_die(count * ptrdiff_t(sizeof(T)), alignof(T), flags));
     }
 };

@@ -424,7 +424,7 @@ static void DebugNameObject(
 void RHI::Create(SDL_Window* window) {
     DEBUG_ASSERT(window);
 
-    sCtx.scratchArena.Init(16'000'000);
+    sCtx.scratchArena.init(16'000'000);
 
     VK_CHECK(volkInitialize());
 
@@ -1438,14 +1438,14 @@ void RHI::QueueSubmit(RHI::Queue queue, const SliceArg<QueueSubmitDesc>&& desc) 
 
     Arena scratchArena = sCtx.scratchArena;
 
-    VkSubmitInfo2* const submitInfos = scratchArena.AllocOrDie<VkSubmitInfo2>(desc.count);
+    VkSubmitInfo2* const submitInfos = scratchArena.alloc_or_die<VkSubmitInfo2>(desc.count);
 
     for (int i = 0; i < desc.count; ++i) {
         const CommandBufferImpl* const cb = sCtx.commandBuffers.GetPtr(desc[i].cb);
 
         // +1 for optional image acquire binary semaphore.
         VkSemaphoreSubmitInfo* const semWaitSubmitInfos =
-            scratchArena.AllocOrDie<VkSemaphoreSubmitInfo>(desc[i].waitSemaphores.count + 1);
+            scratchArena.alloc_or_die<VkSemaphoreSubmitInfo>(desc[i].waitSemaphores.count + 1);
 
         int waitSemaphoreCount = desc[i].waitSemaphores.count;
         for (int j = 0; j < waitSemaphoreCount; ++j) {
@@ -1467,7 +1467,7 @@ void RHI::QueueSubmit(RHI::Queue queue, const SliceArg<QueueSubmitDesc>&& desc) 
 
         // +1 for optional present binary semaphore.
         VkSemaphoreSubmitInfo* const semSignalSubmitInfos =
-            scratchArena.AllocOrDie<VkSemaphoreSubmitInfo>(desc[i].signalSemaphores.count + 1);
+            scratchArena.alloc_or_die<VkSemaphoreSubmitInfo>(desc[i].signalSemaphores.count + 1);
 
         int signalSemaphoreCount = desc[i].signalSemaphores.count;
         for (int j = 0; j < desc[i].signalSemaphores.count; ++j) {
@@ -1489,7 +1489,7 @@ void RHI::QueueSubmit(RHI::Queue queue, const SliceArg<QueueSubmitDesc>&& desc) 
 
         // NOTE: to prevent a dangling pointer, since submitInfos takes a pointer to this.
         VkCommandBufferSubmitInfo* const cbSubmitInfo =
-            scratchArena.AllocOrDie<VkCommandBufferSubmitInfo>(1);
+            scratchArena.alloc_or_die<VkCommandBufferSubmitInfo>(1);
         *cbSubmitInfo = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
             .commandBuffer = cb->commandBuffer,
@@ -1801,7 +1801,7 @@ RHI::Pipeline RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&& desc
     Arena scratchArena = sCtx.scratchArena;
 
     VkFormat* const colorAttachmentFormats =
-        scratchArena.AllocOrDie<VkFormat>(desc.colorTargets.count);
+        scratchArena.alloc_or_die<VkFormat>(desc.colorTargets.count);
     for (int i = 0; i < desc.colorTargets.count; ++i) {
         colorAttachmentFormats[i] = FormatToVk(desc.colorTargets[i].format);
     }
@@ -1851,7 +1851,7 @@ RHI::Pipeline RHI::CreateGraphicsPipeline(const RHI::GraphicsPipelineDesc&& desc
     };
 
     VkPipelineColorBlendAttachmentState* const colorBlendAttachments =
-        scratchArena.AllocOrDie<VkPipelineColorBlendAttachmentState>(desc.colorTargets.count);
+        scratchArena.alloc_or_die<VkPipelineColorBlendAttachmentState>(desc.colorTargets.count);
 
     for (int i = 0; i < desc.colorTargets.count; ++i) {
         const RHI::PipelineColorTarget& t = desc.colorTargets[i];
@@ -2012,7 +2012,7 @@ void RHI::CmdTextureBarrier(
     Arena scratchArena = sCtx.scratchArena;
 
     VkImageMemoryBarrier2* const barriers =
-        scratchArena.AllocOrDie<VkImageMemoryBarrier2>(desc.count);
+        scratchArena.alloc_or_die<VkImageMemoryBarrier2>(desc.count);
 
     for (int i = 0; i < desc.count; ++i) {
         const RHI::TextureBarrierDesc& d = desc[i];
@@ -2064,7 +2064,7 @@ void RHI::CmdTextureInvalidateBarrier(
     Arena scratchArena = sCtx.scratchArena;
 
     VkImageMemoryBarrier2* const barriers =
-        scratchArena.AllocOrDie<VkImageMemoryBarrier2>(textures.count);
+        scratchArena.alloc_or_die<VkImageMemoryBarrier2>(textures.count);
 
     for (int i = 0; i < textures.count; ++i) {
         const TextureImpl* const texture = sCtx.textures.GetPtr(textures[i]);
@@ -2113,7 +2113,7 @@ void RHI::CmdCopyBufferToTexture(
     Arena scratchArena = sCtx.scratchArena;
 
     VkBufferImageCopy* const regions =
-        scratchArena.AllocOrDie<VkBufferImageCopy>(copyRegions.count);
+        scratchArena.alloc_or_die<VkBufferImageCopy>(copyRegions.count);
 
     const TextureImpl* const tex = sCtx.textures.GetPtr(texture);
 
@@ -2197,7 +2197,7 @@ void RHI::CmdPushDescriptors(
     Arena scratchArena = sCtx.scratchArena;
 
     DescriptorInfoImpl* const infos =
-        scratchArena.AllocOrDie<DescriptorInfoImpl>(descriptors.count);
+        scratchArena.alloc_or_die<DescriptorInfoImpl>(descriptors.count);
 
     for (int i = 0; i < descriptors.count; ++i) {
         const RHI::DescriptorInfo& d = descriptors[i];
@@ -2285,7 +2285,7 @@ void RHI::CmdBeginRendering(const BeginRenderingDesc&& desc) {
     Arena scratchArena = sCtx.scratchArena;
 
     VkRenderingAttachmentInfo* const renderingAttachmentInfos =
-        scratchArena.AllocOrDie<VkRenderingAttachmentInfo>(desc.colorTargets.count);
+        scratchArena.alloc_or_die<VkRenderingAttachmentInfo>(desc.colorTargets.count);
 
     for (int i = 0; i < desc.colorTargets.count; ++i) {
         const RHI::Attachment& t = desc.colorTargets[i];

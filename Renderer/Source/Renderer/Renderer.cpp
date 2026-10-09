@@ -143,7 +143,7 @@ static Vec3 CalcSunColor(Vec3 sunDirectionWorld) {
 }
 
 bool Renderer::Init() {
-    mScratchArena.Init(16'000'000);
+    mScratchArena.init(16'000'000);
 
     // SDL.
     {
@@ -196,7 +196,7 @@ bool Renderer::Init() {
     CreateSwapchain({u32(width), u32(height)});
 
     for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i) {
-        mFrame[i].uniformBufferManager.Init(
+        mFrame[i].uniformBufferManager.init(
             16'000,
             int(RHI::GetDeviceProperties().minUniformBufferOffsetAlignment)
         );
@@ -589,7 +589,7 @@ void Renderer::Cleanup() {
     RHI::DestroyBuffer(mDrawCmdLateBuffer2);
     RHI::DestroyBuffer(mDrawCmdBuffer1);
     for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i) {
-        mFrame[i].uniformBufferManager.Cleanup();
+        mFrame[i].uniformBufferManager.cleanup();
     }
     RHI::DestroySemaphore(mFrameSemaphore);
     for (int i = 0; i < RHI::FRAMES_IN_FLIGHT; ++i) {
@@ -737,10 +737,10 @@ bool Renderer::Render(f32 deltaTime) {
 
     UpdateShadowCascades();
 
-    frame.uniformBufferManager.OnNewFrame();
-    mUniformBufferDescriptor = frame.uniformBufferManager.Push(&mUniformData, sizeof(mUniformData));
+    frame.uniformBufferManager.on_new_frame();
+    mUniformBufferDescriptor = frame.uniformBufferManager.push(&mUniformData, sizeof(mUniformData));
     mShadowPassUniformBufferDescriptor =
-        frame.uniformBufferManager.Push(&mShadowPassData, sizeof(mShadowPassData));
+        frame.uniformBufferManager.push(&mShadowPassData, sizeof(mShadowPassData));
 
     switch (mUniformData.renderMode) {
         case RENDER_MODE_GRAD_ERROR:
@@ -2034,7 +2034,7 @@ void Renderer::RecordAndSubmitDebugGradError(RHI::Texture swapchainTexture) {
 
     RHI::EndCommandBuffer(cb);
 
-    mFrame[mFrameIdx].uniformBufferManager.Flush();
+    mFrame[mFrameIdx].uniformBufferManager.flush();
     RHI::QueueSubmit(
         RHI::QUEUE_GRAPHICS,
         {{
@@ -2154,7 +2154,7 @@ void Renderer::RecordAndSubmitVisibility(RHI::Texture swapchainTexture) {
     RHI::EndCommandBuffer(cbStart);
 
     // TODO: I don't see why can't I use 2 submits per frame (1 for each queue).
-    frame.uniformBufferManager.Flush();
+    frame.uniformBufferManager.flush();
     RHI::QueueSubmit(
         RHI::QUEUE_GRAPHICS,
         {{
@@ -2213,7 +2213,7 @@ void Renderer::RecordAndSubmitVisibility(RHI::Texture swapchainTexture) {
 
     RHI::EndCommandBuffer(cbSSAO);
 
-    frame.uniformBufferManager.Flush();
+    frame.uniformBufferManager.flush();
     RHI::QueueSubmit(
         RHI::QUEUE_COMPUTE,
         {{
@@ -2255,7 +2255,7 @@ void Renderer::RecordAndSubmitVisibility(RHI::Texture swapchainTexture) {
 
     RHI::EndCommandBuffer(cbShadow);
 
-    frame.uniformBufferManager.Flush();
+    frame.uniformBufferManager.flush();
     RHI::QueueSubmit(
         RHI::QUEUE_GRAPHICS,
         {{
@@ -2370,7 +2370,7 @@ void Renderer::RecordAndSubmitVisibility(RHI::Texture swapchainTexture) {
 
     RHI::EndCommandBuffer(cbEnd);
 
-    frame.uniformBufferManager.Flush();
+    frame.uniformBufferManager.flush();
     RHI::QueueSubmit(
         RHI::QUEUE_GRAPHICS,
         {{
