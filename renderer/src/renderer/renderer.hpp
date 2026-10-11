@@ -43,6 +43,8 @@ struct Renderer
         Semaphore startSemaphore;
         Semaphore shadowSemaphore;
         Semaphore ssaoSemaphore;
+        rhi::CommandPool graphics_command_pool;
+        rhi::CommandPool compute_command_pool;
         rhi::CommandBuffer startCommandBuffer;
         rhi::CommandBuffer shadowCommandBuffer;
         rhi::CommandBuffer ssaoCommandBuffer;
@@ -52,6 +54,8 @@ struct Renderer
 
     Arena mScratchArena;
     SDL_Window* mWindow;
+    rhi::Queue m_graphics_queue;
+    rhi::Queue m_compute_queue;
     rhi::DescriptorInfo mUniformBufferDescriptor;
     rhi::DescriptorInfo mShadowPassUniformBufferDescriptor;
     rhi::Semaphore mFrameSemaphore;
@@ -115,9 +119,9 @@ struct Renderer
     rhi::Sampler mShadowPcfJitterSampler;
     std::vector<rhi::Texture> mTextures;
     Vec2U32 mWindowSize;
-    Frame mFrame[rhi::FRAMES_IN_FLIGHT];
+    Frame m_frame[rhi::FRAMES_IN_FLIGHT];
     f32 mShadowCascadeRadii[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    int mFrameIdx;
+    int m_frame_idx;
     int mPrevFrameIdx;
     u32 mTaaJitterIdx;
     u32 mTaaJitterMaxIdx;

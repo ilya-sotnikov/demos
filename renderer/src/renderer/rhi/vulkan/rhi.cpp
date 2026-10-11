@@ -50,11 +50,11 @@
     } \
     while (0)
 
-struct QueueInfoImpl
+struct QueueImpl
 {
-    u32 family_idx;
-    u32 queue_idx;
     VkQueue queue;
+    rhi::QueueType type;
+    u32 idx;
 };
 
 struct BufferImpl
@@ -98,8 +98,7 @@ struct SwapchainImpl
 struct CommandBufferImpl
 {
     VkCommandBuffer command_buffer;
-    rhi::Queue queue;
-    int frame_idx;
+    VkCommandPool command_pool;
 };
 
 struct ShaderImpl
@@ -153,32 +152,43 @@ struct ContextImpl
 {
     struct Frame
     {
-        VkCommandPool command_pool_graphics;
-        VkCommandPool command_pool_compute;
         VkSemaphore image_acquire_semaphore;
     } frames[rhi::FRAMES_IN_FLIGHT];
 
     Arena scratch_arena;
+
     VkSurfaceKHR surface;
     VkInstance instance;
     VkDevice device;
     VkPhysicalDevice physical_device;
     VmaAllocator vma_allocator;
-    QueueInfoImpl graphics_queue_info;
-    QueueInfoImpl compute_queue_info;
+
+    VkQueue graphics_queue;
+    u32 graphics_queue_family_idx;
+    std::vector<u32> graphics_queue_idxs; // TODO: Might as well count them?
+    VkQueue compute_queue;
+    u32 compute_queue_family_idx;
+    std::vector<u32> compute_queue_idxs;
+
     VkDescriptorSetLayout bindless_textures_descriptor_set_layout;
     VkDescriptorSet bindless_textures_descriptor_set;
     VkDescriptorPool bindless_textures_descriptor_pool;
+
     Pool<rhi::Buffer, BufferImpl> buffers;
     Pool<rhi::Texture, TextureImpl> textures;
     Pool<rhi::TextureDescriptor, TextureViewImpl> texture_descriptors;
     Pool<rhi::Sampler, VkSampler> samplers;
     Pool<rhi::Semaphore, VkSemaphore> semaphores;
+    Pool<rhi::Queue, QueueImpl> queues;
+    Pool<rhi::CommandPool, VkCommandPool> command_pools;
     Pool<rhi::CommandBuffer, CommandBufferImpl> command_buffers;
     Pool<rhi::Pipeline, PipelineImpl> pipelines;
+
     SwapchainImpl swapchain;
+
     int frame_idx;
     u32 image_idx;
+
     rhi::DeviceProperties device_properties;
 };
 
@@ -199,9 +209,9 @@ static bool extension_is_available(const char* name, SliceArg<VkExtensionPropert
     return false;
 }
 
-static void get_queue(
+static bool get_queue(
     u32& family_idx,
-    u32& queue_idx,
+    u32& queue_count,
     VkPhysicalDevice device,
     VkQueueFlagBits flags,
     VkQueueFlagBits not_flags = static_cast<VkQueueFlagBits>(0)
@@ -220,18 +230,39 @@ static void get_queue(
 
     for (u32 i = 0; i < queue_family_count; ++i)
     {
-        if (queue_families[i].queueFamilyProperties.queueFlags & flags)
+        const VkQueueFamilyProperties props = queue_families[i].queueFamilyProperties;
+        if (props.queueFlags & flags)
         {
-            DEBUG_ASSERT(queue_families[i].queueFamilyProperties.queueCount > 0);
+            DEBUG_ASSERT(props.queueCount > 0);
             family_idx = i;
-            queue_idx = 0;
-            if ((not_flags != 0)
-                && !(queue_families[i].queueFamilyProperties.queueFlags & not_flags))
+            queue_count = props.queueCount;
+            if (not_flags == 0)
             {
-                break;
+                return true;
+            }
+            else if (!(props.queueFlags & not_flags))
+            {
+                return true;
             }
         }
     }
+
+    return false;
+}
+
+static bool find_queue_index(u32& idx, std::vector<u32>& idxs)
+{
+    for (u32 i = 0; i < idxs.size(); ++i)
+    {
+        if (idxs[i] == 0)
+        {
+            idxs[i] = 1;
+            idx = i;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static VkImageAspectFlags vk_aspect_flags_from_format(VkFormat format)
@@ -774,21 +805,26 @@ void rhi::create(SDL_Window* window)
     // Logical device, queue.
     {
         // Already checked when picking a physical device.
-        QueueInfoImpl graphics_queue_info{};
-        get_queue(
-            graphics_queue_info.family_idx,
-            graphics_queue_info.queue_idx,
+        u32 graphics_queue_count = 0;
+        bool result = get_queue(
+            s_ctx.graphics_queue_family_idx,
+            graphics_queue_count,
             s_ctx.physical_device,
             VK_QUEUE_GRAPHICS_BIT
         );
-        QueueInfoImpl compute_queue_info{};
-        get_queue(
-            compute_queue_info.family_idx,
-            compute_queue_info.queue_idx,
+        ASSERT(result);
+        s_ctx.graphics_queue_idxs.resize(graphics_queue_count);
+
+        u32 compute_queue_count = 0;
+        result = get_queue(
+            s_ctx.compute_queue_family_idx,
+            compute_queue_count,
             s_ctx.physical_device,
             VK_QUEUE_COMPUTE_BIT,
             VK_QUEUE_GRAPHICS_BIT
         );
+        ASSERT(result);
+        s_ctx.compute_queue_idxs.resize(compute_queue_count);
 
         // NOTE: did not find any info if I should enable it or just checking it's availability
         // should be enough (which is probably the case), but did it anyway.
@@ -855,20 +891,23 @@ void rhi::create(SDL_Window* window)
             },
         };
 
-        const f32 queue_priority = 1.0f;
+        std::vector<f32> queue_priorities;
+        queue_priorities.resize(
+            Max(s_ctx.graphics_queue_idxs.size(), s_ctx.compute_queue_idxs.size())
+        );
 
         const VkDeviceQueueCreateInfo device_queue_infos[] = {
             {
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                .queueFamilyIndex = graphics_queue_info.family_idx,
-                .queueCount = 1,
-                .pQueuePriorities = &queue_priority,
+                .queueFamilyIndex = s_ctx.graphics_queue_family_idx,
+                .queueCount = u32(s_ctx.graphics_queue_idxs.size()),
+                .pQueuePriorities = queue_priorities.data(),
             },
             {
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                .queueFamilyIndex = compute_queue_info.family_idx,
-                .queueCount = 1,
-                .pQueuePriorities = &queue_priority,
+                .queueFamilyIndex = s_ctx.compute_queue_family_idx,
+                .queueCount = u32(s_ctx.compute_queue_idxs.size()),
+                .pQueuePriorities = queue_priorities.data(),
             },
         };
 
@@ -884,22 +923,6 @@ void rhi::create(SDL_Window* window)
         VK_CHECK(vkCreateDevice(s_ctx.physical_device, &device_info, nullptr, &s_ctx.device));
 
         volkLoadDevice(s_ctx.device);
-
-        vkGetDeviceQueue(
-            s_ctx.device,
-            graphics_queue_info.family_idx,
-            graphics_queue_info.queue_idx,
-            &graphics_queue_info.queue
-        );
-        s_ctx.graphics_queue_info = graphics_queue_info;
-
-        vkGetDeviceQueue(
-            s_ctx.device,
-            compute_queue_info.family_idx,
-            compute_queue_info.queue_idx,
-            &compute_queue_info.queue
-        );
-        s_ctx.compute_queue_info = compute_queue_info;
     }
 
     // VMA.
@@ -917,34 +940,6 @@ void rhi::create(SDL_Window* window)
         vma_allocator_info.pVulkanFunctions = &vma_vulkan_functions;
 
         VK_CHECK(vmaCreateAllocator(&vma_allocator_info, &s_ctx.vma_allocator));
-    }
-
-    // Command pools.
-    {
-        VkCommandPoolCreateInfo cmd_pool_info = {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-            .queueFamilyIndex = s_ctx.graphics_queue_info.family_idx,
-        };
-
-        for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
-        {
-            cmd_pool_info.queueFamilyIndex = s_ctx.graphics_queue_info.family_idx;
-            VK_CHECK(vkCreateCommandPool(
-                s_ctx.device,
-                &cmd_pool_info,
-                nullptr,
-                &s_ctx.frames[i].command_pool_graphics
-            ));
-
-            cmd_pool_info.queueFamilyIndex = s_ctx.compute_queue_info.family_idx;
-            VK_CHECK(vkCreateCommandPool(
-                s_ctx.device,
-                &cmd_pool_info,
-                nullptr,
-                &s_ctx.frames[i].command_pool_compute
-            ));
-        }
     }
 
     // Synchronization primitives.
@@ -1048,8 +1043,6 @@ void rhi::destroy()
 
     for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
     {
-        vkDestroyCommandPool(s_ctx.device, s_ctx.frames[i].command_pool_compute, nullptr);
-        vkDestroyCommandPool(s_ctx.device, s_ctx.frames[i].command_pool_graphics, nullptr);
         vkDestroySemaphore(s_ctx.device, s_ctx.frames[i].image_acquire_semaphore, nullptr);
     }
     vkDestroyDescriptorSetLayout(
@@ -1084,7 +1077,7 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc)
             | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
 
     const u32 queue_family_indices[]
-        = {s_ctx.graphics_queue_info.family_idx, s_ctx.compute_queue_info.family_idx};
+        = {s_ctx.graphics_queue_family_idx, s_ctx.compute_queue_family_idx};
 
     const VkBufferCreateInfo buffer_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -1096,7 +1089,7 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc)
     };
 
     const VmaAllocationCreateInfo allocation_info = {
-        .requiredFlags = MemoryTypeToVk(desc.type),
+        .requiredFlags = memory_type_to_vk(desc.type),
     };
 
     if (desc.min_alignment > 0)
@@ -1206,15 +1199,15 @@ rhi::Texture rhi::create_texture(const TextureDesc&& desc)
 
     TextureImpl texture{};
 
-    const VkImageType type = TextureTypeToVk(desc.type);
-    const VkImageViewType view_type = TextureTypeToViewVk(desc.type);
-    const VkImageUsageFlags usage = TextureUsageToVk(desc.usage);
-    const VkFormat format = FormatToVk(desc.format);
+    const VkImageType type = texture_type_to_vk(desc.type);
+    const VkImageViewType view_type = texture_type_to_view_vk(desc.type);
+    const VkImageUsageFlags usage = texture_usage_to_vk(desc.usage);
+    const VkFormat format = format_to_vk(desc.format);
 
     // NOTE: won't check format availability since vkCreateImage should fail in this case.
 
     const u32 queue_family_indices[]
-        = {s_ctx.graphics_queue_info.family_idx, s_ctx.compute_queue_info.family_idx};
+        = {s_ctx.graphics_queue_family_idx, s_ctx.compute_queue_family_idx};
 
     const VkImageCreateInfo image_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -1312,12 +1305,12 @@ rhi::TextureDescriptor rhi::create_texture_descriptor(const TextureDescriptorDes
 
     TextureViewImpl view{};
 
-    const VkFormat format = FormatToVk(texture->format);
+    const VkFormat format = format_to_vk(texture->format);
 
     const VkImageViewCreateInfo view_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = texture->image,
-        .viewType = TextureTypeToViewVk(desc.type),
+        .viewType = texture_type_to_view_vk(desc.type),
         .format = format,
         .subresourceRange = {
             .aspectMask = vk_aspect_flags_from_format(format),
@@ -1390,16 +1383,16 @@ rhi::Sampler rhi::create_sampler(const rhi::SamplerDesc&& desc)
         .pNext = desc.reduction_mode != rhi::SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE
             ? &reductionModeInfo
             : nullptr,
-        .magFilter = FilterToVk(desc.mag_filter),
-        .minFilter = FilterToVk(desc.mag_filter),
-        .mipmapMode = SamplerMipmapModeToVk(desc.mipmap_mode),
-        .addressModeU = SamplerAddressModeToVk(desc.address_mode_u),
-        .addressModeV = SamplerAddressModeToVk(desc.address_mode_v),
-        .addressModeW = SamplerAddressModeToVk(desc.address_mode_w),
+        .magFilter = filter_to_vk(desc.mag_filter),
+        .minFilter = filter_to_vk(desc.mag_filter),
+        .mipmapMode = sampler_mipmap_mode_to_vk(desc.mipmap_mode),
+        .addressModeU = sampler_address_mode_to_vk(desc.address_mode_u),
+        .addressModeV = sampler_address_mode_to_vk(desc.address_mode_v),
+        .addressModeW = sampler_address_mode_to_vk(desc.address_mode_w),
         .anisotropyEnable = desc.anisotropy_enable,
         .maxAnisotropy = desc.max_anisotropy,
         .compareEnable = desc.compare_enable,
-        .compareOp = CompareOpToVk(desc.compare_op),
+        .compareOp = compare_op_to_vk(desc.compare_op),
         .minLod = desc.min_lod,
         .maxLod = desc.max_lod,
     };
@@ -1477,18 +1470,52 @@ void rhi::wait_semaphore(rhi::Semaphore handle, u64 value, u64 timeout)
     VK_CHECK(vkWaitSemaphores(s_ctx.device, &wait_info, timeout));
 }
 
-rhi::CommandBuffer rhi::create_command_buffer(
-    rhi::Queue queue,
-    int frame_in_flight_idx,
-    const char* debug_name
-)
+rhi::CommandPool rhi::create_command_pool(const CommandPoolDesc&& desc)
 {
-    DEBUG_ASSERT(frame_in_flight_idx >= 0);
-    DEBUG_ASSERT(frame_in_flight_idx < rhi::FRAMES_IN_FLIGHT);
+    const QueueImpl& queue = *s_ctx.queues.get_ptr(desc.queue);
 
-    const VkCommandPool pool = queue == QUEUE_GRAPHICS
-        ? s_ctx.frames[frame_in_flight_idx].command_pool_graphics
-        : s_ctx.frames[frame_in_flight_idx].command_pool_compute;
+    u32 family_idx = UINT32_MAX;
+    switch (queue.type)
+    {
+    case rhi::QUEUE_TYPE_GRAPHICS:
+        family_idx = s_ctx.graphics_queue_family_idx;
+        break;
+    case rhi::QUEUE_TYPE_COMPUTE:
+        family_idx = s_ctx.compute_queue_family_idx;
+        break;
+    }
+    ASSERT(family_idx != UINT32_MAX);
+
+    const VkCommandPoolCreateInfo cmd_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags
+        = desc.transient ? VK_COMMAND_POOL_CREATE_TRANSIENT_BIT : VkCommandPoolCreateFlags(0),
+        .queueFamilyIndex = family_idx,
+    };
+
+    VkCommandPool pool{};
+    VK_CHECK(vkCreateCommandPool(s_ctx.device, &cmd_pool_info, nullptr, &pool));
+
+    return s_ctx.command_pools.create_handle(pool);
+}
+
+void rhi::destroy_command_pool(CommandPool handle)
+{
+    if (handle)
+    {
+        vkDestroyCommandPool(s_ctx.device, *s_ctx.command_pools.get_ptr(handle), nullptr);
+        s_ctx.command_pools.destroy_handle(handle);
+    }
+}
+
+void rhi::reset_command_pool(CommandPool handle)
+{
+    VK_CHECK(vkResetCommandPool(s_ctx.device, *s_ctx.command_pools.get_ptr(handle), 0));
+}
+
+rhi::CommandBuffer rhi::create_command_buffer(const CommandBufferDesc&& desc)
+{
+    const VkCommandPool pool = *s_ctx.command_pools.get_ptr(desc.command_pool);
 
     const VkCommandBufferAllocateInfo cmd_buffer_allocate_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -1500,16 +1527,15 @@ rhi::CommandBuffer rhi::create_command_buffer(
     CommandBufferImpl cb{};
     VK_CHECK(vkAllocateCommandBuffers(s_ctx.device, &cmd_buffer_allocate_info, &cb.command_buffer));
 
-    cb.queue = queue;
-    cb.frame_idx = frame_in_flight_idx;
+    cb.command_pool = pool;
 
-    if (debug_name)
+    if (desc.debug_name)
     {
         debug_name_object(
             s_ctx.device,
             VK_OBJECT_TYPE_COMMAND_BUFFER,
             reinterpret_cast<u64>(cb.command_buffer),
-            debug_name
+            desc.debug_name
         );
     }
 
@@ -1521,13 +1547,7 @@ void rhi::destroy_command_buffer(rhi::CommandBuffer handle)
     if (handle)
     {
         const CommandBufferImpl* const cb = s_ctx.command_buffers.get_ptr(handle);
-
-        const VkCommandPool pool = cb->queue == QUEUE_GRAPHICS
-            ? s_ctx.frames[cb->frame_idx].command_pool_graphics
-            : s_ctx.frames[cb->frame_idx].command_pool_compute;
-
-        vkFreeCommandBuffers(s_ctx.device, pool, 1, &cb->command_buffer);
-
+        vkFreeCommandBuffers(s_ctx.device, cb->command_pool, 1, &cb->command_buffer);
         s_ctx.command_buffers.destroy_handle(handle);
     }
 }
@@ -1550,6 +1570,73 @@ void rhi::end_command_buffer(rhi::CommandBuffer handle)
     DEBUG_ASSERT(handle);
 
     VK_CHECK(vkEndCommandBuffer(s_ctx.command_buffers.get_ptr(handle)->command_buffer));
+}
+
+rhi::Queue rhi::create_queue(const QueueDesc&& desc)
+{
+    if (desc.type == rhi::QUEUE_TYPE_GRAPHICS)
+    {
+        QueueImpl queue = {.type = rhi::QUEUE_TYPE_GRAPHICS};
+
+        const bool found = find_queue_index(queue.idx, s_ctx.graphics_queue_idxs);
+        ASSERT(found);
+
+        vkGetDeviceQueue(s_ctx.device, s_ctx.graphics_queue_family_idx, queue.idx, &queue.queue);
+
+        debug_name_object(
+            s_ctx.device,
+            VK_OBJECT_TYPE_QUEUE,
+            reinterpret_cast<u64>(queue.queue),
+            desc.debug_name
+        );
+
+        return s_ctx.queues.create_handle(queue);
+    }
+    else if (desc.type == rhi::QUEUE_TYPE_COMPUTE)
+    {
+        QueueImpl queue = {.type = rhi::QUEUE_TYPE_COMPUTE};
+
+        const bool found = find_queue_index(queue.idx, s_ctx.compute_queue_idxs);
+        ASSERT(found);
+
+        vkGetDeviceQueue(s_ctx.device, s_ctx.compute_queue_family_idx, queue.idx, &queue.queue);
+
+        debug_name_object(
+            s_ctx.device,
+            VK_OBJECT_TYPE_QUEUE,
+            reinterpret_cast<u64>(queue.queue),
+            desc.debug_name
+        );
+
+        return s_ctx.queues.create_handle(queue);
+    }
+    else
+    {
+        UNREACHABLE();
+    }
+}
+
+void rhi::destroy_queue(Queue handle)
+{
+    if (handle)
+    {
+        const QueueImpl& queue = *s_ctx.queues.get_ptr(handle);
+
+        if (queue.type == rhi::QUEUE_TYPE_GRAPHICS)
+        {
+            s_ctx.graphics_queue_idxs[queue.idx] = 0;
+            s_ctx.queues.destroy_handle(handle);
+        }
+        else if (queue.type == rhi::QUEUE_TYPE_COMPUTE)
+        {
+            s_ctx.compute_queue_idxs[queue.idx] = 0;
+            s_ctx.queues.destroy_handle(handle);
+        }
+        else
+        {
+            UNREACHABLE();
+        }
+    }
 }
 
 void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
@@ -1575,7 +1662,7 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .semaphore = *s_ctx.semaphores.get_ptr(desc[i].wait_semaphores[j].semaphore),
                 .value = desc[i].wait_semaphores[j].value,
-                .stageMask = StageToVk(desc[i].wait_semaphores[j].stage_mask),
+                .stageMask = stage_to_vk(desc[i].wait_semaphores[j].stage_mask),
             };
         };
 
@@ -1601,7 +1688,7 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .semaphore = *s_ctx.semaphores.get_ptr(desc[i].signal_semaphores[j].semaphore),
                 .value = desc[i].signal_semaphores[j].value,
-                .stageMask = StageToVk(desc[i].signal_semaphores[j].stage_mask),
+                .stageMask = stage_to_vk(desc[i].signal_semaphores[j].stage_mask),
             };
         };
 
@@ -1633,10 +1720,12 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
         };
     }
 
-    const VkQueue vk_queue = queue == QUEUE_GRAPHICS ? s_ctx.graphics_queue_info.queue
-                                                     : s_ctx.compute_queue_info.queue;
-
-    VK_CHECK(vkQueueSubmit2(vk_queue, u32(desc.count), submit_infos, VK_NULL_HANDLE));
+    VK_CHECK(vkQueueSubmit2(
+        s_ctx.queues.get_ptr(queue)->queue,
+        u32(desc.count),
+        submit_infos,
+        VK_NULL_HANDLE
+    ));
 }
 
 rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc)
@@ -1942,15 +2031,15 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         = scratch_arena.alloc_or_die<VkFormat>(desc.color_targets.count);
     for (int i = 0; i < desc.color_targets.count; ++i)
     {
-        color_attachment_formats[i] = FormatToVk(desc.color_targets[i].format);
+        color_attachment_formats[i] = format_to_vk(desc.color_targets[i].format);
     }
 
     const VkPipelineRenderingCreateInfo pipeline_rendering_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = u32(desc.color_targets.count),
         .pColorAttachmentFormats = color_attachment_formats,
-        .depthAttachmentFormat = FormatToVk(desc.depth_format),
-        .stencilAttachmentFormat = FormatToVk(desc.stencil_format),
+        .depthAttachmentFormat = format_to_vk(desc.depth_format),
+        .stencilAttachmentFormat = format_to_vk(desc.stencil_format),
     };
 
     const VkPipelineVertexInputStateCreateInfo vertex_input_info = {
@@ -1959,7 +2048,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
 
     const VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = PrimitiveTopologyToVk(desc.topology),
+        .topology = primitive_topology_to_vk(desc.topology),
     };
 
     const VkPipelineViewportStateCreateInfo viewport_info = {
@@ -1972,7 +2061,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .depthClampEnable = desc.depth_clamp_enable,
         .polygonMode = VK_POLYGON_MODE_FILL,
-        .cullMode = CullToVk(desc.cull),
+        .cullMode = cull_to_vk(desc.cull),
         .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .lineWidth = 1.0f,
     };
@@ -1997,13 +2086,13 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         const rhi::PipelineColorTarget& t = desc.color_targets[i];
         color_blend_attachments[i] = {
             .blendEnable = t.blend_enable,
-            .srcColorBlendFactor = BlendFactorToVk(t.src_color_factor),
-            .dstColorBlendFactor = BlendFactorToVk(t.dst_color_factor),
-            .colorBlendOp = BlendOpToVk(t.color_op),
-            .srcAlphaBlendFactor = BlendFactorToVk(t.dst_alpha_factor),
-            .dstAlphaBlendFactor = BlendFactorToVk(t.dst_alpha_factor),
-            .alphaBlendOp = BlendOpToVk(t.alpha_op),
-            .colorWriteMask = ColorComponentToVk(t.color_component_mask),
+            .srcColorBlendFactor = blend_factor_to_vk(t.src_color_factor),
+            .dstColorBlendFactor = blend_factor_to_vk(t.dst_color_factor),
+            .colorBlendOp = blend_op_to_vk(t.color_op),
+            .srcAlphaBlendFactor = blend_factor_to_vk(t.dst_alpha_factor),
+            .dstAlphaBlendFactor = blend_factor_to_vk(t.dst_alpha_factor),
+            .alphaBlendOp = blend_op_to_vk(t.alpha_op),
+            .colorWriteMask = color_component_to_vk(t.color_component_mask),
         };
     }
 
@@ -2134,10 +2223,10 @@ void rhi::cmd_barrier(
 
     const VkMemoryBarrier2 barrier = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
-        .srcStageMask = StageToVk(src_stage_mask),
-        .srcAccessMask = AccessToVk(src_access_mask),
-        .dstStageMask = StageToVk(dst_stage_mask),
-        .dstAccessMask = AccessToVk(dst_access_mask),
+        .srcStageMask = stage_to_vk(src_stage_mask),
+        .srcAccessMask = access_to_vk(src_access_mask),
+        .dstStageMask = stage_to_vk(dst_stage_mask),
+        .dstAccessMask = access_to_vk(dst_access_mask),
     };
 
     const VkDependencyInfo dependency_info = {
@@ -2169,17 +2258,17 @@ void rhi::cmd_texture_barrier(
 
         barriers[i] = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = StageToVk(d.src_stage_mask),
-            .srcAccessMask = AccessToVk(d.src_access_mask),
-            .dstStageMask = StageToVk(d.dst_stage_mask),
-            .dstAccessMask = AccessToVk(d.dst_access_mask),
-            .oldLayout = TextureLayoutToVk(d.old_layout),
-            .newLayout = TextureLayoutToVk(d.new_layout),
+            .srcStageMask = stage_to_vk(d.src_stage_mask),
+            .srcAccessMask = access_to_vk(d.src_access_mask),
+            .dstStageMask = stage_to_vk(d.dst_stage_mask),
+            .dstAccessMask = access_to_vk(d.dst_access_mask),
+            .oldLayout = texture_layout_to_vk(d.old_layout),
+            .newLayout = texture_layout_to_vk(d.new_layout),
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = texture->image,
             .subresourceRange = {
-                .aspectMask = vk_aspect_flags_from_format(FormatToVk(texture->format)),
+                .aspectMask = vk_aspect_flags_from_format(format_to_vk(texture->format)),
                 .baseMipLevel = 0,
                 .levelCount = d.mip_count,
                 .baseArrayLayer = 0,
@@ -2221,17 +2310,17 @@ void rhi::cmd_texture_invalidate_barrier(
 
         barriers[i] = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = StageToVk(src_stage_mask),
-            .srcAccessMask = AccessToVk(src_access_mask),
-            .dstStageMask = StageToVk(dst_stage_mask),
-            .dstAccessMask = AccessToVk(dst_access_mask),
+            .srcStageMask = stage_to_vk(src_stage_mask),
+            .srcAccessMask = access_to_vk(src_access_mask),
+            .dstStageMask = stage_to_vk(dst_stage_mask),
+            .dstAccessMask = access_to_vk(dst_access_mask),
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = texture->image,
             .subresourceRange = {
-                .aspectMask = vk_aspect_flags_from_format(FormatToVk(texture->format)),
+                .aspectMask = vk_aspect_flags_from_format(format_to_vk(texture->format)),
                 .baseMipLevel = 0,
                 .levelCount = rhi::ALL_MIPS,
                 .baseArrayLayer = 0,
@@ -2276,7 +2365,7 @@ void rhi::cmd_copy_buffer_to_texture(
             .bufferRowLength = c.buffer_row_length,
             .bufferImageHeight = c.buffer_texture_height,
             .imageSubresource = {
-                .aspectMask = vk_aspect_flags_from_format(FormatToVk(tex->format)),
+                .aspectMask = vk_aspect_flags_from_format(format_to_vk(tex->format)),
                 .mipLevel = c.texture_subresource.mip_level,
                 .baseArrayLayer = c.texture_subresource.base_array_layer,
                 .layerCount = c.texture_subresource.layer_count,
@@ -2459,8 +2548,8 @@ void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc)
                 ? s_ctx.textures.get_ptr(t.attachment.texture)->view
                 : s_ctx.texture_descriptors.get_ptr(t.attachment.descriptor)->view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .loadOp = AttachmentLoadOpToVk(t.load_op),
-            .storeOp = AttachmentStoreOpToVk(t.store_op),
+            .loadOp = attachment_load_op_to_vk(t.load_op),
+            .storeOp = attachment_store_op_to_vk(t.store_op),
         };
     }
 
@@ -2478,8 +2567,8 @@ void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc)
                 ? s_ctx.textures.get_ptr(desc.depth_target.attachment.texture)->view
                 : s_ctx.texture_descriptors.get_ptr(desc.depth_target.attachment.descriptor)->view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .loadOp = AttachmentLoadOpToVk(desc.depth_target.load_op),
-            .storeOp = AttachmentStoreOpToVk(desc.depth_target.store_op),
+            .loadOp = attachment_load_op_to_vk(desc.depth_target.load_op),
+            .storeOp = attachment_store_op_to_vk(desc.depth_target.store_op),
         };
     }
 
@@ -2519,7 +2608,7 @@ void rhi::cmd_bind_index_buffer(
         s_ctx.command_buffers.get_ptr(cb)->command_buffer,
         s_ctx.buffers.get_ptr(buffer)->buffer,
         offset,
-        IndexTypeToVk(index_type)
+        index_type_to_vk(index_type)
     );
 }
 
@@ -2761,7 +2850,7 @@ void rhi::create_swapchain(Vec2U32 size)
     {
         textures[i].image = images[i];
         textures[i].type = rhi::TEXTURE_TYPE_2D;
-        textures[i].format = FormatToRHI(s_ctx.swapchain.surface_format.format);
+        textures[i].format = format_to_rhi(s_ctx.swapchain.surface_format.format);
         textures[i].dimensions = {s_ctx.swapchain.extent.width, s_ctx.swapchain.extent.height, 1};
     }
 
@@ -2860,7 +2949,7 @@ rhi::Texture rhi::get_swapchain_texture(u32 idx)
     return s_ctx.swapchain.textures[idx];
 }
 
-rhi::SwapchainResult rhi::queue_present(Queue queue)
+rhi::SwapchainResult rhi::queue_present(Queue handle)
 {
     const VkPresentInfoKHR present_info = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -2871,10 +2960,8 @@ rhi::SwapchainResult rhi::queue_present(Queue queue)
         .pImageIndices = &s_ctx.image_idx,
     };
 
-    const VkQueue vk_queue = queue == rhi::QUEUE_GRAPHICS ? s_ctx.graphics_queue_info.queue
-                                                          : s_ctx.compute_queue_info.queue;
-
-    const VkResult vulkan_result = vkQueuePresentKHR(vk_queue, &present_info);
+    const VkResult vulkan_result
+        = vkQueuePresentKHR(s_ctx.queues.get_ptr(handle)->queue, &present_info);
     switch (vulkan_result)
     {
     case VK_SUCCESS:
@@ -2893,12 +2980,9 @@ void rhi::device_wait_idle()
     VK_CHECK(vkDeviceWaitIdle(s_ctx.device));
 }
 
-void rhi::queue_wait_idle(rhi::Queue queue)
+void rhi::queue_wait_idle(rhi::Queue handle)
 {
-    VK_CHECK(vkQueueWaitIdle(
-        queue == rhi::QUEUE_GRAPHICS ? s_ctx.graphics_queue_info.queue
-                                     : s_ctx.compute_queue_info.queue
-    ));
+    VK_CHECK(vkQueueWaitIdle(s_ctx.queues.get_ptr(handle)->queue));
 }
 
 void rhi::begin_new_frame(int frame_in_flight_idx)
@@ -2907,11 +2991,4 @@ void rhi::begin_new_frame(int frame_in_flight_idx)
     DEBUG_ASSERT(frame_in_flight_idx < rhi::FRAMES_IN_FLIGHT);
 
     s_ctx.frame_idx = frame_in_flight_idx;
-
-    VK_CHECK(
-        vkResetCommandPool(s_ctx.device, s_ctx.frames[frame_in_flight_idx].command_pool_compute, 0)
-    );
-    VK_CHECK(
-        vkResetCommandPool(s_ctx.device, s_ctx.frames[frame_in_flight_idx].command_pool_graphics, 0)
-    );
 }

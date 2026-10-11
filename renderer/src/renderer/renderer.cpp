@@ -200,6 +200,27 @@ bool Renderer::Init()
 
     rhi::create(mWindow);
 
+    m_graphics_queue = rhi::create_queue({
+        .type = rhi::QUEUE_TYPE_GRAPHICS,
+        .debug_name = "graphics_queue",
+    });
+    m_compute_queue = rhi::create_queue({
+        .type = rhi::QUEUE_TYPE_COMPUTE,
+        .debug_name = "compute_queue",
+    });
+
+    for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
+    {
+        m_frame[i].graphics_command_pool = rhi::create_command_pool({
+            .queue = m_graphics_queue,
+            .debug_name = "graphics_command_pool",
+        });
+        m_frame[i].compute_command_pool = rhi::create_command_pool({
+            .queue = m_compute_queue,
+            .debug_name = "compute_command_pool",
+        });
+    }
+
     int width = 0;
     int height = 0;
     if (!SDL_GetWindowSizeInPixels(mWindow, &width, &height))
@@ -212,7 +233,7 @@ bool Renderer::Init()
 
     for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
     {
-        mFrame[i].uniformBufferManager.init(
+        m_frame[i].uniformBufferManager.init(
             16'000,
             int(rhi::get_device_properties().min_uniform_buffer_offset_alignment)
         );
@@ -271,9 +292,9 @@ bool Renderer::Init()
 
         for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
         {
-            mFrame[i].startSemaphore.semaphore = rhi::create_semaphore(0);
-            mFrame[i].shadowSemaphore.semaphore = rhi::create_semaphore(0);
-            mFrame[i].ssaoSemaphore.semaphore = rhi::create_semaphore(0);
+            m_frame[i].startSemaphore.semaphore = rhi::create_semaphore(0);
+            m_frame[i].shadowSemaphore.semaphore = rhi::create_semaphore(0);
+            m_frame[i].ssaoSemaphore.semaphore = rhi::create_semaphore(0);
         }
     }
 
@@ -326,7 +347,8 @@ bool Renderer::Init()
 
             memcpy(rhi::get_buffer_host_ptr(stagingBuffer), jitterOffsets.data(), uploadSize);
 
-            rhi::CommandBuffer cb = rhi::create_command_buffer(rhi::QUEUE_GRAPHICS);
+            rhi::CommandBuffer cb
+                = rhi::create_command_buffer({.command_pool = m_frame[0].graphics_command_pool});
             DEFER(rhi::destroy_command_buffer(cb));
 
             rhi::begin_command_buffer(cb);
@@ -367,7 +389,7 @@ bool Renderer::Init()
 
             rhi::end_command_buffer(cb);
 
-            rhi::queue_submit(rhi::QUEUE_GRAPHICS, {{.cb = cb}});
+            rhi::queue_submit(m_graphics_queue, {{.cb = cb}});
 
             rhi::device_wait_idle();
 
@@ -529,14 +551,26 @@ bool Renderer::Init()
     // Command buffers
     for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
     {
-        mFrame[i].startCommandBuffer = rhi::create_command_buffer(rhi::QUEUE_GRAPHICS, i, "Start");
-        mFrame[i].shadowCommandBuffer
-            = rhi::create_command_buffer(rhi::QUEUE_GRAPHICS, i, "Shadow");
-        mFrame[i].ssaoCommandBuffer = rhi::create_command_buffer(rhi::QUEUE_COMPUTE, i, "SSAO");
-        mFrame[i].endCommandBuffer = rhi::create_command_buffer(rhi::QUEUE_GRAPHICS, i, "End");
+        m_frame[i].startCommandBuffer = rhi::create_command_buffer(
+            {.command_pool = m_frame[i].graphics_command_pool, .debug_name = "start_cb"}
+        );
+        m_frame[i].shadowCommandBuffer = rhi::create_command_buffer(
+            {.command_pool = m_frame[i].graphics_command_pool, .debug_name = "shadow_cb"}
+        );
+        m_frame[i].ssaoCommandBuffer = rhi::create_command_buffer(
+            {.command_pool = m_frame[i].compute_command_pool, .debug_name = "ssao_cb"}
+        );
+        m_frame[i].endCommandBuffer = rhi::create_command_buffer(
+            {.command_pool = m_frame[i].graphics_command_pool, .debug_name = "end_cb"}
+        );
     }
 
-    if (!mImguiRenderer.init(mWindow, rhi::get_texture_format(rhi::get_swapchain_texture(0))))
+    if (!mImguiRenderer.init(
+            mWindow,
+            rhi::get_texture_format(rhi::get_swapchain_texture(0)),
+            m_graphics_queue,
+            m_frame[0].graphics_command_pool
+        ))
     {
         fprintf(stderr, "failed to initialize ImGui renderer\n");
         return false;
@@ -544,7 +578,9 @@ bool Renderer::Init()
 
     // Initializing resources.
     {
-        rhi::CommandBuffer cb = rhi::create_command_buffer(rhi::QUEUE_GRAPHICS);
+        rhi::CommandBuffer cb = rhi::create_command_buffer(
+            {.command_pool = m_frame[0].graphics_command_pool, .debug_name = "init_cb"}
+        );
         DEFER(rhi::destroy_command_buffer(cb));
 
         rhi::begin_command_buffer(cb);
@@ -553,8 +589,8 @@ bool Renderer::Init()
 
         rhi::end_command_buffer(cb);
 
-        rhi::queue_submit(rhi::QUEUE_GRAPHICS, {{.cb = cb}});
-        rhi::queue_wait_idle(rhi::QUEUE_GRAPHICS);
+        rhi::queue_submit(m_graphics_queue, {{.cb = cb}});
+        rhi::queue_wait_idle(m_graphics_queue);
     }
 
     mSwapchainNeedsRecreating = true;
@@ -592,6 +628,9 @@ void Renderer::Cleanup()
 {
     rhi::device_wait_idle();
 
+    rhi::destroy_queue(m_graphics_queue);
+    rhi::destroy_queue(m_compute_queue);
+
     mImguiRenderer.cleanup();
 
     CleanupPipelines();
@@ -628,14 +667,17 @@ void Renderer::Cleanup()
     rhi::destroy_buffer(mDrawCmdBuffer1);
     for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
     {
-        mFrame[i].uniformBufferManager.cleanup();
+        m_frame[i].uniformBufferManager.cleanup();
     }
     rhi::destroy_semaphore(mFrameSemaphore);
     for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
     {
-        rhi::destroy_semaphore(mFrame[i].startSemaphore.semaphore);
-        rhi::destroy_semaphore(mFrame[i].shadowSemaphore.semaphore);
-        rhi::destroy_semaphore(mFrame[i].ssaoSemaphore.semaphore);
+        rhi::destroy_command_pool(m_frame[i].graphics_command_pool);
+        rhi::destroy_command_pool(m_frame[i].compute_command_pool);
+
+        rhi::destroy_semaphore(m_frame[i].startSemaphore.semaphore);
+        rhi::destroy_semaphore(m_frame[i].shadowSemaphore.semaphore);
+        rhi::destroy_semaphore(m_frame[i].ssaoSemaphore.semaphore);
     }
     rhi::destroy_sampler(mShadowPcfJitterSampler);
     rhi::destroy_sampler(mShadowSampler);
@@ -661,7 +703,10 @@ bool Renderer::StartNewFrame()
         rhi::wait_semaphore(mFrameSemaphore, mUniformData.frameCount - rhi::FRAMES_IN_FLIGHT + 1);
     }
 
-    rhi::begin_new_frame(mFrameIdx);
+    rhi::begin_new_frame(m_frame_idx);
+
+    rhi::reset_command_pool(m_frame[m_frame_idx].graphics_command_pool);
+    rhi::reset_command_pool(m_frame[m_frame_idx].compute_command_pool);
 
     mImguiRenderer.start_new_frame();
 
@@ -699,14 +744,17 @@ bool Renderer::Render(f32 deltaTime)
         CreateSwapchain(mWindowSize);
     }
 
-    Frame& frame = mFrame[mFrameIdx];
+    Frame& frame = m_frame[m_frame_idx];
 
     // I can't be arsed to handle the edge cases and it's only used for debugging.
     if (mRenderModeChanged)
     {
         rhi::device_wait_idle();
 
-        rhi::CommandBuffer cb = rhi::create_command_buffer(rhi::QUEUE_GRAPHICS);
+        rhi::CommandBuffer cb = rhi::create_command_buffer({
+            .command_pool = m_frame[0].graphics_command_pool,
+            .debug_name = "rendering_mode_changed_cb",
+        });
         DEFER(rhi::destroy_command_buffer(cb));
 
         rhi::begin_command_buffer(cb);
@@ -721,7 +769,7 @@ bool Renderer::Render(f32 deltaTime)
 
         rhi::end_command_buffer(cb);
 
-        rhi::queue_submit(rhi::QUEUE_GRAPHICS, {{.cb = cb}});
+        rhi::queue_submit(m_graphics_queue, {{.cb = cb}});
 
         rhi::device_wait_idle();
     }
@@ -740,7 +788,7 @@ bool Renderer::Render(f32 deltaTime)
         && (swapchainResult != rhi::SWAPCHAIN_SUBOPTIMAL)
     )
     {
-        fprintf(stderr, "RHI::AcquireNextSwapchainTexture failed\n");
+        fprintf(stderr, "rhi::acquire_next_swapchain_texture failed\n");
         return false;
     }
 
@@ -808,7 +856,7 @@ bool Renderer::Render(f32 deltaTime)
         break;
     }
 
-    swapchainResult = rhi::queue_present(rhi::QUEUE_GRAPHICS);
+    swapchainResult = rhi::queue_present(m_graphics_queue);
     if ((swapchainResult == rhi::SWAPCHAIN_OUT_OF_DATE)
         || (swapchainResult == rhi::SWAPCHAIN_SUBOPTIMAL))
     {
@@ -822,8 +870,8 @@ bool Renderer::Render(f32 deltaTime)
 
     mNewFrameStarted = false;
 
-    mPrevFrameIdx = mFrameIdx;
-    mFrameIdx = (mFrameIdx + 1) % rhi::FRAMES_IN_FLIGHT;
+    mPrevFrameIdx = m_frame_idx;
+    m_frame_idx = (m_frame_idx + 1) % rhi::FRAMES_IN_FLIGHT;
     ++mUniformData.frameCount;
     mSwapchainRecreated = false;
     mRenderModeChanged = false;
@@ -1231,7 +1279,7 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
         }
         DEFER(ktxTexture2_Destroy(ktxTex));
 
-        const rhi::Format format = FormatToRHI(ktxTexture2_GetVkFormat(ktxTex));
+        const rhi::Format format = format_to_rhi(ktxTexture2_GetVkFormat(ktxTex));
         const Vec3U32 extent{ktxTex->baseWidth, ktxTex->baseHeight, ktxTex->baseDepth};
         const u32 mipLevels = ktxTex->numLevels;
         const ktx_size_t size = ktxTexture_GetDataSize(ktxTexture(ktxTex));
@@ -1276,7 +1324,10 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
         memcpy(rhi::get_buffer_host_ptr(stagingBuffer), ktxData, size);
         rhi::unmap_buffer(stagingBuffer);
 
-        rhi::CommandBuffer cb = rhi::create_command_buffer(rhi::QUEUE_GRAPHICS);
+        rhi::CommandBuffer cb = rhi::create_command_buffer({
+            .command_pool = m_frame[0].graphics_command_pool,
+            .debug_name = "upload_textures_cb",
+        });
         DEFER(rhi::destroy_command_buffer(cb));
 
         rhi::begin_command_buffer(cb);
@@ -1302,8 +1353,8 @@ bool Renderer::UploadTextures(const std::vector<std::string>& texturePaths)
 
         rhi::end_command_buffer(cb);
 
-        rhi::queue_submit(rhi::QUEUE_GRAPHICS, {{.cb = cb}});
-        rhi::queue_wait_idle(rhi::QUEUE_GRAPHICS);
+        rhi::queue_submit(m_graphics_queue, {{.cb = cb}});
+        rhi::queue_wait_idle(m_graphics_queue);
     }
 
     for (size_t i = 0; i < mTextures.size(); ++i)
@@ -1827,14 +1878,15 @@ void Renderer::TaaResolvePass(rhi::CommandBuffer cb)
             mRenderTexture,
             mDepthTexture,
             mVelocityTexture,
-            mSwapchainRecreated || mRenderModeChanged ? mFrame[mFrameIdx].resolvedRenderTexture
-                                                      : mFrame[mPrevFrameIdx].resolvedRenderTexture,
-            mFrame[mFrameIdx].resolvedRenderTexture,
+            mSwapchainRecreated || mRenderModeChanged
+                ? m_frame[m_frame_idx].resolvedRenderTexture
+                : m_frame[mPrevFrameIdx].resolvedRenderTexture,
+            m_frame[m_frame_idx].resolvedRenderTexture,
             mLinearSampler,
         }
     );
 
-    CmdDispatchOverTextureSize(cb, pipeline, mFrame[mFrameIdx].resolvedRenderTexture);
+    CmdDispatchOverTextureSize(cb, pipeline, m_frame[m_frame_idx].resolvedRenderTexture);
 }
 
 void Renderer::DebugDrawPass(rhi::CommandBuffer cb)
@@ -1888,7 +1940,7 @@ void Renderer::DebugDrawPass(rhi::CommandBuffer cb)
         .cb = cb,
         .extent = size,
         .color_targets = {{
-            .attachment = mFrame[mFrameIdx].resolvedRenderTexture,
+            .attachment = m_frame[m_frame_idx].resolvedRenderTexture,
             .load_op = rhi::ATTACHMENT_LOAD_OP_LOAD,
             .store_op = rhi::ATTACHMENT_STORE_OP_STORE,
         }},
@@ -1912,7 +1964,7 @@ void Renderer::FullscreenPass(rhi::CommandBuffer cb, rhi::Texture swapchainTextu
         cb,
         pipeline,
         {
-            mFrame[mFrameIdx].resolvedRenderTexture,
+            m_frame[m_frame_idx].resolvedRenderTexture,
             mLinearSampler,
         }
     );
@@ -2013,7 +2065,7 @@ void Renderer::RecordAndSubmitDebugGradError(rhi::Texture swapchainTexture)
 {
     DEBUG_ASSERT(swapchainTexture);
 
-    const rhi::CommandBuffer cb = mFrame[mFrameIdx].startCommandBuffer;
+    const rhi::CommandBuffer cb = m_frame[m_frame_idx].startCommandBuffer;
 
     rhi::begin_command_buffer(cb);
 
@@ -2111,7 +2163,7 @@ void Renderer::RecordAndSubmitDebugGradError(rhi::Texture swapchainTexture)
 
     DebugDrawGradErrorPass(cb, true, swapchainTexture);
 
-    mImguiRenderer.update_vertex_index_buffers(u32(mFrameIdx));
+    mImguiRenderer.update_vertex_index_buffers(u32(m_frame_idx));
 
     // TODO: separate pass.
     if (mEnableUI)
@@ -2128,7 +2180,7 @@ void Renderer::RecordAndSubmitDebugGradError(rhi::Texture swapchainTexture)
             }},
         });
 
-        mImguiRenderer.render(cb, u32(mFrameIdx));
+        mImguiRenderer.render(cb, u32(m_frame_idx));
 
         rhi::cmd_end_rendering(cb);
     }
@@ -2148,9 +2200,9 @@ void Renderer::RecordAndSubmitDebugGradError(rhi::Texture swapchainTexture)
 
     rhi::end_command_buffer(cb);
 
-    mFrame[mFrameIdx].uniformBufferManager.flush();
+    m_frame[m_frame_idx].uniformBufferManager.flush();
     rhi::queue_submit(
-        rhi::QUEUE_GRAPHICS,
+        m_graphics_queue,
         {{
             .cb = cb,
             .wait_for_texture_acquire = true,
@@ -2164,7 +2216,7 @@ void Renderer::RecordAndSubmitDebugGradError(rhi::Texture swapchainTexture)
 
 void Renderer::RecordAndSubmitVisibility(rhi::Texture swapchainTexture)
 {
-    Frame& frame = mFrame[mFrameIdx];
+    Frame& frame = m_frame[m_frame_idx];
 
     const rhi::CommandBuffer cbStart = frame.startCommandBuffer;
     rhi::begin_command_buffer(cbStart);
@@ -2272,7 +2324,7 @@ void Renderer::RecordAndSubmitVisibility(rhi::Texture swapchainTexture)
     // TODO: I don't see why can't I use 2 submits per frame (1 for each queue).
     frame.uniformBufferManager.flush();
     rhi::queue_submit(
-        rhi::QUEUE_GRAPHICS,
+        m_graphics_queue,
         {{
             .cb = cbStart,
             .wait_for_texture_acquire = true,
@@ -2331,7 +2383,7 @@ void Renderer::RecordAndSubmitVisibility(rhi::Texture swapchainTexture)
 
     frame.uniformBufferManager.flush();
     rhi::queue_submit(
-        rhi::QUEUE_COMPUTE,
+        m_compute_queue,
         {{
             .cb = cbSSAO,
             .wait_semaphores =
@@ -2373,7 +2425,7 @@ void Renderer::RecordAndSubmitVisibility(rhi::Texture swapchainTexture)
 
     frame.uniformBufferManager.flush();
     rhi::queue_submit(
-        rhi::QUEUE_GRAPHICS,
+        m_graphics_queue,
         {{
             .cb = cbShadow,
             .wait_semaphores =
@@ -2451,7 +2503,7 @@ void Renderer::RecordAndSubmitVisibility(rhi::Texture swapchainTexture)
 
     FullscreenPass(cbEnd, swapchainTexture);
 
-    mImguiRenderer.update_vertex_index_buffers(u32(mFrameIdx));
+    mImguiRenderer.update_vertex_index_buffers(u32(m_frame_idx));
 
     if (mEnableUI)
     {
@@ -2467,7 +2519,7 @@ void Renderer::RecordAndSubmitVisibility(rhi::Texture swapchainTexture)
             }},
         });
 
-        mImguiRenderer.render(cbEnd, u32(mFrameIdx));
+        mImguiRenderer.render(cbEnd, u32(m_frame_idx));
 
         rhi::cmd_end_rendering(cbEnd);
     }
@@ -2489,7 +2541,7 @@ void Renderer::RecordAndSubmitVisibility(rhi::Texture swapchainTexture)
 
     frame.uniformBufferManager.flush();
     rhi::queue_submit(
-        rhi::QUEUE_GRAPHICS,
+        m_graphics_queue,
         {{
             .cb = cbEnd,
             .wait_semaphores =
@@ -2622,7 +2674,7 @@ void Renderer::CreateColorResources()
 
     for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
     {
-        mFrame[i].resolvedRenderTexture = rhi::create_texture({
+        m_frame[i].resolvedRenderTexture = rhi::create_texture({
             .format = rhi::get_texture_format(mRenderTexture),
             .dimensions = renderDimensions,
             .usage = rhi::TEXTURE_USAGE_STORAGE_BIT | rhi::TEXTURE_USAGE_SAMPLED_BIT
@@ -2644,7 +2696,7 @@ void Renderer::CleanupColorResources()
 {
     for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
     {
-        rhi::destroy_texture(mFrame[i].resolvedRenderTexture);
+        rhi::destroy_texture(m_frame[i].resolvedRenderTexture);
     }
     rhi::destroy_texture(mFogBlurredVerticalTexture);
     rhi::destroy_texture(mFogBlurredHorizontalTexture);

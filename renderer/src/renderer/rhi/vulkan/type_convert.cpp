@@ -2,7 +2,7 @@
 
 #include "utils.hpp"
 
-VkMemoryPropertyFlags MemoryTypeToVk(rhi::MemoryType type)
+VkMemoryPropertyFlags memory_type_to_vk(rhi::MemoryType type)
 {
     switch (type)
     {
@@ -17,7 +17,7 @@ VkMemoryPropertyFlags MemoryTypeToVk(rhi::MemoryType type)
     UNREACHABLE();
 }
 
-VkImageType TextureTypeToVk(rhi::TextureType type)
+VkImageType texture_type_to_vk(rhi::TextureType type)
 {
     switch (type)
     {
@@ -33,7 +33,7 @@ VkImageType TextureTypeToVk(rhi::TextureType type)
     UNREACHABLE();
 }
 
-VkImageViewType TextureTypeToViewVk(rhi::TextureType type)
+VkImageViewType texture_type_to_view_vk(rhi::TextureType type)
 {
     switch (type)
     {
@@ -50,31 +50,31 @@ VkImageViewType TextureTypeToViewVk(rhi::TextureType type)
     UNREACHABLE();
 }
 
-VkImageUsageFlags TextureUsageToVk(rhi::TextureUsageFlags usage)
+VkImageUsageFlags texture_usage_to_vk(rhi::TextureUsageFlags usage)
 {
-    VkImageUsageFlags vkUsage{};
+    VkImageUsageFlags vk_usage{};
 
     if (usage & rhi::TEXTURE_USAGE_TRANSFER_SRC_BIT)
-        vkUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        vk_usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     if (usage & rhi::TEXTURE_USAGE_TRANSFER_DST_BIT)
-        vkUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        vk_usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     if (usage & rhi::TEXTURE_USAGE_SAMPLED_BIT)
-        vkUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+        vk_usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
     if (usage & rhi::TEXTURE_USAGE_STORAGE_BIT)
-        vkUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
+        vk_usage |= VK_IMAGE_USAGE_STORAGE_BIT;
     if (usage & rhi::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT)
-        vkUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        vk_usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     if (usage & rhi::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-        vkUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        vk_usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-    return vkUsage;
+    return vk_usage;
 }
 
-VkFormat FormatToVk(rhi::Format format)
+VkFormat format_to_vk(rhi::Format format)
 {
     static const VkFormat sTable[] =
     {
-#define RHI_XFMT(rhiFormat, vulkanFormat) vulkanFormat,
+#define RHI_XFMT(rhi_format, vulkan_format) vulkan_format,
 #include "../format_table.hpp"
     };
 
@@ -83,7 +83,7 @@ VkFormat FormatToVk(rhi::Format format)
     return sTable[u32(format)];
 }
 
-VkPipelineStageFlags2 StageToVk(rhi::StageFlags stage)
+VkPipelineStageFlags2 stage_to_vk(rhi::StageFlags stage)
 {
     VkPipelineStageFlags2 result{};
 
@@ -97,7 +97,7 @@ VkPipelineStageFlags2 StageToVk(rhi::StageFlags stage)
     return result;
 }
 
-VkAccessFlags2 AccessToVk(rhi::AccessFlags access)
+VkAccessFlags2 access_to_vk(rhi::AccessFlags access)
 {
     VkAccessFlags2 result{};
 
@@ -111,7 +111,7 @@ VkAccessFlags2 AccessToVk(rhi::AccessFlags access)
     return result;
 }
 
-VkImageLayout TextureLayoutToVk(rhi::TextureLayout layout)
+VkImageLayout texture_layout_to_vk(rhi::TextureLayout layout)
 {
     switch (layout)
     {
@@ -126,7 +126,7 @@ VkImageLayout TextureLayoutToVk(rhi::TextureLayout layout)
     UNREACHABLE();
 }
 
-VkPrimitiveTopology PrimitiveTopologyToVk(rhi::Topology topology)
+VkPrimitiveTopology primitive_topology_to_vk(rhi::Topology topology)
 {
     switch (topology)
     {
@@ -141,7 +141,7 @@ VkPrimitiveTopology PrimitiveTopologyToVk(rhi::Topology topology)
     UNREACHABLE();
 }
 
-VkCullModeFlags CullToVk(rhi::Cull cull)
+VkCullModeFlags cull_to_vk(rhi::Cull cull)
 {
     switch (cull)
     {
@@ -158,7 +158,7 @@ VkCullModeFlags CullToVk(rhi::Cull cull)
     UNREACHABLE();
 }
 
-VkColorComponentFlags ColorComponentToVk(rhi::ColorComponentFlags flags)
+VkColorComponentFlags color_component_to_vk(rhi::ColorComponentFlags flags)
 {
     VkColorComponentFlags result{};
 
@@ -174,7 +174,7 @@ VkColorComponentFlags ColorComponentToVk(rhi::ColorComponentFlags flags)
     return result;
 }
 
-VkFilter FilterToVk(rhi::Filter filter)
+VkFilter filter_to_vk(rhi::Filter filter)
 {
     switch (filter)
     {
@@ -187,7 +187,7 @@ VkFilter FilterToVk(rhi::Filter filter)
     UNREACHABLE();
 }
 
-VkSamplerMipmapMode SamplerMipmapModeToVk(rhi::SamplerMipmapMode mode)
+VkSamplerMipmapMode sampler_mipmap_mode_to_vk(rhi::SamplerMipmapMode mode)
 {
     switch (mode)
     {
@@ -200,7 +200,7 @@ VkSamplerMipmapMode SamplerMipmapModeToVk(rhi::SamplerMipmapMode mode)
     UNREACHABLE();
 }
 
-VkSamplerAddressMode SamplerAddressModeToVk(rhi::SamplerAddressMode mode)
+VkSamplerAddressMode sampler_address_mode_to_vk(rhi::SamplerAddressMode mode)
 {
     switch (mode)
     {
@@ -219,7 +219,7 @@ VkSamplerAddressMode SamplerAddressModeToVk(rhi::SamplerAddressMode mode)
     UNREACHABLE();
 }
 
-VkCompareOp CompareOpToVk(rhi::CompareOp op)
+VkCompareOp compare_op_to_vk(rhi::CompareOp op)
 {
     switch (op)
     {
@@ -244,7 +244,7 @@ VkCompareOp CompareOpToVk(rhi::CompareOp op)
     UNREACHABLE();
 }
 
-VkAttachmentLoadOp AttachmentLoadOpToVk(rhi::AttachmentLoadOp op)
+VkAttachmentLoadOp attachment_load_op_to_vk(rhi::AttachmentLoadOp op)
 {
     switch (op)
     {
@@ -261,7 +261,7 @@ VkAttachmentLoadOp AttachmentLoadOpToVk(rhi::AttachmentLoadOp op)
     UNREACHABLE();
 }
 
-VkAttachmentStoreOp AttachmentStoreOpToVk(rhi::AttachmentStoreOp op)
+VkAttachmentStoreOp attachment_store_op_to_vk(rhi::AttachmentStoreOp op)
 {
     switch (op)
     {
@@ -276,7 +276,7 @@ VkAttachmentStoreOp AttachmentStoreOpToVk(rhi::AttachmentStoreOp op)
     UNREACHABLE();
 }
 
-VkIndexType IndexTypeToVk(rhi::IndexType type)
+VkIndexType index_type_to_vk(rhi::IndexType type)
 {
     switch (type)
     {
@@ -291,7 +291,7 @@ VkIndexType IndexTypeToVk(rhi::IndexType type)
     UNREACHABLE();
 }
 
-VkBlendFactor BlendFactorToVk(rhi::BlendFactor factor)
+VkBlendFactor blend_factor_to_vk(rhi::BlendFactor factor)
 {
     switch (factor)
     {
@@ -312,7 +312,7 @@ VkBlendFactor BlendFactorToVk(rhi::BlendFactor factor)
     UNREACHABLE();
 }
 
-VkBlendOp BlendOpToVk(rhi::BlendOp op)
+VkBlendOp blend_op_to_vk(rhi::BlendOp op)
 {
     switch (op)
     {
@@ -331,7 +331,20 @@ VkBlendOp BlendOpToVk(rhi::BlendOp op)
     UNREACHABLE();
 }
 
-rhi::Format FormatToRHI(VkFormat format)
+VkQueueFlagBits queue_type_to_vk(rhi::QueueType type)
+{
+    switch (type)
+    {
+    case rhi::QUEUE_TYPE_GRAPHICS:
+        return VK_QUEUE_GRAPHICS_BIT;
+    case rhi::QUEUE_TYPE_COMPUTE:
+        return VK_QUEUE_COMPUTE_BIT;
+    }
+
+    UNREACHABLE();
+}
+
+rhi::Format format_to_rhi(VkFormat format)
 {
     switch (format)
     {

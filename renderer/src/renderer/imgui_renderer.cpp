@@ -12,7 +12,12 @@
 // Heavily based on Sascha Willems's vulkan examples:
 // https://github.com/SaschaWillems/Vulkan/blob/master/base/VulkanUIOverlay.h
 
-bool ImguiRenderer::init(SDL_Window* window, rhi::Format color_format)
+bool ImguiRenderer::init(
+    SDL_Window* window,
+    rhi::Format color_format,
+    rhi::Queue queue,
+    rhi::CommandPool command_pool
+)
 {
     DEBUG_ASSERT(window);
 
@@ -77,7 +82,10 @@ bool ImguiRenderer::init(SDL_Window* window, rhi::Format color_format)
 
         memcpy(rhi::get_buffer_host_ptr(staging_buffer), font_data, upload_size);
 
-        const rhi::CommandBuffer cb = rhi::create_command_buffer(rhi::QUEUE_GRAPHICS);
+        const rhi::CommandBuffer cb = rhi::create_command_buffer({
+            .command_pool = command_pool,
+            .debug_name = "imgui_font_upload_cb",
+        });
         DEFER(rhi::destroy_command_buffer(cb));
 
         rhi::begin_command_buffer(cb);
@@ -114,9 +122,9 @@ bool ImguiRenderer::init(SDL_Window* window, rhi::Format color_format)
 
         rhi::end_command_buffer(cb);
 
-        rhi::queue_submit(rhi::QUEUE_GRAPHICS, {{.cb = cb}});
+        rhi::queue_submit(queue, {{.cb = cb}});
 
-        rhi::queue_wait_idle(rhi::QUEUE_GRAPHICS);
+        rhi::queue_wait_idle(queue);
     }
 
     m_font_sampler = rhi::create_sampler({});
@@ -142,7 +150,7 @@ bool ImguiRenderer::init(SDL_Window* window, rhi::Format color_format)
                 .src_alpha_factor = rhi::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                 .dst_alpha_factor = rhi::BLEND_FACTOR_ZERO,
             }},
-            .debug_name = "fullscreen_pass",
+            .debug_name = "fullscreen_pipeline",
         });
         if (!m_pipeline)
         {

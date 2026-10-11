@@ -59,6 +59,8 @@ RHI_HANDLE(Texture);
 RHI_HANDLE(TextureDescriptor);
 RHI_HANDLE(Sampler);
 RHI_HANDLE(Semaphore);
+RHI_HANDLE(Queue);
+RHI_HANDLE(CommandPool);
 RHI_HANDLE(CommandBuffer);
 
 enum MemoryType
@@ -246,10 +248,11 @@ enum IndexType
     INDEX_TYPE_U32,
 };
 
-enum Queue
+enum QueueType
 {
-    QUEUE_GRAPHICS,
-    QUEUE_COMPUTE,
+    QUEUE_TYPE_GRAPHICS,
+    QUEUE_TYPE_COMPUTE,
+    // TODO: Transfer.
 };
 
 // clang-format off
@@ -356,8 +359,37 @@ u64 get_semaphore_value(Semaphore semaphore);
 void wait_semaphore(Semaphore semaphore, u64 value, u64 timeout = 1'000'000'000);
 
 // -----------------------------------------------------------------------------
-// Command buffer and queue.
-// Command pools are reset in BeginNewFrame.
+// Command pool and command buffer.
+struct CommandPoolDesc
+{
+    Queue queue;
+    bool transient = true;
+    const char* debug_name;
+};
+CommandPool create_command_pool(const CommandPoolDesc&& desc);
+void destroy_command_pool(CommandPool pool);
+void reset_command_pool(CommandPool pool);
+
+struct CommandBufferDesc
+{
+    CommandPool command_pool;
+    const char* debug_name;
+};
+CommandBuffer create_command_buffer(const CommandBufferDesc&& desc);
+void destroy_command_buffer(CommandBuffer cb);
+void begin_command_buffer(CommandBuffer cb);
+void end_command_buffer(CommandBuffer cb);
+
+// -----------------------------------------------------------------------------
+// Queue.
+struct QueueDesc
+{
+    QueueType type = QUEUE_TYPE_GRAPHICS;
+    const char* debug_name;
+};
+Queue create_queue(const QueueDesc&& desc);
+void destroy_queue(Queue queue);
+
 struct QueueSubmitDesc
 {
     struct SemaphoreSubmitDesc
@@ -374,14 +406,6 @@ struct QueueSubmitDesc
     bool signal_ready_to_present;
     SliceArg<SemaphoreSubmitDesc> signal_semaphores;
 };
-CommandBuffer create_command_buffer(
-    Queue queue,
-    int frame_in_flight_idx = 0,
-    const char* debug_name = nullptr
-);
-void destroy_command_buffer(CommandBuffer cb);
-void begin_command_buffer(CommandBuffer cb);
-void end_command_buffer(CommandBuffer cb);
 void queue_submit(Queue queue, const SliceArg<QueueSubmitDesc>&& desc);
 
 // -----------------------------------------------------------------------------
