@@ -97,11 +97,11 @@ static void decompose_transform(
 }
 
 static void load_geometry(
-    std::vector<Vertex>& vertices,
-    std::vector<u32>& indices,
-    std::vector<Mesh>& meshes,
-    std::vector<MeshPrimitive>& mesh_primitives,
-    std::vector<rhi::DrawIndexedIndirectCommand>& draw_cmds,
+    eastl::vector<Vertex>& vertices,
+    eastl::vector<u32>& indices,
+    eastl::vector<Mesh>& meshes,
+    eastl::vector<MeshPrimitive>& mesh_primitives,
+    eastl::vector<rhi::DrawIndexedIndirectCommand>& draw_cmds,
     const cgltf_data* cgltf_data
 ) {
     DEBUG_ASSERT(vertices.empty());
@@ -111,11 +111,11 @@ static void load_geometry(
     DEBUG_ASSERT(draw_cmds.empty());
     DEBUG_ASSERT(cgltf_data);
 
-    std::vector<f32> tmp;
-    std::vector<Vertex> prim_vertices;
-    std::vector<u32> prim_indices;
-    std::vector<Vec3> prim_positions;
-    std::vector<u32> remap;
+    eastl::vector<f32> tmp;
+    eastl::vector<Vertex> prim_vertices;
+    eastl::vector<u32> prim_indices;
+    eastl::vector<Vec3> prim_positions;
+    eastl::vector<u32> remap;
 
     for (cgltf_size mi = 0; mi < cgltf_data->meshes_count; ++mi) {
         const cgltf_mesh& mesh = cgltf_data->meshes[mi];
@@ -322,11 +322,11 @@ static void load_geometry(
 }
 
 static void load_materials(
-    std::vector<DrawData>& draw_data,
-    std::vector<Material>& materials,
+    eastl::vector<DrawData>& draw_data,
+    eastl::vector<Material>& materials,
     Vec3& sun_direction_world,
-    const std::vector<Mesh>& meshes,
-    const std::vector<MeshPrimitive>& mesh_primitives,
+    const eastl::vector<Mesh>& meshes,
+    const eastl::vector<MeshPrimitive>& mesh_primitives,
     const cgltf_data* cgltf_data
 ) {
     DEBUG_ASSERT(draw_data.empty());
@@ -425,17 +425,17 @@ static void load_materials(
 }
 
 static void load_texture_paths(
-    std::vector<std::string>& texture_paths,
-    const std::string& gltf_path,
+    eastl::vector<eastl::string>& texture_paths,
+    const eastl::string& gltf_path,
     const cgltf_data* cgltf_data
 ) {
     DEBUG_ASSERT(texture_paths.empty());
     DEBUG_ASSERT(!gltf_path.empty());
     DEBUG_ASSERT(cgltf_data);
 
-    std::string base_path;
+    eastl::string base_path;
     const size_t last_separator_pos = gltf_path.find_last_of("/\\");
-    if (last_separator_pos == std::string::npos) {
+    if (last_separator_pos == eastl::string::npos) {
         base_path = "";
     } else {
         base_path = gltf_path.substr(0, last_separator_pos + 1);
@@ -448,11 +448,11 @@ static void load_texture_paths(
         const cgltf_image& image = *tex.image;
         ASSERT(image.uri);
 
-        std::string uri{image.uri};
+        eastl::string uri{image.uri};
         uri.resize(cgltf_decode_uri(uri.data()));
 
-        const std::string::size_type dot_pos = uri.find_last_of('.');
-        if (dot_pos != std::string::npos) {
+        const eastl::string::size_type dot_pos = uri.find_last_of('.');
+        if (dot_pos != eastl::string::npos) {
             uri.replace(dot_pos, uri.size() - dot_pos, ".ktx2");
         }
 
@@ -463,15 +463,15 @@ static void load_texture_paths(
 // Stole some GLTF loading logic from niagara.
 // https://github.com/zeux/niagara
 bool load_scene(
-    std::vector<Vertex>& vertices,
-    std::vector<u32>& indices,
-    std::vector<MeshPrimitive>& mesh_primitives,
-    std::vector<rhi::DrawIndexedIndirectCommand>& draw_cmds,
-    std::vector<DrawData>& draw_data,
-    std::vector<Material>& materials,
-    std::vector<std::string>& texture_paths,
+    eastl::vector<Vertex>& vertices,
+    eastl::vector<u32>& indices,
+    eastl::vector<MeshPrimitive>& mesh_primitives,
+    eastl::vector<rhi::DrawIndexedIndirectCommand>& draw_cmds,
+    eastl::vector<DrawData>& draw_data,
+    eastl::vector<Material>& materials,
+    eastl::vector<eastl::string>& texture_paths,
     Vec3& sun_direction_world,
-    const std::string& gltf_path
+    const eastl::string& gltf_path
 ) {
     DEBUG_ASSERT(vertices.empty());
     DEBUG_ASSERT(indices.empty());
@@ -503,7 +503,7 @@ bool load_scene(
         return false;
     }
 
-    std::vector<Mesh> meshes;
+    eastl::vector<Mesh> meshes;
 
     load_geometry(vertices, indices, meshes, mesh_primitives, draw_cmds, cgltf_data);
 

@@ -175,3 +175,5 @@ struct ScopedDefer {
 #define STR_CONCAT_2__(a, b) a##b
 #define DEFER(code) \
     const auto STR_CONCAT__(tmpDeferVarName__, __LINE__) = ScopedDefer([&]() { code; })
+
+#define UNUSED(x) (void)(x)
