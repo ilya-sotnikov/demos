@@ -10,10 +10,8 @@
 
 struct SDL_Window;
 
-struct ImguiRenderer
-{
-    struct PushConstantBlock
-    {
+struct ImguiRenderer {
+    struct PushConstantBlock {
         Vec2 scale;
         Vec2 translate;
     };
@@ -22,8 +20,7 @@ struct ImguiRenderer
     rhi::Sampler m_font_sampler;
     rhi::Pipeline m_pipeline;
 
-    struct Frame
-    {
+    struct Frame {
         rhi::Buffer vertex_buffer;
         rhi::Buffer index_buffer;
         u64 vertex_buffer_size;

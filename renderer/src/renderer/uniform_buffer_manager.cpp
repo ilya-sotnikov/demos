@@ -4,8 +4,7 @@
 
 #include <stdio.h>
 
-void UniformBufferManager::init(int size, int alignment)
-{
+void UniformBufferManager::init(int size, int alignment) {
     m_cpu_buffer = static_cast<u8*>(utils::xmalloc(size_t(size)));
     m_size = size;
     m_alignment = alignment;
@@ -17,21 +16,18 @@ void UniformBufferManager::init(int size, int alignment)
     });
 }
 
-void UniformBufferManager::cleanup()
-{
+void UniformBufferManager::cleanup() {
     free(m_cpu_buffer);
     m_offset = 0;
     rhi::destroy_buffer(m_buffer);
 }
 
-void UniformBufferManager::on_new_frame()
-{
+void UniformBufferManager::on_new_frame() {
     m_flushed_offset = 0;
     m_offset = 0;
 }
 
-rhi::DescriptorInfo UniformBufferManager::push(const void* data, int size)
-{
+rhi::DescriptorInfo UniformBufferManager::push(const void* data, int size) {
     ASSERT(size < rhi::UNIFORM_BUFFER_MAX_SIZE_BYTES);
 
     m_offset = utils::align_up_pow2(m_offset, m_alignment);
@@ -46,10 +42,8 @@ rhi::DescriptorInfo UniformBufferManager::push(const void* data, int size)
     return result;
 }
 
-void UniformBufferManager::flush()
-{
-    if (m_flushed_offset == m_offset)
-    {
+void UniformBufferManager::flush() {
+    if (m_flushed_offset == m_offset) {
         return;
     }
     DEBUG_ASSERT(m_offset > m_flushed_offset);

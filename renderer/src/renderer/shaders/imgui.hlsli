@@ -2,23 +2,21 @@
 
 #include "common.hlsli"
 
-struct ImguiVertex
-{
+struct ImguiVertex {
     float2 position;
     float2 uv;
     uint32_t color;
 };
 
 [[vk::binding(0)]]
-StructuredBuffer<ImguiVertex> vertexBuffer;
+StructuredBuffer<ImguiVertex> vertex_buffer;
 [[vk::binding(1)]]
-Texture2D fontTexture;
+Texture2D font_texture;
 [[vk::binding(2)]]
-SamplerState fontSampler;
+SamplerState font_sampler;
 
-struct VertexOutput
-{
+struct VertexOutput {
     float4 position : SV_Position;
-    float2 uv : TexCoord0;
-    float4 color : Color0;
+    float2 uv : UV;
+    float4 color : COLOR;
 };

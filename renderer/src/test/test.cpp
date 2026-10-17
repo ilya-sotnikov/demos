@@ -11,17 +11,13 @@
 #define TEST(name) test_name = name;
 
 #define TEST_ASSERT(x) \
-    do \
-    { \
+    do { \
         test_assertion = #x; \
         test_file = __FILE__; \
         test_line = __LINE__; \
-        if (x) \
-        { \
+        if (x) { \
             putchar('.'); \
-        } \
-        else \
-        { \
+        } else { \
             printf( \
                 "\ntest failed at %s:%d\n    %s: %s\n", \
                 test_file, \
@@ -31,11 +27,9 @@
             ); \
             exit(1); \
         } \
-    } \
-    while (0)
+    } while (0)
 
-int main(void)
-{
+int main(void) {
     const char* test_name = "";
     const char* test_assertion = "";
     const char* test_file = "";

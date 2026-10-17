@@ -1,11 +1,10 @@
 #if defined(TEST_HEADERS)
 
-#include "arena.hpp"
+    #include "arena.hpp"
 
 #elif defined(TEST_SOURCE)
 
-TEST("Arena")
-{
+TEST("Arena") {
     Arena arena;
     int* res;
     int cmp[] = {1337, -1, 282, 222};
@@ -29,8 +28,7 @@ TEST("Arena")
 
     res = static_cast<int*>(arena.alloc(sizeof(cmp), sizeof(int)));
     TEST_ASSERT(res);
-    for (int i = 0; i < cmp_count; ++i)
-    {
+    for (int i = 0; i < cmp_count; ++i) {
         res[i] = cmp[i];
     }
     TEST_ASSERT(!memcmp(arena.m_buffer, cmp, sizeof(cmp)));

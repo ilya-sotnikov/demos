@@ -1,18 +1,17 @@
 #include "common.hlsli"
 
-ByteAddressBuffer countBuffer;
-RWStructuredBuffer<DrawIndirectCommand> cmdBuffer;
+ByteAddressBuffer count_buffer;
+RWStructuredBuffer<DrawIndirectCommand> cmd_buffer;
 
 [numthreads(1, 1, 1)]
-void main()
-{
-    const uint count = countBuffer.Load(0);
+void main() {
+    const uint count = count_buffer.Load(0);
 
     DrawIndirectCommand cmd;
-    cmd.vertexCount = 6 * count;
-    cmd.instanceCount = 1;
-    cmd.firstVertex = 0;
-    cmd.firstInstance = 0;
+    cmd.vertex_count = 6 * count;
+    cmd.instance_count = 1;
+    cmd.first_vertex = 0;
+    cmd.first_instance = 0;
 
-    cmdBuffer[0] = cmd;
+    cmd_buffer[0] = cmd;
 }

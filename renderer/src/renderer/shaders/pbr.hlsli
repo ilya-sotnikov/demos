@@ -4,31 +4,28 @@
 // https://github.com/KhronosGroup/Vulkan-Tutorial/blob/main/en/Building_a_Simple_Engine/Lighting_Materials/04_lighting_implementation.adoc
 // https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf
 
-float NormalDistributionGGX(float dotNormalHalf, float roughness)
-{
+float normal_distribution_ggx(float dot_normal_half, float roughness) {
     const float a = roughness * roughness;
     const float a2 = a * a;
-    const float dotNormalHalf2 = dotNormalHalf * dotNormalHalf;
+    const float dot_normal_half2 = dot_normal_half * dot_normal_half;
 
     const float nom = a2;
-    float denom = (dotNormalHalf2 * (a2 - 1.0) + 1.0);
+    float denom = (dot_normal_half2 * (a2 - 1.0f) + 1.0f);
     denom = M_PIf * denom * denom;
 
     return nom / denom;
 }
 
-float GeometrySmith(float dotNormalView, float dotNormalLight, float roughness)
-{
-    const float r = roughness + 1.0;
-    const float k = (r * r) / 8.0;
+float geometry_smith(float dot_normal_view, float dot_normal_light, float roughness) {
+    const float r = roughness + 1.0f;
+    const float k = (r * r) / 8.0f;
 
-    const float ggx1 = dotNormalView / (dotNormalView * (1.0 - k) + k);
-    const float ggx2 = dotNormalLight / (dotNormalLight * (1.0 - k) + k);
+    const float ggx1 = dot_normal_view / (dot_normal_view * (1.0f - k) + k);
+    const float ggx2 = dot_normal_light / (dot_normal_light * (1.0f - k) + k);
 
     return ggx1 * ggx2;
 }
 
-float3 FresnelSchlick(float cosTheta, float3 fresnel0)
-{
-    return fresnel0 + (1.0 - fresnel0) * pow(1.0 - cosTheta, 5.0);
+float3 fresnel_schlick(float cos_theta, float3 fresnel0) {
+    return fresnel0 + (1.0f - fresnel0) * pow(1.0f - cos_theta, 5.0f);
 }

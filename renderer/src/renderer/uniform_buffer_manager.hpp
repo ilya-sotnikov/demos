@@ -3,8 +3,7 @@
 #include "common.hpp"
 #include "renderer/rhi/rhi.hpp"
 
-struct UniformBufferManager
-{
+struct UniformBufferManager {
     void init(int size, int alignment);
     void cleanup();
 

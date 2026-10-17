@@ -6,18 +6,18 @@
 // https://github.com/zeux/niagara
 
 [[vk::push_constant]]
-PushConstantsCull cullPassData;
+PushConstantsCull cull_pass_data;
 
-ConstantBuffer<UniformData> uniformBuffer;
-StructuredBuffer<DrawData> drawDataBuffer;
-RWByteAddressBuffer drawCountBuffer;
-StructuredBuffer<DrawIndexedIndirectCommand> drawCmdsBuffer1;
-RWStructuredBuffer<DrawIndexedIndirectCommand> drawCmdsBuffer2;
-RWStructuredBuffer<uint32_t> drawIndicesBuffer;
-RWStructuredBuffer<uint32_t> meshPrimitiveVisibleBuffer;
+ConstantBuffer<UniformData> uniform_buffer;
+StructuredBuffer<DrawData> draw_data_buffer;
+RWByteAddressBuffer draw_count_buffer;
+StructuredBuffer<DrawIndexedIndirectCommand> draw_cmds_buffer1;
+RWStructuredBuffer<DrawIndexedIndirectCommand> draw_cmds_buffer2;
+RWStructuredBuffer<uint32_t> draw_indices_buffer;
+RWStructuredBuffer<uint32_t> mesh_primitive_visible_buffer;
 
-SamplerState minSampler;
-Texture2D<float> depthPyramidTexture;
+SamplerState min_sampler;
+Texture2D<float> depth_pyramid_texture;
 
 // 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere, Michael Mara, Morgan McGuire
 // http://jcgt.org/published/0002/02/05/paper.pdf
@@ -25,19 +25,17 @@ Texture2D<float> depthPyramidTexture;
 // https://github.com/zeux/niagara
 // The idea is to simplify the code in this paper, because it's very generic
 // and we only care about getting a clip space (uv) AABB of a sphere.
-bool ProjectSphere(
+bool project_sphere(
     float3 center,
     float radius,
-    float zNear,
+    float z_near,
     float perspective00,
     float perspective11,
     out float4 aabb
-)
-{
+) {
     // If the bounding sphere intersects the near plane, we skip occlusion tests
     // since it simplifies math and in this case the object is probably not occluded anyway.
-    if (center.z > -(radius + zNear))
-    {
+    if (center.z > -(radius + z_near)) {
         return false;
     }
 
@@ -58,81 +56,76 @@ bool ProjectSphere(
         maxx * perspective00,
         maxy * perspective11
     );
-    aabb = aabb.zyxw * float4(-0.5, 0.5, -0.5, 0.5) + 0.5; // Clip space -> uv space.
+    aabb = aabb.zyxw * float4(-0.5f, 0.5f, -0.5f, 0.5f) + 0.5f; // Clip space -> uv space.
 
     return true;
 }
 
 [numthreads(RENDERER_CULL_WORKGROUP_SIZE, 1, 1)]
-void main(uint3 dtid : SV_DispatchThreadID)
-{
-    const uint drawIdx = dtid.x;
+void main(uint3 dtid : SV_DispatchThreadID) {
+    const uint draw_idx = dtid.x;
 
-    if (drawIdx >= uniformBuffer.drawCount)
-    {
+    if (draw_idx >= uniform_buffer.draw_count) {
         return;
     }
 
-    const DrawData drawData = drawDataBuffer[drawIdx];
+    const DrawData draw_data = draw_data_buffer[draw_idx];
 
     // TODO: support translucent materials.
-    bool visible = drawData.render_pass_flags == RENDER_PASS_OPAQUE_BIT;
+    bool visible = draw_data.render_pass_flags == RENDER_PASS_OPAQUE_BIT;
 
     // In the early cull pass of 2-pass Hi-Z occlusion culling, we render only
     // mesh primitives that were visible last frame.
-    if (CULL_LATE == 0)
-    {
-        visible = visible && meshPrimitiveVisibleBuffer[drawIdx] != 0;
+    if (CULL_LATE == 0) {
+        visible = visible && mesh_primitive_visible_buffer[draw_idx] != 0;
     }
 
-    const float3 sphereCenterWorld =
-        QuatRotate(drawData.orientation, drawData.sphere_center) * drawData.scale + drawData.position;
-    const float3 sphereCenterView = mul(
-        uniformBuffer.cullWorldToView,
-        float4(sphereCenterWorld, 1.0)
+    const float3 sphere_center_world =
+        quat_rotate(draw_data.orientation, draw_data.sphere_center) * draw_data.scale + draw_data.position;
+    const float3 sphere_center_view = mul(
+        uniform_buffer.cull_world_to_view,
+        float4(sphere_center_world, 1.0f)
     ).xyz;
-    const float sphereRadius = drawData.scale * drawData.sphere_radius;
+    const float sphere_radius = draw_data.scale * draw_data.sphere_radius;
 
     // View frustum is symmetrical, therefore we can cull against two opposite planes simultaneously.
-    visible = visible && sphereCenterView.z * cullPassData.frustumPlaneXZ -
-        abs(sphereCenterView.x) * cullPassData.frustumPlaneXX > -sphereRadius;
+    visible = visible && sphere_center_view.z * cull_pass_data.frustum_plane_xz -
+        abs(sphere_center_view.x) * cull_pass_data.frustum_plane_xx > -sphere_radius;
 
-    visible = visible && sphereCenterView.z * cullPassData.frustumPlaneYZ -
-        abs(sphereCenterView.y) * cullPassData.frustumPlaneYY > -sphereRadius;
+    visible = visible && sphere_center_view.z * cull_pass_data.frustum_plane_yz -
+        abs(sphere_center_view.y) * cull_pass_data.frustum_plane_yy > -sphere_radius;
 
-    visible = visible && sphereCenterView.z - sphereRadius < -RENDERER_NEAR_PLANE;
+    visible = visible && sphere_center_view.z - sphere_radius < -RENDERER_NEAR_PLANE;
 
-    if ((CULL_LATE == 1) && visible)
-    {
+    if ((CULL_LATE == 1) && visible) {
         float4 aabb; // Screen-space (uv) AABB.
-        if (ProjectSphere(
-            sphereCenterView,
-            sphereRadius,
+        if (project_sphere(
+            sphere_center_view,
+            sphere_radius,
             RENDERER_NEAR_PLANE,
-            uniformBuffer.viewToClip[0][0],
-            uniformBuffer.viewToClip[1][1],
-            aabb))
-        {
-            const float width = (aabb.z - aabb.x) * cullPassData.depthPyramidWidth;
-            const float height = (aabb.w - aabb.y) * cullPassData.depthPyramidHeight;
+            uniform_buffer.view_to_clip[0][0],
+            uniform_buffer.view_to_clip[1][1],
+            aabb)) {
 
-            const float mipLevel = ceil(log2(max(width, height)));
+            const float width = (aabb.z - aabb.x) * cull_pass_data.depth_pyramid_width;
+            const float height = (aabb.w - aabb.y) * cull_pass_data.depth_pyramid_height;
+
+            const float mip_level = ceil(log2(max(width, height)));
 
             // Min reduction sampler (minimum depth of 2x2 texel quad).
             const float depth =
-                depthPyramidTexture.SampleLevel(minSampler, (aabb.xy + aabb.zw) * 0.5, mipLevel);
-            const float depthSphere = RENDERER_NEAR_PLANE / (-sphereCenterView.z - sphereRadius);
+                depth_pyramid_texture.SampleLevel(min_sampler, (aabb.xy + aabb.zw) * 0.5f, mip_level);
+            const float depth_sphere = RENDERER_NEAR_PLANE / (-sphere_center_view.z - sphere_radius);
 
-            visible = visible && depthSphere > depth;
+            visible = visible && depth_sphere > depth;
 
-            if (cullPassData.drawCullAABB)
-            {
-                DebugDrawRect(
+            if (cull_pass_data.draw_cull_aabb) {
+                debug_draw_rect(
                     aabb * float4(
-                        uniformBuffer.renderWidth,
-                        uniformBuffer.renderHeight,
-                        uniformBuffer.renderWidth,
-                        uniformBuffer.renderHeight
+                        uniform_buffer.render_width,
+                        uniform_buffer.render_height,
+                        uniform_buffer.render_width,
+                        uniform_buffer.render_height
                     ),
                     COLOR_RED
                 );
@@ -145,40 +138,37 @@ void main(uint3 dtid : SV_DispatchThreadID)
     // In the late cull pass, we are writing only draw commands for mesh primitives
     // that are visible, but were not visible in the early cull pass.
     // Therefore, if camera did not move between the 2 consecutive frames, visibleCount == 0.
-    const bool shouldWriteDrawData =
-        visible && ((CULL_LATE == 0) || (meshPrimitiveVisibleBuffer[drawIdx] == 0));
+    const bool should_write_draw_data =
+        visible && ((CULL_LATE == 0) || (mesh_primitive_visible_buffer[draw_idx] == 0));
 
-    const uint subgroupVisibleIdx = WavePrefixCountBits(shouldWriteDrawData);
-    const uint subgroupVisibleCount = WaveActiveCountBits(shouldWriteDrawData);
-    uint baseVisibleIdx;
-    if (WaveIsFirstLane())
-    {
-        drawCountBuffer.InterlockedAdd(0, subgroupVisibleCount, baseVisibleIdx);
+    const uint subgroup_visible_idx = WavePrefixCountBits(should_write_draw_data);
+    const uint subgroup_visible_count = WaveActiveCountBits(should_write_draw_data);
+    uint base_visible_idx;
+    if (WaveIsFirstLane()) {
+        draw_count_buffer.InterlockedAdd(0, subgroup_visible_count, base_visible_idx);
     }
-    baseVisibleIdx = WaveReadLaneFirst(baseVisibleIdx);
+    base_visible_idx = WaveReadLaneFirst(base_visible_idx);
 
-    if (shouldWriteDrawData)
-    {
-        const uint visibleIdx = baseVisibleIdx + subgroupVisibleIdx;
-        const DrawIndexedIndirectCommand drawCmd = drawCmdsBuffer1[drawIdx];
+    if (should_write_draw_data) {
+        const uint visible_idx = base_visible_idx + subgroup_visible_idx;
+        const DrawIndexedIndirectCommand draw_cmd = draw_cmds_buffer1[draw_idx];
 
-        DrawIndexedIndirectCommand writeDrawCmd;
-        writeDrawCmd.indexCount = drawCmd.indexCount;
-        writeDrawCmd.instanceCount = 1;
-        writeDrawCmd.firstIndex = drawCmd.firstIndex;
-        writeDrawCmd.vertexOffset = drawCmd.vertexOffset;
-        writeDrawCmd.firstInstance = 0;
+        DrawIndexedIndirectCommand write_draw_cmd;
+        write_draw_cmd.index_count = draw_cmd.index_count;
+        write_draw_cmd.instance_count = 1;
+        write_draw_cmd.first_index = draw_cmd.first_index;
+        write_draw_cmd.vertex_offset = draw_cmd.vertex_offset;
+        write_draw_cmd.first_instance = 0;
 
-        drawCmdsBuffer2[visibleIdx] = writeDrawCmd;
-        drawIndicesBuffer[visibleIdx] = drawIdx;
+        draw_cmds_buffer2[visible_idx] = write_draw_cmd;
+        draw_indices_buffer[visible_idx] = draw_idx;
     }
 
-    if (CULL_LATE == 1)
-    {
+    if (CULL_LATE == 1) {
         // On the next frame, this buffer will be used in the early cull pass
         // to draw mesh primitives that were visible last frame.
         // TODO: pack?
-        meshPrimitiveVisibleBuffer[drawIdx] = visible ? 1 : 0;
+        mesh_primitive_visible_buffer[draw_idx] = visible ? 1 : 0;
     }
 }
 

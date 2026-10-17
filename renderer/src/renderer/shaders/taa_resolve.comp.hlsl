@@ -2,15 +2,15 @@
 #include "math.hlsli"
 
 [[vk::push_constant]]
-PushConstantsTAA pushConstants;
+PushConstantsTAA push_constants;
 
-ConstantBuffer<UniformData> uniformBuffer;
-Texture2D renderTexture;
-Texture2D depthTexture;
-Texture2D velocityTexture;
-Texture2D prevResolvedRenderTexture;
-RWTexture2D<float3> resolvedRenderTextureRW;
-SamplerState linearSampler;
+ConstantBuffer<UniformData> uniform_buffer;
+Texture2D render_texture;
+Texture2D depth_texture;
+Texture2D velocity_texture;
+Texture2D prev_resolved_render_texture;
+RWTexture2D<float3> resolved_render_texture_rw;
+SamplerState linear_sampler;
 
 // Took an implementation from this article:
 // https://alextardif.com/TAA.html
@@ -31,106 +31,99 @@ SamplerState linearSampler;
 // TODO: now that we have a visibility buffer, is it useful for history rejection?
 
 [numthreads(RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_X, RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_Y, 1)]
-void main(uint3 dtid : SV_DispatchThreadID)
-{
-    int2 renderTextureSize = int2(uniformBuffer.renderWidth, uniformBuffer.renderHeight);
+void main(uint3 dtid : SV_DispatchThreadID) {
+    int2 render_texture_size = int2(uniform_buffer.render_width, uniform_buffer.render_height);
 
-    if (dtid.x >= renderTextureSize.x || dtid.y >= renderTextureSize.y)
-    {
+    if (dtid.x >= render_texture_size.x || dtid.y >= render_texture_size.y) {
         return;
     }
 
-    if (pushConstants.enable == 0)
-    {
-        resolvedRenderTextureRW[dtid.xy] = renderTexture[dtid.xy].rgb;
+    if (push_constants.enable == 0) {
+        resolved_render_texture_rw[dtid.xy] = render_texture[dtid.xy].rgb;
         return;
     }
 
-    float3 currSampleTotal = 0.0;
-    float currSampleWeight = 0.0;
-    float3 neighborhoodMin = 10000.0;
-    float3 neighborhoodMax = -10000.0;
-    float3 m1 = 0.0;
-    float3 m2 = 0.0;
-    float closestDepth = 0.0;
-    int2 closestDepthPixelPosition = int2(0, 0);
+    float3 curr_sample_total = 0.0f;
+    float curr_sample_weight = 0.0f;
+    float3 neighborhood_min = 10000.0f;
+    float3 neighborhood_max = -10000.0f;
+    float3 m1 = 0.0f;
+    float3 m2 = 0.0f;
+    float closest_depth = 0.0f;
+    int2 closest_depth_pixel_position = int2(0, 0);
 
     // 3x3 pixel neighborhood grid.
-    for (int x = -1; x <= 1; ++x)
-    {
-        for (int y = -1; y <= 1; ++y)
-        {
-            int2 pixelPosition = dtid.xy + int2(x, y);
-            pixelPosition = clamp(pixelPosition, 0, renderTextureSize - 1);
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            int2 pixel_position = dtid.xy + int2(x, y);
+            pixel_position = clamp(pixel_position, 0, render_texture_size - 1);
 
-            const float3 neighbor = max(0, renderTexture[pixelPosition].rgb);
+            const float3 neighbor = max(0, render_texture[pixel_position].rgb);
 
             // A filter over a neighborhood negates jitter.
-            const float subSampleDistance = length(float2(x, y));
-            const float subSampleWeight = FilterMitchellNetravali(subSampleDistance);
+            const float sub_sample_distance = length(float2(x, y));
+            const float sub_sample_weight = filter_mitchell_netravali(sub_sample_distance);
 
-            currSampleTotal += neighbor * subSampleWeight;
-            currSampleWeight += subSampleWeight;
+            curr_sample_total += neighbor * sub_sample_weight;
+            curr_sample_weight += sub_sample_weight;
 
             // For neighborhood clamping.
-            neighborhoodMin = min(neighborhoodMin, neighbor);
-            neighborhoodMax = max(neighborhoodMax, neighbor);
+            neighborhood_min = min(neighborhood_min, neighbor);
+            neighborhood_max = max(neighborhood_max, neighbor);
 
             // For variance clipping.
             m1 += neighbor;
             m2 += neighbor * neighbor;
 
             // For sampling the velocity buffer.
-            const float currentDepth = depthTexture[pixelPosition].r;
-            if (currentDepth > closestDepth)
-            {
-                closestDepth = currentDepth;
-                closestDepthPixelPosition = pixelPosition;
+            const float current_depth = depth_texture[pixel_position].r;
+            if (current_depth > closest_depth) {
+                closest_depth = current_depth;
+                closest_depth_pixel_position = pixel_position;
             }
         }
     }
 
-    const float2 motionVector =
-        velocityTexture[closestDepthPixelPosition].xy * float2(0.5, 0.5);
-    const float2 uv = float2(dtid.xy + 0.5) / float2(renderTextureSize);
-    const float2 prevUV = uv - motionVector;
-    const float3 currSample = currSampleTotal / currSampleWeight;
+    const float2 motion_vector =
+        velocity_texture[closest_depth_pixel_position].xy * float2(0.5f, 0.5f);
+    const float2 uv = float2(dtid.xy + 0.5f) / float2(render_texture_size);
+    const float2 prev_uv = uv - motion_vector;
+    const float3 curr_sample = curr_sample_total / curr_sample_weight;
 
-    if (any(prevUV != saturate(prevUV)))
-    {
-        resolvedRenderTextureRW[dtid.xy] = currSample;
+    if (any(prev_uv != saturate(prev_uv))) {
+        resolved_render_texture_rw[dtid.xy] = curr_sample;
         return;
     }
 
-    float3 prevSample = SampleTextureCatmullRom(
-        prevResolvedRenderTexture,
-        linearSampler,
-        prevUV,
-        float2(renderTextureSize)
+    float3 prev_sample = sample_texture_catmull_rom(
+        prev_resolved_render_texture,
+        linear_sampler,
+        prev_uv,
+        float2(render_texture_size)
     ).rgb;
 
-    const float sampleCountInv = 1.0 / 9.0;
-    const float gamma = 1.0;
-    const float3 mu = m1 * sampleCountInv;
-    const float3 sigma = sqrt(abs((m2 * sampleCountInv) - (mu * mu)));
-    const float3 minColor = mu - gamma * sigma;
-    const float3 maxColor = mu + gamma * sigma;
+    const float sample_count_inv = 1.0f / 9.0f;
+    const float gamma = 1.0f;
+    const float3 mu = m1 * sample_count_inv;
+    const float3 sigma = sqrt(abs((m2 * sample_count_inv) - (mu * mu)));
+    const float3 min_color = mu - gamma * sigma;
+    const float3 max_color = mu + gamma * sigma;
 
-    prevSample =
-        ClipAabbCenter(minColor, maxColor, clamp(prevSample, neighborhoodMin, neighborhoodMax));
+    prev_sample =
+        clip_aabb_center(min_color, max_color, clamp(prev_sample, neighborhood_min, neighborhood_max));
 
-    const float3 currCompressed = currSample * rcp(Max(currSample) + 1.0);
-    const float3 prevCompressed = prevSample * rcp(Max(prevSample) + 1.0);
-    const float currLuminance = Luminance(currCompressed);
-    const float prevLuminance = Luminance(prevCompressed);
+    const float3 curr_compressed = curr_sample * rcp(max(curr_sample) + 1.0f);
+    const float3 prev_compressed = prev_sample * rcp(max(prev_sample) + 1.0f);
+    const float curr_luminance = luminance(curr_compressed);
+    const float prev_luminance = luminance(prev_compressed);
 
-    float currWeight = pushConstants.blendWeight;
-    float prevWeight = 1.0 - currWeight;
-    currWeight *= 1.0 / (1.0 + currLuminance);
-    prevWeight *= 1.0 / (1.0 + prevLuminance);
+    float curr_weight = push_constants.blend_weight;
+    float prev_weight = 1.0f - curr_weight;
+    curr_weight *= 1.0f / (1.0f + curr_luminance);
+    prev_weight *= 1.0f / (1.0f + prev_luminance);
 
     const float3 result =
-        (currSample * currWeight + prevSample * prevWeight) / max(currWeight + prevWeight, 0.00001);
+        (curr_sample * curr_weight + prev_sample * prev_weight) / max(curr_weight + prev_weight, 0.00001f);
 
-    resolvedRenderTextureRW[dtid.xy] = result;
+    resolved_render_texture_rw[dtid.xy] = result;
 }

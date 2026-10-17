@@ -1,13 +1,11 @@
 #pragma once
 
-#include "../Common.hpp"
+#include "common.hpp"
 
-namespace Hash
-{
+namespace hash {
 
 // https://nullprogram.com/blog/2018/07/31/
-inline u64 Splittable64(u64 x)
-{
+inline u64 splittable64(u64 x) {
     x ^= x >> 30;
     x *= 0xbf58476d1ce4e5b9U;
     x ^= x >> 27;
@@ -16,4 +14,4 @@ inline u64 Splittable64(u64 x)
     return x;
 }
 
-} // namespace Hash
+} // namespace hash

@@ -46,25 +46,48 @@ set(SOURCES
     src/common.hpp
     src/arena.hpp
     src/arena.cpp
-    src/utils.hpp
-    src/utils.cpp
-    src/math/utils.cpp
-    src/time_meter.hpp
-    src/time_meter.cpp
     src/camera.hpp
     src/camera.cpp
-    src/renderer/rhi/rhi.hpp
-    src/renderer/rhi/vulkan/rhi.cpp
-    src/renderer/rhi/vulkan/type_convert.cpp
-    src/renderer/renderer.hpp
-    src/renderer/renderer.cpp
-    src/renderer/uniform_buffer_manager.hpp
-    src/renderer/uniform_buffer_manager.cpp
-    src/renderer/scene.hpp
-    src/renderer/scene.cpp
-    src/renderer/imgui_renderer.cpp
     src/extern.cpp
     src/extern.c
+    src/pack_utils.hpp
+    src/slice_arg.hpp
+    src/time_meter.hpp
+    src/time_meter.cpp
+    src/utils.hpp
+    src/utils.cpp
+
+    src/math/hash.hpp
+    src/math/math.hpp
+    src/math/math_common.hpp
+    src/math/mat2.hpp
+    src/math/mat3.hpp
+    src/math/mat4.hpp
+    src/math/quat.hpp
+    src/math/types.hpp
+    src/math/utils.hpp
+    src/math/utils.cpp
+    src/math/vec2.hpp
+    src/math/vec3.hpp
+    src/math/vec4.hpp
+
+    src/renderer/rhi/access_table.hpp
+    src/renderer/rhi/format_table.hpp
+    src/renderer/rhi/pool.hpp
+    src/renderer/rhi/rhi.hpp
+    src/renderer/rhi/stage_table.hpp
+    src/renderer/rhi/vulkan/common.hpp
+    src/renderer/rhi/vulkan/rhi.cpp
+    src/renderer/rhi/vulkan/type_convert.hpp
+    src/renderer/rhi/vulkan/type_convert.cpp
+    src/renderer/imgui_renderer.hpp
+    src/renderer/imgui_renderer.cpp
+    src/renderer/renderer.hpp
+    src/renderer/renderer.cpp
+    src/renderer/scene.hpp
+    src/renderer/scene.cpp
+    src/renderer/uniform_buffer_manager.hpp
+    src/renderer/uniform_buffer_manager.cpp
 
     src/renderer/shaders/shared_def.hlsli
     src/renderer/shaders/shared_config.hlsli

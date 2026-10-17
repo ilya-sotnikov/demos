@@ -28,119 +28,107 @@
 #define MAT_4X4 float4x4
 #endif
 
-struct UniformData
-{
-    MAT_4X4 worldToView;
-    MAT_4X4 cullWorldToView;
-    MAT_4X4 worldToClip;
-    MAT_4X4 viewToClip;
-    MAT_4X4 prevWorldToClip;
-    MAT_4X4 clipToWorld;
-    FLOAT_3 cameraPosition;
-    FLOAT_3 sunDirectionWorld;
-    FLOAT_3 sunColor;
-    FLOAT_2 taaJitter;
-    FLOAT_2 prevTaaJitter;
-    FLOAT_2 viewToClipInv0011;
-    FLOAT_2 renderTextureSizeInv;
-    float deltaTime;
-    float sunIntensity;
-    float ambientIntensity;
-    float gradErrorMax;
+struct UniformData {
+    MAT_4X4 world_to_view;
+    MAT_4X4 cull_world_to_view;
+    MAT_4X4 world_to_clip;
+    MAT_4X4 view_to_clip;
+    MAT_4X4 prev_world_to_clip;
+    MAT_4X4 clip_to_world;
+    FLOAT_3 camera_position;
+    FLOAT_3 sun_direction_world;
+    FLOAT_3 sun_color;
+    FLOAT_2 taa_jitter;
+    FLOAT_2 prev_taa_jitter;
+    FLOAT_2 view_to_clip_inv0011;
+    FLOAT_2 render_texture_size_inv;
+    float delta_time;
+    float sun_intensity;
+    float ambient_intensity;
+    float grad_error_max;
     float aspect;
-    uint64_t frameCount;
-    uint32_t swapchainWidth;
-    uint32_t swapchainHeight;
-    uint32_t renderWidth;
-    uint32_t renderHeight;
-    uint32_t drawCount;
-    uint32_t renderMode;
-    uint32_t enableSSAO;
-    uint32_t enableFog;
+    uint64_t frame_count;
+    uint32_t swapchain_width;
+    uint32_t swapchain_height;
+    uint32_t render_width;
+    uint32_t render_height;
+    uint32_t draw_count;
+    uint32_t render_mode;
+    uint32_t enable_ssao;
+    uint32_t enable_fog;
 };
 
-struct ShadowPassData
-{
+struct ShadowPassData {
     // TODO: 1 matrix plus offsets and scales for each cascade should be enough.
-    MAT_4X4 worldToClip[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    float texelSizes[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    // float frustumPlaneXX[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    // float frustumPlaneXZ[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    // float frustumPlaneYY[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    // float frustumPlaneYZ[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    float pcfKernelCascadeScales[RENDERER_SHADOW_MAP_CASCADE_COUNT];
-    float normalOffset;
-    float constantOffset;
-    float pcfKernelScale;
-    uint32_t enableCascadeColor;
-    uint32_t enablePcf;
+    MAT_4X4 world_to_clip[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+    float texel_sizes[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+    // float frustum_plane_xx[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+    // float frustum_plane_xz[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+    // float frustum_plane_yy[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+    // float frustum_plane_yz[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+    float pcf_kernel_cascade_scales[RENDERER_SHADOW_MAP_CASCADE_COUNT];
+    float normal_offset;
+    float constant_offset;
+    float pcf_kernel_scale;
+    uint32_t enable_cascade_color;
+    uint32_t enable_pcf;
 };
 
-struct PushConstantsCull
-{
-    float frustumPlaneXX;
-    float frustumPlaneXZ;
-    float frustumPlaneYY;
-    float frustumPlaneYZ;
-    float depthPyramidWidth;
-    float depthPyramidHeight;
-    uint32_t drawCullAABB;
+struct PushConstantsCull {
+    float frustum_plane_xx;
+    float frustum_plane_xz;
+    float frustum_plane_yy;
+    float frustum_plane_yz;
+    float depth_pyramid_width;
+    float depth_pyramid_height;
+    uint32_t draw_cull_aabb;
 };
 
-struct PushConstantsSSAO
-{
-    FLOAT_2 textureSizeInv;
+struct PushConstantsSSAO {
+    FLOAT_2 texture_size_inv;
     uint32_t width;
     uint32_t height;
-    int32_t pixelOffsetX;
-    int32_t pixelOffsetY;
+    int32_t pixel_offset_x;
+    int32_t pixel_offset_y;
 };
 
-struct PushConstantsTAA
-{
-    float blendWeight;
+struct PushConstantsTAA {
+    float blend_weight;
     uint32_t enable;
 };
 
-struct PushConstantsImgui
-{
+struct PushConstantsImgui {
     FLOAT_2 scale;
     FLOAT_2 translate;
 };
 
-struct PushConstantsVisibilityBuffer
-{
-    uint32_t cullLate;
+struct PushConstantsVisibilityBuffer {
+    uint32_t cull_late;
 };
 
-struct PushConstantsDepthReduce
-{
-    uint32_t mipLevel;
-    uint32_t outWidth;
-    uint32_t outHeight;
+struct PushConstantsDepthReduce {
+    uint32_t mip_level;
+    uint32_t out_width;
+    uint32_t out_height;
 };
 
-struct PushConstantsShadow
-{
-    int32_t shadowCascadeIdx;
-    uint32_t renderPassFlags;
+struct PushConstantsShadow {
+    int32_t shadow_cascade_idx;
+    uint32_t render_pass_flags;
 };
 
-struct PushConstantsFogBlur
-{
+struct PushConstantsFogBlur {
     uint32_t horizontal;
 };
 
-struct Vertex
-{
+struct Vertex {
     HALF px, py, pz;
     uint16_t normal; // 8-8 octahedral.
     uint32_t tangent; // 8-8 octahedral in bits 0-15, bit 31 bitangent sign, 15 free bits.
     HALF u, v;
 };
 
-struct Material
-{
+struct Material {
     uint32_t albedo_tex_idx;
     uint32_t metallic_roughness_tex_idx;
     uint32_t normal_tex_idx;
@@ -150,8 +138,7 @@ struct Material
     float roughness_factor;
 };
 
-struct DrawData
-{
+struct DrawData {
     FLOAT_3 position;
     float scale;
     QUAT orientation;
@@ -164,20 +151,17 @@ struct DrawData
     uint32_t render_pass_flags;
 };
 
-struct DebugDrawRectData
-{
-    FLOAT_4 lbrtScreen;
+struct DebugDrawRectData {
+    FLOAT_4 lbrt_screen;
     uint32_t color;
 };
 
-enum RenderPassFlagBits
-{
+enum RenderPassFlagBits {
     RENDER_PASS_OPAQUE_BIT      = (1U << 0),
     RENDER_PASS_TRANSLUCENT_BIT = (1U << 1),
 };
 
-enum RenderMode
-{
+enum RenderMode {
     RENDER_MODE_VISIBILITY,
     RENDER_MODE_GRAD_ERROR,
     RENDER_MODE_AMBIENT_OCCLUSION,

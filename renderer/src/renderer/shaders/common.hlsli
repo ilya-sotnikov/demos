@@ -3,21 +3,19 @@
 #include "shared_config.hlsli"
 #include "shared_def.hlsli"
 
-struct DrawIndexedIndirectCommand
-{
-    uint32_t    indexCount;
-    uint32_t    instanceCount;
-    uint32_t    firstIndex;
-    int32_t     vertexOffset;
-    uint32_t    firstInstance;
+struct DrawIndexedIndirectCommand {
+    uint32_t    index_count;
+    uint32_t    instance_count;
+    uint32_t    first_index;
+    int32_t     vertex_offset;
+    uint32_t    first_instance;
 };
 
-struct DrawIndirectCommand
-{
-    uint32_t    vertexCount;
-    uint32_t    instanceCount;
-    uint32_t    firstVertex;
-    uint32_t    firstInstance;
+struct DrawIndirectCommand {
+    uint32_t    vertex_count;
+    uint32_t    instance_count;
+    uint32_t    first_vertex;
+    uint32_t    first_instance;
 };
 
 static const uint32_t COLOR_RED     = 0xff0000ff;
@@ -35,8 +33,7 @@ static const uint32_t COLOR_MAGENTA = 0xffff00ff;
         { \
             printf(__FILE__ ":%d shader assertion failed " #expr "\n", __LINE__); \
         } \
-    } \
-    while (false)
+    } while (false)
 #else
 #define ASSERT(expr)
 #endif

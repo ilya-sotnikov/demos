@@ -8,16 +8,14 @@
 #include <string>
 #include <vector>
 
-struct Mesh
-{
+struct Mesh {
     size_t primitive_idx;
     size_t primitive_count;
 };
 
 struct cgltf_material;
 
-struct MeshPrimitive
-{
+struct MeshPrimitive {
     Vec3 sphere_center;
     f32 sphere_radius;
 

@@ -1,16 +1,14 @@
 #include "common.hlsli"
 #include "visibility_buffer.hlsli"
 
-struct FragmentOutput
-{
-    uint2 visibilityData : SV_Target0;
+struct FragmentOutput {
+    uint2 visibility_data : SV_Target0;
 };
 
 void main(
     VertexOutput input,
-    uint primitiveId : SV_PrimitiveID,
+    uint primitive_id : SV_PrimitiveID,
     out FragmentOutput output
-) : SV_Target
-{
-    output.visibilityData = uint2(primitiveId, input.rawDrawIdx);
+) : SV_Target {
+    output.visibility_data = uint2(primitive_id, input.raw_draw_idx);
 }

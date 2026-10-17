@@ -3,13 +3,8 @@
 #include "common.hpp"
 
 // Exponential moving average.
-struct TimeMeter
-{
-    enum
-    {
-        FRAME,
-        COUNT
-    };
+struct TimeMeter {
+    enum { FRAME, COUNT };
 
     u64 m_start_time;
     u64 m_end_time;

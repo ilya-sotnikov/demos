@@ -1,4 +1,4 @@
-// Using X-macro to define a 1D LUT for each API, just to keep changes in sync.
+// Using x-macro to define a 1D LUT for each API, just to keep changes in sync.
 // Example usage:
 //
 // static const VkFormat sTable[] =

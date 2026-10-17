@@ -7,58 +7,54 @@
 // https://research.nvidia.com/sites/default/files/pubs/2011-08_The-Alchemy-Screen-space/paper.pdf
 
 [[vk::push_constant]]
-PushConstantsSSAO pushConstants;
+PushConstantsSSAO push_constants;
 
-ConstantBuffer<UniformData> uniformBuffer;
-StructuredBuffer<uint32_t> drawIndicesEarlyBuffer;
-StructuredBuffer<uint32_t> drawIndicesLateBuffer;
-StructuredBuffer<DrawIndexedIndirectCommand> drawCmdEarlyBuffer;
-StructuredBuffer<DrawIndexedIndirectCommand> drawCmdLateBuffer;
-StructuredBuffer<DrawData> drawDataBuffer;
-StructuredBuffer<uint32_t> indexBuffer;
-StructuredBuffer<Vertex> vertexBuffer;
+ConstantBuffer<UniformData> uniform_buffer;
+StructuredBuffer<uint32_t> draw_indices_early_buffer;
+StructuredBuffer<uint32_t> draw_indices_late_buffer;
+StructuredBuffer<DrawIndexedIndirectCommand> draw_cmd_early_buffer;
+StructuredBuffer<DrawIndexedIndirectCommand> draw_cmd_late_buffer;
+StructuredBuffer<DrawData> draw_data_buffer;
+StructuredBuffer<uint32_t> index_buffer;
+StructuredBuffer<Vertex> vertex_buffer;
 
-SamplerState nearestSampler;
-Texture2D<float> depthViewTexture;
-Texture2D<uint2> visibilityTexture;
+SamplerState nearest_sampler;
+Texture2D<float> depth_view_texture;
+Texture2D<uint2> visibility_texture;
 [[vk::image_format("r8")]]
-RWTexture2D<float> outTexture;
+RWTexture2D<float> out_texture;
 
-static const float MAX_RADIUS_SCREEN = 0.1;
-static const float RADIUS_WORLD = 0.3;
+static const float MAX_RADIUS_SCREEN = 0.1f;
+static const float RADIUS_WORLD = 0.3f;
 static const int SAMPLES_COUNT = 16;
 
-float2 VogelDiskOffset(int sampleIndex, float phi)
-{
-    const float GOLDEN_ANGLE = 2.4;
+float2 vogel_disk_offset(int sample_idx, float phi) {
+    const float GOLDEN_ANGLE = 2.4f;
 
-    const float r = sqrt(float(sampleIndex) + 0.5) / sqrt(SAMPLES_COUNT);
-    const float theta = sampleIndex * GOLDEN_ANGLE + phi;
+    const float r = sqrt(float(sample_idx) + 0.5f) / sqrt(SAMPLES_COUNT);
+    const float theta = sample_idx * GOLDEN_ANGLE + phi;
 
-    float sinTheta;
-    float cosTheta;
-    sincos(theta, sinTheta, cosTheta);
+    float sin_theta;
+    float cos_theta;
+    sincos(theta, sin_theta, cos_theta);
 
-    return float2(r * cosTheta, r * sinTheta);
+    return float2(r * cos_theta, r * sin_theta);
 }
 
-float3 CalcPosView(float2 uv)
-{
-    float3 pos = float3(uv, -1.0);
-    pos.xy = pos.xy * 2.0 - 1.0;
-    pos.y *= -1.0;
-    pos.xy *= uniformBuffer.viewToClipInv0011;
-    pos *= -depthViewTexture.SampleLevel(nearestSampler, uv, 0);
+float3 calc_pos_view(float2 uv) {
+    float3 pos = float3(uv, -1.0f);
+    pos.xy = pos.xy * 2.0f - 1.0f;
+    pos.y *= -1.0f;
+    pos.xy *= uniform_buffer.view_to_clip_inv0011;
+    pos *= -depth_view_texture.SampleLevel(nearest_sampler, uv, 0);
     return pos;
 }
 
 [numthreads(RENDERER_SSAO_WORKGROUP_SIZE_X, RENDERER_SSAO_WORKGROUP_SIZE_Y, 1)]
-void main(uint3 dtid : SV_DispatchThreadID)
-{
-    const uint2 textureSize = uint2(pushConstants.width, pushConstants.height);
+void main(uint3 dtid : SV_DispatchThreadID) {
+    const uint2 texture_size = uint2(push_constants.width, push_constants.height);
 
-    if (dtid.x >= textureSize.x || dtid.y >= textureSize.y)
-    {
+    if (dtid.x >= texture_size.x || dtid.y >= texture_size.y) {
         return;
     }
 
@@ -67,121 +63,113 @@ void main(uint3 dtid : SV_DispatchThreadID)
     // TODO: reconstructing normals from the depth buffer may be faster
     // and usable in forward pipelines:
     // https://turanszkij.wpcomstaging.com/2019/09/improved-normal-reconstruction-from-depth/
-    const uint2 visibilityData = visibilityTexture[dtid.xy * 2];
-    uint rawDrawIdx = visibilityData.y;
+    const uint2 visibility_data = visibility_texture[dtid.xy * 2];
+    uint raw_draw_idx = visibility_data.y;
 
-    const bool isCullLate = rawDrawIdx & 0x80000000;
-    rawDrawIdx &= 0x7fffffff;
+    const bool is_cull_late = raw_draw_idx & 0x80000000;
+    raw_draw_idx &= 0x7fffffff;
 
-    if (rawDrawIdx == 0)
-    {
-        outTexture[dtid.xy] = 0.0;
+    if (raw_draw_idx == 0) {
+        out_texture[dtid.xy] = 0.0f;
         return;
     }
 
-    --rawDrawIdx;
+    --raw_draw_idx;
 
-    const uint triangleIdx = visibilityData.x;
+    const uint triangle_idx = visibility_data.x;
 
-    uint drawIdx;
-    if (isCullLate)
-    {
-        drawIdx = drawIndicesLateBuffer[rawDrawIdx];
-    }
-    else
-    {
-        drawIdx = drawIndicesEarlyBuffer[rawDrawIdx];
+    uint draw_idx;
+    if (is_cull_late) {
+        draw_idx = draw_indices_late_buffer[raw_draw_idx];
+    } else {
+        draw_idx = draw_indices_early_buffer[raw_draw_idx];
     }
 
-    DrawIndexedIndirectCommand drawCmd;
-    if (isCullLate)
-    {
-        drawCmd = drawCmdLateBuffer[rawDrawIdx];
-    }
-    else
-    {
-        drawCmd = drawCmdEarlyBuffer[rawDrawIdx];
+    DrawIndexedIndirectCommand draw_cmd;
+    if (is_cull_late) {
+        draw_cmd = draw_cmd_late_buffer[raw_draw_idx];
+    } else {
+        draw_cmd = draw_cmd_early_buffer[raw_draw_idx];
     }
 
-    const DrawData drawData = drawDataBuffer[drawIdx];
+    const DrawData draw_data = draw_data_buffer[draw_idx];
 
-    const uint indexBufferIdx0 = drawCmd.firstIndex + (triangleIdx * 3 + 0);
-    const uint indexBufferIdx1 = drawCmd.firstIndex + (triangleIdx * 3 + 1);
-    const uint indexBufferIdx2 = drawCmd.firstIndex + (triangleIdx * 3 + 2);
+    const uint index_buffer_idx0 = draw_cmd.first_index + (triangle_idx * 3 + 0);
+    const uint index_buffer_idx1 = draw_cmd.first_index + (triangle_idx * 3 + 1);
+    const uint index_buffer_idx2 = draw_cmd.first_index + (triangle_idx * 3 + 2);
 
-    const uint idx0 = indexBuffer[indexBufferIdx0];
-    const uint idx1 = indexBuffer[indexBufferIdx1];
-    const uint idx2 = indexBuffer[indexBufferIdx2];
+    const uint idx0 = index_buffer[index_buffer_idx0];
+    const uint idx1 = index_buffer[index_buffer_idx1];
+    const uint idx2 = index_buffer[index_buffer_idx2];
 
-    const Vertex v0 = vertexBuffer[drawCmd.vertexOffset + idx0];
-    const Vertex v1 = vertexBuffer[drawCmd.vertexOffset + idx1];
-    const Vertex v2 = vertexBuffer[drawCmd.vertexOffset + idx2];
+    const Vertex v0 = vertex_buffer[draw_cmd.vertex_offset + idx0];
+    const Vertex v1 = vertex_buffer[draw_cmd.vertex_offset + idx1];
+    const Vertex v2 = vertex_buffer[draw_cmd.vertex_offset + idx2];
 
-    const float3 posLocal0 = float3(v0.px, v0.py, v0.pz);
-    const float3 posLocal1 = float3(v1.px, v1.py, v1.pz);
-    const float3 posLocal2 = float3(v2.px, v2.py, v2.pz);
+    const float3 pos_local0 = float3(v0.px, v0.py, v0.pz);
+    const float3 pos_local1 = float3(v1.px, v1.py, v1.pz);
+    const float3 pos_local2 = float3(v2.px, v2.py, v2.pz);
 
-    const float3 posWorld0 =
-        QuatRotate(drawData.orientation, posLocal0.xyz) * drawData.scale + drawData.position;
-    const float3 posWorld1 =
-        QuatRotate(drawData.orientation, posLocal1.xyz) * drawData.scale + drawData.position;
-    const float3 posWorld2 =
-        QuatRotate(drawData.orientation, posLocal2.xyz) * drawData.scale + drawData.position;
+    const float3 pos_world0 =
+        quat_rotate(draw_data.orientation, pos_local0.xyz) * draw_data.scale + draw_data.position;
+    const float3 pos_world1 =
+        quat_rotate(draw_data.orientation, pos_local1.xyz) * draw_data.scale + draw_data.position;
+    const float3 pos_world2 =
+        quat_rotate(draw_data.orientation, pos_local2.xyz) * draw_data.scale + draw_data.position;
 
-    const float4 posClip0 = mul(uniformBuffer.worldToClip, float4(posWorld0, 1.0));
-    const float4 posClip1 = mul(uniformBuffer.worldToClip, float4(posWorld1, 1.0));
-    const float4 posClip2 = mul(uniformBuffer.worldToClip, float4(posWorld2, 1.0));
+    const float4 pos_clip0 = mul(uniform_buffer.world_to_clip, float4(pos_world0, 1.0f));
+    const float4 pos_clip1 = mul(uniform_buffer.world_to_clip, float4(pos_world1, 1.0f));
+    const float4 pos_clip2 = mul(uniform_buffer.world_to_clip, float4(pos_world2, 1.0f));
 
-    const float2 textureSizeInv = pushConstants.textureSizeInv;
+    const float2 texture_size_inv = push_constants.texture_size_inv;
 
-    const float2 pixelUV = (dtid.xy + 0.5) * textureSizeInv;
-    float2 pixelNdc = pixelUV * 2.0 - 1.0;
-    pixelNdc.y *= -1.0;
+    const float2 pixel_uv = (dtid.xy + 0.5f) * texture_size_inv;
+    float2 pixel_ndc = pixel_uv * 2.0f - 1.0f;
+    pixel_ndc.y *= -1.0f;
 
-    const BarycentricData baryData = CalcBarycentricData(
-        posClip0,
-        posClip1,
-        posClip2,
-        pixelNdc,
-        2.0 * textureSizeInv
+    const BarycentricData bary_data = calc_barycentric_data(
+        pos_clip0,
+        pos_clip1,
+        pos_clip2,
+        pixel_ndc,
+        2.0f * texture_size_inv
     );
 
-    const float3 posView = CalcPosView(pixelUV);
+    const float3 pos_view = calc_pos_view(pixel_uv);
 
-    const float3 n0 = UnpackNormalOctahedral(UnpackRG8SnormToFloat2(v0.normal));
-    const float3 n1 = UnpackNormalOctahedral(UnpackRG8SnormToFloat2(v1.normal));
-    const float3 n2 = UnpackNormalOctahedral(UnpackRG8SnormToFloat2(v2.normal));
+    const float3 n0 = unpack_normal_octahedral(unpack_rg8snorm_to_float2(v0.normal));
+    const float3 n1 = unpack_normal_octahedral(unpack_rg8snorm_to_float2(v1.normal));
+    const float3 n2 = unpack_normal_octahedral(unpack_rg8snorm_to_float2(v2.normal));
 
-    const InterpolatedData3D interpNormal = Interpolate3D(baryData, n0, n1, n2);
+    const InterpolatedData3D interp_normal = interpolate_3d(bary_data, n0, n1, n2);
 
-    const float3 normalWorld = QuatRotate(drawData.orientation, normalize(interpNormal.c));
-    const float3 normalView = mul(uniformBuffer.worldToView, float4(normalWorld, 0.0)).xyz;
+    const float3 normal_world = quat_rotate(draw_data.orientation, normalize(interp_normal.c));
+    const float3 normal_view = mul(uniform_buffer.world_to_view, float4(normal_world, 0.0f)).xyz;
 
-    const float noisePixel = InterleavedGradientNoise(dtid.x, dtid.y);
+    const float noise_pixel = interleaved_gradient_noise(dtid.x, dtid.y);
 
-    float2 radiusScreen = RADIUS_WORLD / posView.z;
-    // To prevent radiusScreen getting too large for pixels that are close to the camera.
-    radiusScreen = min(radiusScreen, MAX_RADIUS_SCREEN);
+    float2 radius_screen = RADIUS_WORLD / pos_view.z;
+    // To prevent radius_screen getting too large for pixels that are close to the camera.
+    radius_screen = min(radius_screen, MAX_RADIUS_SCREEN);
     // Vogel disk returns samples in the [0, 1] unit disk, multiplying by aspect ratio
     // preserves this unit disk, otherwise it would be an ellipse.
-    radiusScreen.y *= uniformBuffer.aspect;
+    radius_screen.y *= uniform_buffer.aspect;
 
-    float occlusion = 0.0;
+    float occlusion = 0.0f;
 
-    for (int i = 0; i < SAMPLES_COUNT; ++i)
-    {
-        const float2 sampleOffset = VogelDiskOffset(i, 2.0 * M_PIf * noisePixel);
-        const float2 sampleUV = pixelUV + radiusScreen * sampleOffset;
-        const float3 sampleView = CalcPosView(sampleUV);
+    for (int i = 0; i < SAMPLES_COUNT; ++i) {
+        const float2 sample_offset = vogel_disk_offset(i, 2.0f * M_PIf * noise_pixel);
+        const float2 sample_uv = pixel_uv + radius_screen * sample_offset;
+        const float3 sample_view = calc_pos_view(sample_uv);
 
-        const float3 v = sampleView - posView;
+        const float3 v = sample_view - pos_view;
 
         // Tweak beta to reduce self-shadowing.
-        const float beta = 1e-3;
-        occlusion += max(0.0, dot(v, normalView) + beta * posView.z) / (dot(v, v) + 1e-5);
+        const float beta = 1e-3f;
+        occlusion += max(0.0f, dot(v, normal_view) + beta * pos_view.z) / (dot(v, v) + 1e-5f);
     }
 
-    occlusion = pow(1.0 - saturate(occlusion / SAMPLES_COUNT), 2);
+    occlusion = pow(1.0f - saturate(occlusion / SAMPLES_COUNT), 2);
 
-    outTexture[dtid.xy] = occlusion;
+    out_texture[dtid.xy] = occlusion;
 }

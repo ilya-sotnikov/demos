@@ -3,17 +3,8 @@
 #include "common.hpp"
 #include "math/types.hpp"
 
-struct Camera
-{
-    enum class MoveDirection
-    {
-        LEFT,
-        RIGHT,
-        FORWARD,
-        BACKWARD,
-        DOWN,
-        UP
-    };
+struct Camera {
+    enum class MoveDirection { LEFT, RIGHT, FORWARD, BACKWARD, DOWN, UP };
 
     void move(MoveDirection move, f32 delta_time);
     void update_vectors();

@@ -4,15 +4,12 @@
 
 #include <vector>
 
-template <typename Handle, typename Resource>
-struct Pool
-{
-    Handle create_handle(const Resource& resource)
-    {
+template<typename Handle, typename Resource>
+struct Pool {
+    Handle create_handle(const Resource& resource) {
         DEBUG_ASSERT(m_data.size() == m_generations.size());
 
-        if (m_free_list.empty())
-        {
+        if (m_free_list.empty()) {
             m_data.push_back(resource);
             m_generations.push_back(0);
             return {
@@ -32,8 +29,7 @@ struct Pool
         };
     }
 
-    void destroy_handle(Handle handle)
-    {
+    void destroy_handle(Handle handle) {
         DEBUG_ASSERT(m_data.size() == m_generations.size());
         DEBUG_ASSERT(handle.idx < m_data.size());
 
@@ -42,26 +38,22 @@ struct Pool
         ++m_generations[handle.idx];
     }
 
-    Resource* get_ptr(Handle handle)
-    {
+    Resource* get_ptr(Handle handle) {
         DEBUG_ASSERT(m_data.size() == m_generations.size());
         DEBUG_ASSERT(handle.idx < m_data.size());
 
-        if (handle.generation != m_generations[handle.idx])
-        {
+        if (handle.generation != m_generations[handle.idx]) {
             return nullptr;
         }
 
         return &m_data[handle.idx];
     }
 
-    const Resource* get_ptr(Handle handle) const
-    {
+    const Resource* get_ptr(Handle handle) const {
         DEBUG_ASSERT(m_data.size() == m_generations.size());
         DEBUG_ASSERT(handle.idx < m_data.size());
 
-        if (handle.generation != m_generations[handle.idx])
-        {
+        if (handle.generation != m_generations[handle.idx]) {
             return nullptr;
         }
 

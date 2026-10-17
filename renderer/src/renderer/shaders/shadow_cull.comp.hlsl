@@ -1,55 +1,50 @@
 #include "common.hlsli"
 #include "math.hlsli"
 
-ConstantBuffer<UniformData> uniformBuffer;
-StructuredBuffer<DrawData> drawDataBuffer;
-RWByteAddressBuffer drawCountBuffer;
-StructuredBuffer<DrawIndexedIndirectCommand> drawCmdsBuffer1;
-RWStructuredBuffer<DrawIndexedIndirectCommand> drawCmdsBuffer2;
-RWStructuredBuffer<uint32_t> drawIndicesBuffer;
+ConstantBuffer<UniformData> uniform_buffer;
+StructuredBuffer<DrawData> draw_data_buffer;
+RWByteAddressBuffer draw_count_buffer;
+StructuredBuffer<DrawIndexedIndirectCommand> draw_cmds_buffer1;
+RWStructuredBuffer<DrawIndexedIndirectCommand> draw_cmds_buffer2;
+RWStructuredBuffer<uint32_t> draw_indices_buffer;
 
 [[vk::push_constant]]
-PushConstantsShadow pushConstants;
+PushConstantsShadow push_constants;
 
 [numthreads(RENDERER_CULL_WORKGROUP_SIZE, 1, 1)]
-void main(uint3 dtid : SV_DispatchThreadID)
-{
-    const uint drawIdx = dtid.x;
+void main(uint3 dtid : SV_DispatchThreadID) {
+    const uint draw_idx = dtid.x;
 
-    if (drawIdx >= uniformBuffer.drawCount)
-    {
+    if (draw_idx >= uniform_buffer.draw_count) {
         return;
     }
 
-    const DrawData drawData = drawDataBuffer[drawIdx];
+    const DrawData draw_data = draw_data_buffer[draw_idx];
 
-    bool visible = drawData.render_pass_flags == pushConstants.renderPassFlags;
+    bool visible = draw_data.render_pass_flags == push_constants.render_pass_flags;
 
     // TODO: ortho frustum cull.
 
-    const uint subgroupVisibleIdx = WavePrefixCountBits(visible);
-    const uint subgroupVisibleCount = WaveActiveCountBits(visible);
-    uint baseVisibleIdx;
-    if (WaveIsFirstLane())
-    {
-        drawCountBuffer.InterlockedAdd(0, subgroupVisibleCount, baseVisibleIdx);
+    const uint subgroup_visible_idx = WavePrefixCountBits(visible);
+    const uint subgroup_visible_count = WaveActiveCountBits(visible);
+    uint base_visible_idx;
+    if (WaveIsFirstLane()) {
+        draw_count_buffer.InterlockedAdd(0, subgroup_visible_count, base_visible_idx);
     }
-    baseVisibleIdx = WaveReadLaneFirst(baseVisibleIdx);
+    base_visible_idx = WaveReadLaneFirst(base_visible_idx);
 
-    if (visible)
-    {
-        const uint visibleIdx = baseVisibleIdx + subgroupVisibleIdx;
-        const DrawIndexedIndirectCommand drawCmd = drawCmdsBuffer1[drawIdx];
+    if (visible) {
+        const uint visible_idx = base_visible_idx + subgroup_visible_idx;
+        const DrawIndexedIndirectCommand draw_cmd = draw_cmds_buffer1[draw_idx];
 
-        DrawIndexedIndirectCommand writeDrawCmd;
-        writeDrawCmd.indexCount = drawCmd.indexCount;
-        writeDrawCmd.instanceCount = 1;
-        writeDrawCmd.firstIndex = drawCmd.firstIndex;
-        writeDrawCmd.vertexOffset = drawCmd.vertexOffset;
-        writeDrawCmd.firstInstance = 0;
+        DrawIndexedIndirectCommand write_draw_cmd;
+        write_draw_cmd.index_count = draw_cmd.index_count;
+        write_draw_cmd.instance_count = 1;
+        write_draw_cmd.first_index = draw_cmd.first_index;
+        write_draw_cmd.vertex_offset = draw_cmd.vertex_offset;
+        write_draw_cmd.first_instance = 0;
 
-        drawCmdsBuffer2[visibleIdx] = writeDrawCmd;
-        drawIndicesBuffer[visibleIdx] = drawIdx;
+        draw_cmds_buffer2[visible_idx] = write_draw_cmd;
+        draw_indices_buffer[visible_idx] = draw_idx;
     }
 }
-

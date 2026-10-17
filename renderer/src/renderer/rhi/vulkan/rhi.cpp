@@ -9,14 +9,14 @@
 #include "utils.hpp"
 
 #if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wsign-conversion"
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wsign-conversion"
 #endif
 
 #include <spirv_cross/spirv_cross.hpp>
 
 #if defined(__clang__)
-#pragma clang diagnostic pop
+    #pragma clang diagnostic pop
 #endif
 
 #include <SDL3/SDL_vulkan.h>
@@ -25,8 +25,7 @@
 #include <vector>
 
 #define SDL_ERROR(function_name) \
-    do \
-    { \
+    do { \
         fprintf( \
             stderr, \
             "%s:%d: " function_name " failed: %s\n", \
@@ -35,43 +34,35 @@
             SDL_GetError() \
         ); \
         exit(1); \
-    } \
-    while (0)
+    } while (0)
 
 #define VK_CHECK_HANDLE(x) \
-    do \
-    { \
+    do { \
         const VkResult vulkan_result_tmp_ = x; \
-        if (vulkan_result_tmp_ != VK_SUCCESS) \
-        { \
+        if (vulkan_result_tmp_ != VK_SUCCESS) { \
             VK_CHECK_PRINT_ERROR(vulkan_result_tmp_); \
             return {.idx = rhi::INVALID_HANDLE}; \
         } \
-    } \
-    while (0)
+    } while (0)
 
-struct QueueImpl
-{
+struct QueueImpl {
     VkQueue queue;
     rhi::QueueType type;
     u32 idx;
 };
 
-struct BufferImpl
-{
+struct BufferImpl {
     VkBuffer buffer;
     void* mapped;
     VkDeviceAddress device_address;
     VmaAllocation allocation;
 };
 
-struct BufferDescriptorImpl
-{
+struct BufferDescriptorImpl {
     VkBuffer buffer;
 };
 
-struct TextureImpl
-{
+struct TextureImpl {
     VkImage image;
     VkImageView view;
     VmaAllocation allocation;
@@ -80,13 +71,11 @@ struct TextureImpl
     Vec3U32 dimensions;
 };
 
-struct TextureViewImpl
-{
+struct TextureViewImpl {
     VkImageView view;
 };
 
-struct SwapchainImpl
-{
+struct SwapchainImpl {
     VkSwapchainKHR swapchain;
     VkExtent2D extent;
     VkSurfaceFormatKHR surface_format;
@@ -95,22 +84,19 @@ struct SwapchainImpl
     u32 min_image_count;
 };
 
-struct CommandBufferImpl
-{
+struct CommandBufferImpl {
     VkCommandBuffer command_buffer;
     VkCommandPool command_pool;
 };
 
-struct ShaderImpl
-{
+struct ShaderImpl {
     VkShaderModule module;
     VkShaderStageFlagBits stage;
     u32 push_constant_size;
     Vec3U32 local_size;
 };
 
-struct PipelineImpl
-{
+struct PipelineImpl {
     VkPipeline pipeline;
     VkPipelineLayout layout;
     VkDescriptorSetLayout descriptor_set_layout;
@@ -119,39 +105,36 @@ struct PipelineImpl
     Vec3U32 local_size;
 };
 
-union DescriptorInfoImpl
-{
+union DescriptorInfoImpl {
     VkDescriptorImageInfo image;
     VkDescriptorBufferInfo buffer;
     VkAccelerationStructureKHR acceleration_structure;
 
     DescriptorInfoImpl() = default;
 
-    DescriptorInfoImpl(VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE)
-        : buffer{buffer, offset, range}
-    { }
+    DescriptorInfoImpl(
+        VkBuffer buffer,
+        VkDeviceSize offset = 0,
+        VkDeviceSize range = VK_WHOLE_SIZE
+    ):
+        buffer{buffer, offset, range} {}
 
     DescriptorInfoImpl(
         VkImageView image_view,
         VkImageLayout image_layout = VK_IMAGE_LAYOUT_GENERAL,
         VkSampler sampler = VK_NULL_HANDLE
-    )
-        : image{sampler, image_view, image_layout}
-    { }
+    ):
+        image{sampler, image_view, image_layout} {}
 
-    DescriptorInfoImpl(VkSampler sampler)
-        : image{sampler, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED}
-    { }
+    DescriptorInfoImpl(VkSampler sampler):
+        image{sampler, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED} {}
 
-    DescriptorInfoImpl(VkAccelerationStructureKHR acceleration_structure)
-        : acceleration_structure{acceleration_structure}
-    { }
+    DescriptorInfoImpl(VkAccelerationStructureKHR acceleration_structure):
+        acceleration_structure{acceleration_structure} {}
 };
 
-struct ContextImpl
-{
-    struct Frame
-    {
+struct ContextImpl {
+    struct Frame {
         VkSemaphore image_acquire_semaphore;
     } frames[rhi::FRAMES_IN_FLIGHT];
 
@@ -163,12 +146,12 @@ struct ContextImpl
     VkPhysicalDevice physical_device;
     VmaAllocator vma_allocator;
 
-    VkQueue graphics_queue;
     u32 graphics_queue_family_idx;
     std::vector<u32> graphics_queue_idxs; // TODO: Might as well count them?
-    VkQueue compute_queue;
     u32 compute_queue_family_idx;
     std::vector<u32> compute_queue_idxs;
+    u32 transfer_queue_family_idx;
+    std::vector<u32> transfer_queue_idxs;
 
     VkDescriptorSetLayout bindless_textures_descriptor_set_layout;
     VkDescriptorSet bindless_textures_descriptor_set;
@@ -195,14 +178,11 @@ struct ContextImpl
 // I don't see any situation where duplicating this stuff would be useful in practice.
 ContextImpl s_ctx;
 
-static bool extension_is_available(const char* name, SliceArg<VkExtensionProperties> extensions)
-{
+static bool extension_is_available(const char* name, SliceArg<VkExtensionProperties> extensions) {
     DEBUG_ASSERT(name);
 
-    for (int i = 0; i < extensions.count; ++i)
-    {
-        if (!strcmp(name, extensions.data[i].extensionName))
-        {
+    for (int i = 0; i < extensions.count; ++i) {
+        if (!strcmp(name, extensions.data[i].extensionName)) {
             return true;
         }
     }
@@ -213,35 +193,28 @@ static bool get_queue(
     u32& family_idx,
     u32& queue_count,
     VkPhysicalDevice device,
-    VkQueueFlagBits flags,
-    VkQueueFlagBits not_flags = static_cast<VkQueueFlagBits>(0)
-)
-{
+    VkQueueFlags flags,
+    VkQueueFlags not_flags = 0
+) {
     DEBUG_ASSERT(device);
 
     u32 queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties2(device, &queue_family_count, nullptr);
     std::vector<VkQueueFamilyProperties2> queue_families(queue_family_count);
-    for (u32 i = 0; i < queue_family_count; ++i)
-    {
+    for (u32 i = 0; i < queue_family_count; ++i) {
         queue_families[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
     }
     vkGetPhysicalDeviceQueueFamilyProperties2(device, &queue_family_count, queue_families.data());
 
-    for (u32 i = 0; i < queue_family_count; ++i)
-    {
+    for (u32 i = 0; i < queue_family_count; ++i) {
         const VkQueueFamilyProperties props = queue_families[i].queueFamilyProperties;
-        if (props.queueFlags & flags)
-        {
+        if (props.queueFlags & flags) {
             DEBUG_ASSERT(props.queueCount > 0);
             family_idx = i;
             queue_count = props.queueCount;
-            if (not_flags == 0)
-            {
+            if (not_flags == 0) {
                 return true;
-            }
-            else if (!(props.queueFlags & not_flags))
-            {
+            } else if (!(props.queueFlags & not_flags)) {
                 return true;
             }
         }
@@ -250,12 +223,9 @@ static bool get_queue(
     return false;
 }
 
-static bool find_queue_index(u32& idx, std::vector<u32>& idxs)
-{
-    for (u32 i = 0; i < idxs.size(); ++i)
-    {
-        if (idxs[i] == 0)
-        {
+static bool find_queue_index(u32& idx, std::vector<u32>& idxs) {
+    for (u32 i = 0; i < idxs.size(); ++i) {
+        if (idxs[i] == 0) {
             idxs[i] = 1;
             idx = i;
             return true;
@@ -265,15 +235,13 @@ static bool find_queue_index(u32& idx, std::vector<u32>& idxs)
     return false;
 }
 
-static VkImageAspectFlags vk_aspect_flags_from_format(VkFormat format)
-{
-    switch (format)
-    {
-    case VK_FORMAT_D32_SFLOAT:
-    case VK_FORMAT_D16_UNORM:
-        return VK_IMAGE_ASPECT_DEPTH_BIT;
-    default:
-        return VK_IMAGE_ASPECT_COLOR_BIT;
+static VkImageAspectFlags vk_aspect_flags_from_format(VkFormat format) {
+    switch (format) {
+        case VK_FORMAT_D32_SFLOAT:
+        case VK_FORMAT_D16_UNORM:
+            return VK_IMAGE_ASPECT_DEPTH_BIT;
+        default:
+            return VK_IMAGE_ASPECT_COLOR_BIT;
     }
 }
 
@@ -282,8 +250,7 @@ static bool create_shader(
     std::vector<VkDescriptorSetLayoutBinding>& descriptor_set_layout_bindings,
     VkDevice device,
     Slice<u8> bytecode
-)
-{
+) {
     DEBUG_ASSERT(device);
     DEBUG_ASSERT(bytecode.count > 0);
 
@@ -293,8 +260,7 @@ static bool create_shader(
         .pCode = reinterpret_cast<const u32*>(bytecode.data),
     };
 
-    if (vkCreateShaderModule(device, &create_info, nullptr, &shader.module) != VK_SUCCESS)
-    {
+    if (vkCreateShaderModule(device, &create_info, nullptr, &shader.module) != VK_SUCCESS) {
         fprintf(stderr, "vulkan: vkCreateShaderModule failed\n");
         return false;
     }
@@ -305,8 +271,8 @@ static bool create_shader(
         size_t(bytecode.count) / sizeof(u32)
     };
 
-    const spirv_cross::SmallVector<spirv_cross::EntryPoint> entry_points
-        = compiler.get_entry_points_and_stages();
+    const spirv_cross::SmallVector<spirv_cross::EntryPoint> entry_points =
+        compiler.get_entry_points_and_stages();
 
     // NOTE: AFAIK in dxc multiple entry points are buggy. Also, I've encountered a strange bug (?)
     // with multiple compute shader entry points in Nsight Graphics, when profiling, some samples
@@ -314,26 +280,29 @@ static bool create_shader(
     // all. Maybe PEBKAC, but for now I'll just always use 1 entry point per file.
     ASSERT(entry_points.size() == 1);
 
-    switch (entry_points[0].execution_model)
-    {
-    case spirv_cross::ExecutionModelVertex:
-        shader.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        break;
-    case spirv_cross::ExecutionModelFragment:
-        shader.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        break;
-    case spirv_cross::ExecutionModelGLCompute:
-        shader.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        break;
-    case spirv_cross::ExecutionModelMeshEXT:
-        shader.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
-        break;
-    case spirv_cross::ExecutionModelTaskEXT:
-        shader.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
-        break;
-    default:
-        fprintf(stderr, "unhandled shader execution model: %d", entry_points[0].execution_model);
-        return false;
+    switch (entry_points[0].execution_model) {
+        case spirv_cross::ExecutionModelVertex:
+            shader.stage = VK_SHADER_STAGE_VERTEX_BIT;
+            break;
+        case spirv_cross::ExecutionModelFragment:
+            shader.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            break;
+        case spirv_cross::ExecutionModelGLCompute:
+            shader.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+            break;
+        case spirv_cross::ExecutionModelMeshEXT:
+            shader.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+            break;
+        case spirv_cross::ExecutionModelTaskEXT:
+            shader.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
+            break;
+        default:
+            fprintf(
+                stderr,
+                "unhandled shader execution model: %d",
+                entry_points[0].execution_model
+            );
+            return false;
     }
 
     // TODO: would probably fail when specified by specialization constants,
@@ -346,10 +315,8 @@ static bool create_shader(
 
     spirv_cross::ShaderResources shader_resources = compiler.get_shader_resources();
 
-    for (const spirv_cross::Resource& r : shader_resources.separate_images)
-    {
-        if (compiler.get_decoration(r.id, spv::DecorationDescriptorSet) == 1)
-        {
+    for (const spirv_cross::Resource& r: shader_resources.separate_images) {
+        if (compiler.get_decoration(r.id, spv::DecorationDescriptorSet) == 1) {
             // Skip descriptor set 1 (bindless textures).
             continue;
         }
@@ -364,8 +331,7 @@ static bool create_shader(
         descriptor_set_layout_bindings.push_back(binding);
     }
 
-    for (const spirv_cross::Resource& r : shader_resources.separate_samplers)
-    {
+    for (const spirv_cross::Resource& r: shader_resources.separate_samplers) {
         const VkDescriptorSetLayoutBinding binding = {
             .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
             .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
@@ -376,8 +342,7 @@ static bool create_shader(
         descriptor_set_layout_bindings.push_back(binding);
     }
 
-    for (const spirv_cross::Resource& r : shader_resources.storage_images)
-    {
+    for (const spirv_cross::Resource& r: shader_resources.storage_images) {
         const VkDescriptorSetLayoutBinding binding = {
             .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
@@ -388,8 +353,7 @@ static bool create_shader(
         descriptor_set_layout_bindings.push_back(binding);
     }
 
-    for (const spirv_cross::Resource& r : shader_resources.sampled_images)
-    {
+    for (const spirv_cross::Resource& r: shader_resources.sampled_images) {
         const VkDescriptorSetLayoutBinding binding = {
             .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -400,8 +364,7 @@ static bool create_shader(
         descriptor_set_layout_bindings.push_back(binding);
     }
 
-    for (const spirv_cross::Resource& r : shader_resources.uniform_buffers)
-    {
+    for (const spirv_cross::Resource& r: shader_resources.uniform_buffers) {
         const VkDescriptorSetLayoutBinding binding = {
             .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -412,8 +375,7 @@ static bool create_shader(
         descriptor_set_layout_bindings.push_back(binding);
     }
 
-    for (const spirv_cross::Resource& r : shader_resources.storage_buffers)
-    {
+    for (const spirv_cross::Resource& r: shader_resources.storage_buffers) {
         const VkDescriptorSetLayoutBinding binding = {
             .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -424,8 +386,7 @@ static bool create_shader(
         descriptor_set_layout_bindings.push_back(binding);
     }
 
-    for (const spirv_cross::Resource& r : shader_resources.acceleration_structures)
-    {
+    for (const spirv_cross::Resource& r: shader_resources.acceleration_structures) {
         const VkDescriptorSetLayoutBinding binding = {
             .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
             .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
@@ -436,16 +397,14 @@ static bool create_shader(
         descriptor_set_layout_bindings.push_back(binding);
     }
 
-    if (!shader_resources.push_constant_buffers.empty())
-    {
+    if (!shader_resources.push_constant_buffers.empty()) {
         ASSERT(shader_resources.push_constant_buffers.size() == 1);
 
-        const spirv_cross::SPIRType type
-            = compiler.get_type(shader_resources.push_constant_buffers[0].base_type_id);
+        const spirv_cross::SPIRType type =
+            compiler.get_type(shader_resources.push_constant_buffers[0].base_type_id);
         const size_t size = compiler.get_declared_struct_size(type);
 
-        if (size > size_t(rhi::PUSH_CONSTANTS_MAX_SIZE_BYTES))
-        {
+        if (size > size_t(rhi::PUSH_CONSTANTS_MAX_SIZE_BYTES)) {
             fprintf(
                 stderr,
                 "vulkan: push constant size %zu > %d\n",
@@ -461,8 +420,7 @@ static bool create_shader(
     return true;
 }
 
-static VkPipelineBindPoint get_pipeline_bind_point(const PipelineImpl& pipeline)
-{
+static VkPipelineBindPoint get_pipeline_bind_point(const PipelineImpl& pipeline) {
     return (pipeline.local_size.x > 0) && (pipeline.local_size.y > 0) && (pipeline.local_size.z > 0)
         ? VK_PIPELINE_BIND_POINT_COMPUTE
         : VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -473,8 +431,7 @@ static void debug_name_object(
     VkObjectType object_type,
     u64 object_handle,
     const char* object_name
-)
-{
+) {
     DEBUG_ASSERT(device);
     DEBUG_ASSERT(object_handle);
     DEBUG_ASSERT(object_name);
@@ -494,8 +451,7 @@ static void debug_name_object(
 #endif
 }
 
-void rhi::create(SDL_Window* window)
-{
+void rhi::create(SDL_Window* window) {
     DEBUG_ASSERT(window);
 
     s_ctx.scratch_arena.init(16'000'000);
@@ -506,8 +462,7 @@ void rhi::create(SDL_Window* window)
     {
         u32 vulkan_api_version = 0;
         VK_CHECK(vkEnumerateInstanceVersion(&vulkan_api_version));
-        if (vulkan_api_version < VK_API_VERSION_1_4)
-        {
+        if (vulkan_api_version < VK_API_VERSION_1_4) {
             fprintf(stderr, "vulkan: API version 1.4 is required\n");
             ASSERT(0); // TODO: ASSERT_MSG.
         }
@@ -525,8 +480,7 @@ void rhi::create(SDL_Window* window)
 
         // Find the required KHR surface extensions.
         const char* const* const sdl_exts = SDL_Vulkan_GetInstanceExtensions(&sdl_ext_count);
-        if (!sdl_exts)
-        {
+        if (!sdl_exts) {
             SDL_ERROR("SDL_Vulkan_GetInstanceExtensions");
         }
 
@@ -542,12 +496,10 @@ void rhi::create(SDL_Window* window)
             vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, available_exts.data())
         );
 
-        for (const char* ext : required_extensions)
-        {
-            const bool result
-                = extension_is_available(ext, {available_exts.data(), int(available_exts.size())});
-            if (!result)
-            {
+        for (const char* ext: required_extensions) {
+            const bool result =
+                extension_is_available(ext, {available_exts.data(), int(available_exts.size())});
+            if (!result) {
                 fprintf(stderr, "required vulkan extension %s is unavailable\n", ext);
             }
         }
@@ -565,8 +517,7 @@ void rhi::create(SDL_Window* window)
     }
 
     // Surface.
-    if (!SDL_Vulkan_CreateSurface(window, s_ctx.instance, nullptr, &s_ctx.surface))
-    {
+    if (!SDL_Vulkan_CreateSurface(window, s_ctx.instance, nullptr, &s_ctx.surface)) {
         SDL_ERROR("SDL_Vulkan_CreateSurface ");
     }
 
@@ -586,8 +537,7 @@ void rhi::create(SDL_Window* window)
         ));
 
         int physical_device_index = -1;
-        for (u32 i = 0; i < physical_device_count; ++i)
-        {
+        for (u32 i = 0; i < physical_device_count; ++i) {
             const VkPhysicalDevice physical_device = physical_devices[i];
 
             VkPhysicalDeviceSubgroupProperties subgroup_properties = {
@@ -599,8 +549,8 @@ void rhi::create(SDL_Window* window)
                 .pNext = &subgroup_properties,
             };
             vkGetPhysicalDeviceProperties2(physical_device, &physical_device_properties);
-            const bool supports_vulkan13
-                = physical_device_properties.properties.apiVersion >= VK_API_VERSION_1_3;
+            const bool supports_vulkan13 =
+                physical_device_properties.properties.apiVersion >= VK_API_VERSION_1_3;
             bool supports_subgroup = true;
             {
                 const VkSubgroupFeatureFlags flag = subgroup_properties.supportedOperations;
@@ -618,8 +568,7 @@ void rhi::create(SDL_Window* window)
             std::vector<VkQueueFamilyProperties2> queue_family_properties(
                 queue_family_property_count
             );
-            for (u32 j = 0; j < queue_family_property_count; ++j)
-            {
+            for (u32 j = 0; j < queue_family_property_count; ++j) {
                 queue_family_properties[j].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
             }
             vkGetPhysicalDeviceQueueFamilyProperties2(
@@ -628,14 +577,13 @@ void rhi::create(SDL_Window* window)
                 queue_family_properties.data()
             );
             bool supports_graphics_and_presentation = false;
-            bool supports_async_compute = false;
-            for (u32 j = 0; j < queue_family_property_count; ++j)
-            {
-                const VkQueueFlags flags
-                    = queue_family_properties[j].queueFamilyProperties.queueFlags;
+            bool supports_compute_queue = false;
+            bool supports_transfer_queue = false;
+            for (u32 j = 0; j < queue_family_property_count; ++j) {
+                const VkQueueFlags flags =
+                    queue_family_properties[j].queueFamilyProperties.queueFlags;
 
-                if (flags & VK_QUEUE_GRAPHICS_BIT)
-                {
+                if (flags & VK_QUEUE_GRAPHICS_BIT) {
                     VkBool32 surface_supported = VK_FALSE;
                     VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(
                         physical_device,
@@ -643,14 +591,13 @@ void rhi::create(SDL_Window* window)
                         s_ctx.surface,
                         &surface_supported
                     ));
-                    if (surface_supported == VK_TRUE)
-                    {
+                    if (surface_supported == VK_TRUE) {
                         supports_graphics_and_presentation = true;
                     }
-                }
-                else if (flags & VK_QUEUE_COMPUTE_BIT)
-                {
-                    supports_async_compute = true;
+                } else if (flags & VK_QUEUE_COMPUTE_BIT) {
+                    supports_compute_queue = true;
+                } else if (flags & VK_QUEUE_TRANSFER_BIT) {
+                    supports_transfer_queue = true;
                 }
             }
 
@@ -672,14 +619,12 @@ void rhi::create(SDL_Window* window)
                 extension_properties.data()
             ));
             bool supports_required_extensions = true;
-            for (size_t j = 0; j < ARRAY_SIZE(required_device_extensions); ++j)
-            {
+            for (size_t j = 0; j < ARRAY_SIZE(required_device_extensions); ++j) {
                 const bool result = extension_is_available(
                     required_device_extensions[j],
                     {extension_properties.data(), int(extension_properties.size())}
                 );
-                if (!result)
-                {
+                if (!result) {
                     supports_required_extensions = false;
                     break;
                 }
@@ -714,8 +659,8 @@ void rhi::create(SDL_Window* window)
 
             // TODO: maybe check out profiles, this is getting ridiculous.
             VkBool32 supports_required_features = true;
-            supports_required_features
-                &= physical_device_features.features.vertexPipelineStoresAndAtomics;
+            supports_required_features &=
+                physical_device_features.features.vertexPipelineStoresAndAtomics;
             supports_required_features &= vulkan_features14.pushDescriptor;
             supports_required_features &= vulkan_features13.dynamicRendering;
             supports_required_features &= vulkan_features13.synchronization2;
@@ -724,15 +669,15 @@ void rhi::create(SDL_Window* window)
             supports_required_features &= vulkan_features12.shaderInt8;
             supports_required_features &= vulkan_features12.storageBuffer8BitAccess;
             supports_required_features &= vulkan_features12.uniformAndStorageBuffer8BitAccess;
-            supports_required_features
-                &= vulkan_features12.descriptorBindingSampledImageUpdateAfterBind;
+            supports_required_features &=
+                vulkan_features12.descriptorBindingSampledImageUpdateAfterBind;
             supports_required_features &= vulkan_features12.descriptorBindingPartiallyBound;
-            supports_required_features
-                &= vulkan_features12.descriptorBindingVariableDescriptorCount;
-            supports_required_features
-                &= vulkan_features12.descriptorBindingStorageImageUpdateAfterBind;
-            supports_required_features
-                &= vulkan_features12.shaderSampledImageArrayNonUniformIndexing;
+            supports_required_features &=
+                vulkan_features12.descriptorBindingVariableDescriptorCount;
+            supports_required_features &=
+                vulkan_features12.descriptorBindingStorageImageUpdateAfterBind;
+            supports_required_features &=
+                vulkan_features12.shaderSampledImageArrayNonUniformIndexing;
             supports_required_features &= vulkan_features12.runtimeDescriptorArray;
             supports_required_features &= vulkan_features12.drawIndirectCount;
             supports_required_features &= vulkan_features12.shaderFloat16;
@@ -743,8 +688,8 @@ void rhi::create(SDL_Window* window)
             supports_required_features &= vulkan_features11.storageBuffer16BitAccess;
             supports_required_features &= vulkan_features11.uniformAndStorageBuffer16BitAccess;
             supports_required_features &= physical_device_features.features.multiDrawIndirect;
-            supports_required_features
-                &= physical_device_features.features.fragmentStoresAndAtomics;
+            supports_required_features &=
+                physical_device_features.features.fragmentStoresAndAtomics;
             supports_required_features &= physical_device_features.features.samplerAnisotropy;
             supports_required_features &= physical_device_features.features.sampleRateShading;
             supports_required_features &= physical_device_features.features.textureCompressionBC;
@@ -756,8 +701,7 @@ void rhi::create(SDL_Window* window)
             // https://advances.realtimerendering.com/s2024/#hable
             supports_required_features &= physical_device_features.features.geometryShader;
 
-            if (!unified_image_layout_features.unifiedImageLayouts)
-            {
+            if (!unified_image_layout_features.unifiedImageLayouts) {
                 fprintf(
                     stderr,
                     "vulkan: %s extension is not supported, performance may be suboptimal\n",
@@ -768,19 +712,18 @@ void rhi::create(SDL_Window* window)
             bool device_ok = true;
             device_ok &= supports_vulkan13;
             device_ok &= supports_graphics_and_presentation;
-            device_ok &= supports_async_compute;
+            device_ok &= supports_compute_queue;
+            device_ok &= supports_transfer_queue;
             device_ok &= supports_required_extensions;
             device_ok &= bool(supports_required_features);
             device_ok &= supports_subgroup;
-            if (device_ok)
-            {
+            if (device_ok) {
                 physical_device_index = int(i);
                 break;
             }
         }
 
-        if (physical_device_index < 0)
-        {
+        if (physical_device_index < 0) {
             fprintf(stderr, "no suitable physical device found\n");
         }
 
@@ -798,8 +741,8 @@ void rhi::create(SDL_Window* window)
         );
         printf("GPU: %s\n", s_ctx.device_properties.name);
 
-        s_ctx.device_properties.min_uniform_buffer_offset_alignment
-            = properties.properties.limits.minUniformBufferOffsetAlignment;
+        s_ctx.device_properties.min_uniform_buffer_offset_alignment =
+            properties.properties.limits.minUniformBufferOffsetAlignment;
     }
 
     // Logical device, queue.
@@ -825,6 +768,17 @@ void rhi::create(SDL_Window* window)
         );
         ASSERT(result);
         s_ctx.compute_queue_idxs.resize(compute_queue_count);
+
+        u32 transfer_queue_count = 0;
+        result = get_queue(
+            s_ctx.transfer_queue_family_idx,
+            transfer_queue_count,
+            s_ctx.physical_device,
+            VK_QUEUE_TRANSFER_BIT,
+            VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT
+        );
+        ASSERT(result);
+        s_ctx.transfer_queue_idxs.resize(transfer_queue_count);
 
         // NOTE: did not find any info if I should enable it or just checking it's availability
         // should be enough (which is probably the case), but did it anyway.
@@ -893,8 +847,15 @@ void rhi::create(SDL_Window* window)
 
         std::vector<f32> queue_priorities;
         queue_priorities.resize(
-            Max(s_ctx.graphics_queue_idxs.size(), s_ctx.compute_queue_idxs.size())
+            math::max(
+                s_ctx.graphics_queue_idxs.size(),
+                s_ctx.compute_queue_idxs.size(),
+                s_ctx.transfer_queue_idxs.size()
+            )
         );
+        for (f32& p: queue_priorities) {
+            p = 1.0f;
+        }
 
         const VkDeviceQueueCreateInfo device_queue_infos[] = {
             {
@@ -907,6 +868,12 @@ void rhi::create(SDL_Window* window)
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                 .queueFamilyIndex = s_ctx.compute_queue_family_idx,
                 .queueCount = u32(s_ctx.compute_queue_idxs.size()),
+                .pQueuePriorities = queue_priorities.data(),
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .queueFamilyIndex = s_ctx.transfer_queue_family_idx,
+                .queueCount = u32(s_ctx.transfer_queue_idxs.size()),
                 .pQueuePriorities = queue_priorities.data(),
             },
         };
@@ -948,8 +915,7 @@ void rhi::create(SDL_Window* window)
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
 
-        for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
-        {
+        for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i) {
             VK_CHECK(vkCreateSemaphore(
                 s_ctx.device,
                 &semaphore_info,
@@ -974,8 +940,8 @@ void rhi::create(SDL_Window* window)
             .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT,
         };
 
-        const VkDescriptorBindingFlags binding_flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT
-            | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+        const VkDescriptorBindingFlags binding_flags =
+            VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
         const VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_info = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
@@ -1037,12 +1003,10 @@ void rhi::create(SDL_Window* window)
     }
 }
 
-void rhi::destroy()
-{
+void rhi::destroy() {
     rhi::device_wait_idle();
 
-    for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
-    {
+    for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i) {
         vkDestroySemaphore(s_ctx.device, s_ctx.frames[i].image_acquire_semaphore, nullptr);
     }
     vkDestroyDescriptorSetLayout(
@@ -1059,13 +1023,11 @@ void rhi::destroy()
     volkFinalize();
 }
 
-const rhi::DeviceProperties& rhi::get_device_properties()
-{
+const rhi::DeviceProperties& rhi::get_device_properties() {
     return s_ctx.device_properties;
 }
 
-rhi::Buffer rhi::create_buffer(const BufferDesc&& desc)
-{
+rhi::Buffer rhi::create_buffer(const BufferDesc&& desc) {
     DEBUG_ASSERT(desc.size > 0);
 
     BufferImpl buffer{};
@@ -1076,8 +1038,11 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc)
             | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
             | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
 
-    const u32 queue_family_indices[]
-        = {s_ctx.graphics_queue_family_idx, s_ctx.compute_queue_family_idx};
+    const u32 queue_family_indices[] = {
+        s_ctx.graphics_queue_family_idx,
+        s_ctx.compute_queue_family_idx,
+        s_ctx.transfer_queue_family_idx,
+    };
 
     const VkBufferCreateInfo buffer_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -1092,8 +1057,7 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc)
         .requiredFlags = memory_type_to_vk(desc.type),
     };
 
-    if (desc.min_alignment > 0)
-    {
+    if (desc.min_alignment > 0) {
         VK_CHECK(vmaCreateBufferWithAlignment(
             s_ctx.vma_allocator,
             &buffer_info,
@@ -1103,9 +1067,7 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc)
             &buffer.allocation,
             nullptr
         ));
-    }
-    else
-    {
+    } else {
         VK_CHECK(vmaCreateBuffer(
             s_ctx.vma_allocator,
             &buffer_info,
@@ -1116,8 +1078,7 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc)
         ));
     }
 
-    if (allocation_info.requiredFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-    {
+    if (allocation_info.requiredFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
         VK_CHECK(vmaMapMemory(s_ctx.vma_allocator, buffer.allocation, &buffer.mapped));
     }
 
@@ -1127,8 +1088,7 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc)
     };
     buffer.device_address = vkGetBufferDeviceAddress(s_ctx.device, &address_info);
 
-    if (desc.debug_name)
-    {
+    if (desc.debug_name) {
         debug_name_object(
             s_ctx.device,
             VK_OBJECT_TYPE_BUFFER,
@@ -1140,44 +1100,37 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc)
     return s_ctx.buffers.create_handle(buffer);
 }
 
-void* rhi::get_buffer_host_ptr(Buffer handle)
-{
+void* rhi::get_buffer_host_ptr(Buffer handle) {
     DEBUG_ASSERT(handle);
 
     return s_ctx.buffers.get_ptr(handle)->mapped;
 }
 
-u64 rhi::get_buffer_device_ptr(Buffer handle)
-{
+u64 rhi::get_buffer_device_ptr(Buffer handle) {
     DEBUG_ASSERT(handle);
 
     return static_cast<u64>(s_ctx.buffers.get_ptr(handle)->device_address);
 }
 
-void rhi::unmap_buffer(Buffer handle)
-{
+void rhi::unmap_buffer(Buffer handle) {
     DEBUG_ASSERT(handle); // TODO: Remove these kind of asserts.
 
     BufferImpl* const buffer = s_ctx.buffers.get_ptr(handle);
 
-    if (buffer->mapped)
-    {
+    if (buffer->mapped) {
         vmaUnmapMemory(s_ctx.vma_allocator, buffer->allocation);
         buffer->mapped = nullptr;
     }
 }
 
-void rhi::destroy_buffer(Buffer handle)
-{
-    if (!handle)
-    {
+void rhi::destroy_buffer(Buffer handle) {
+    if (!handle) {
         return;
     }
 
     BufferImpl* const buffer = s_ctx.buffers.get_ptr(handle);
 
-    if (buffer->mapped)
-    {
+    if (buffer->mapped) {
         vmaUnmapMemory(s_ctx.vma_allocator, buffer->allocation);
         buffer->mapped = nullptr;
     }
@@ -1188,8 +1141,7 @@ void rhi::destroy_buffer(Buffer handle)
     s_ctx.buffers.destroy_handle(handle);
 }
 
-rhi::Texture rhi::create_texture(const TextureDesc&& desc)
-{
+rhi::Texture rhi::create_texture(const TextureDesc&& desc) {
     DEBUG_ASSERT(desc.dimensions.x > 0);
     DEBUG_ASSERT(desc.dimensions.y > 0);
     DEBUG_ASSERT(desc.dimensions.z > 0);
@@ -1206,8 +1158,11 @@ rhi::Texture rhi::create_texture(const TextureDesc&& desc)
 
     // NOTE: won't check format availability since vkCreateImage should fail in this case.
 
-    const u32 queue_family_indices[]
-        = {s_ctx.graphics_queue_family_idx, s_ctx.compute_queue_family_idx};
+    const u32 queue_family_indices[] = {
+        s_ctx.graphics_queue_family_idx,
+        s_ctx.compute_queue_family_idx,
+        s_ctx.transfer_queue_family_idx,
+    };
 
     const VkImageCreateInfo image_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -1256,8 +1211,7 @@ rhi::Texture rhi::create_texture(const TextureDesc&& desc)
     };
     VK_CHECK(vkCreateImageView(s_ctx.device, &view_info, nullptr, &texture.view));
 
-    if (desc.debug_name)
-    {
+    if (desc.debug_name) {
         debug_name_object(
             s_ctx.device,
             VK_OBJECT_TYPE_IMAGE,
@@ -1279,10 +1233,8 @@ rhi::Texture rhi::create_texture(const TextureDesc&& desc)
     return s_ctx.textures.create_handle(texture);
 }
 
-void rhi::destroy_texture(rhi::Texture handle)
-{
-    if (!handle)
-    {
+void rhi::destroy_texture(rhi::Texture handle) {
+    if (!handle) {
         return;
     }
 
@@ -1297,8 +1249,7 @@ void rhi::destroy_texture(rhi::Texture handle)
     s_ctx.textures.destroy_handle(handle);
 }
 
-rhi::TextureDescriptor rhi::create_texture_descriptor(const TextureDescriptorDesc&& desc)
-{
+rhi::TextureDescriptor rhi::create_texture_descriptor(const TextureDescriptorDesc&& desc) {
     DEBUG_ASSERT(desc.texture);
 
     const TextureImpl* const texture = s_ctx.textures.get_ptr(desc.texture);
@@ -1325,10 +1276,8 @@ rhi::TextureDescriptor rhi::create_texture_descriptor(const TextureDescriptorDes
     return s_ctx.texture_descriptors.create_handle(view);
 }
 
-void rhi::destroy_texture_descriptor(rhi::TextureDescriptor handle)
-{
-    if (!handle)
-    {
+void rhi::destroy_texture_descriptor(rhi::TextureDescriptor handle) {
+    if (!handle) {
         return;
     }
 
@@ -1339,18 +1288,15 @@ void rhi::destroy_texture_descriptor(rhi::TextureDescriptor handle)
     s_ctx.texture_descriptors.destroy_handle(handle);
 }
 
-rhi::Format rhi::get_texture_format(Texture handle)
-{
+rhi::Format rhi::get_texture_format(Texture handle) {
     return s_ctx.textures.get_ptr(handle)->format;
 }
 
-Vec3U32 rhi::get_texture_dimensions(Texture handle)
-{
+Vec3U32 rhi::get_texture_dimensions(Texture handle) {
     return s_ctx.textures.get_ptr(handle)->dimensions;
 }
 
-void rhi::update_texture_descriptor_set(rhi::Texture handle, u32 dst_array_element)
-{
+void rhi::update_texture_descriptor_set(rhi::Texture handle, u32 dst_array_element) {
     DEBUG_ASSERT(handle);
 
     const VkDescriptorImageInfo image_info = {
@@ -1371,8 +1317,7 @@ void rhi::update_texture_descriptor_set(rhi::Texture handle, u32 dst_array_eleme
     vkUpdateDescriptorSets(s_ctx.device, 1, &write_set, 0, nullptr);
 }
 
-rhi::Sampler rhi::create_sampler(const rhi::SamplerDesc&& desc)
-{
+rhi::Sampler rhi::create_sampler(const rhi::SamplerDesc&& desc) {
     const VkSamplerReductionModeCreateInfo reductionModeInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO,
         .reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN,
@@ -1404,10 +1349,8 @@ rhi::Sampler rhi::create_sampler(const rhi::SamplerDesc&& desc)
     return s_ctx.samplers.create_handle(sampler);
 }
 
-void rhi::destroy_sampler(rhi::Sampler handle)
-{
-    if (!handle)
-    {
+void rhi::destroy_sampler(rhi::Sampler handle) {
+    if (!handle) {
         return;
     }
 
@@ -1416,8 +1359,7 @@ void rhi::destroy_sampler(rhi::Sampler handle)
     s_ctx.samplers.destroy_handle(handle);
 }
 
-rhi::Semaphore rhi::create_semaphore(u64 initial_value)
-{
+rhi::Semaphore rhi::create_semaphore(u64 initial_value) {
     const VkSemaphoreTypeCreateInfo timelineSemaphoreTypeInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
         .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
@@ -1435,10 +1377,8 @@ rhi::Semaphore rhi::create_semaphore(u64 initial_value)
     return s_ctx.semaphores.create_handle(semaphore);
 }
 
-void rhi::destroy_semaphore(rhi::Semaphore handle)
-{
-    if (!handle)
-    {
+void rhi::destroy_semaphore(rhi::Semaphore handle) {
+    if (!handle) {
         return;
     }
 
@@ -1447,8 +1387,7 @@ void rhi::destroy_semaphore(rhi::Semaphore handle)
     s_ctx.semaphores.destroy_handle(handle);
 }
 
-u64 rhi::get_semaphore_value(rhi::Semaphore handle)
-{
+u64 rhi::get_semaphore_value(rhi::Semaphore handle) {
     DEBUG_ASSERT(handle);
 
     u64 value = 0;
@@ -1456,8 +1395,7 @@ u64 rhi::get_semaphore_value(rhi::Semaphore handle)
     return value;
 }
 
-void rhi::wait_semaphore(rhi::Semaphore handle, u64 value, u64 timeout)
-{
+void rhi::wait_semaphore(rhi::Semaphore handle, u64 value, u64 timeout) {
     DEBUG_ASSERT(handle);
 
     const VkSemaphoreWaitInfo wait_info = {
@@ -1470,26 +1408,27 @@ void rhi::wait_semaphore(rhi::Semaphore handle, u64 value, u64 timeout)
     VK_CHECK(vkWaitSemaphores(s_ctx.device, &wait_info, timeout));
 }
 
-rhi::CommandPool rhi::create_command_pool(const CommandPoolDesc&& desc)
-{
+rhi::CommandPool rhi::create_command_pool(const CommandPoolDesc&& desc) {
     const QueueImpl& queue = *s_ctx.queues.get_ptr(desc.queue);
 
     u32 family_idx = UINT32_MAX;
-    switch (queue.type)
-    {
-    case rhi::QUEUE_TYPE_GRAPHICS:
-        family_idx = s_ctx.graphics_queue_family_idx;
-        break;
-    case rhi::QUEUE_TYPE_COMPUTE:
-        family_idx = s_ctx.compute_queue_family_idx;
-        break;
+    switch (queue.type) {
+        case rhi::QUEUE_TYPE_GRAPHICS:
+            family_idx = s_ctx.graphics_queue_family_idx;
+            break;
+        case rhi::QUEUE_TYPE_COMPUTE:
+            family_idx = s_ctx.compute_queue_family_idx;
+            break;
+        case rhi::QUEUE_TYPE_TRANSFER:
+            family_idx = s_ctx.transfer_queue_family_idx;
+            break;
     }
     ASSERT(family_idx != UINT32_MAX);
 
     const VkCommandPoolCreateInfo cmd_pool_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags
-        = desc.transient ? VK_COMMAND_POOL_CREATE_TRANSIENT_BIT : VkCommandPoolCreateFlags(0),
+        .flags =
+            desc.transient ? VK_COMMAND_POOL_CREATE_TRANSIENT_BIT : VkCommandPoolCreateFlags{0},
         .queueFamilyIndex = family_idx,
     };
 
@@ -1499,22 +1438,18 @@ rhi::CommandPool rhi::create_command_pool(const CommandPoolDesc&& desc)
     return s_ctx.command_pools.create_handle(pool);
 }
 
-void rhi::destroy_command_pool(CommandPool handle)
-{
-    if (handle)
-    {
+void rhi::destroy_command_pool(CommandPool handle) {
+    if (handle) {
         vkDestroyCommandPool(s_ctx.device, *s_ctx.command_pools.get_ptr(handle), nullptr);
         s_ctx.command_pools.destroy_handle(handle);
     }
 }
 
-void rhi::reset_command_pool(CommandPool handle)
-{
+void rhi::reset_command_pool(CommandPool handle) {
     VK_CHECK(vkResetCommandPool(s_ctx.device, *s_ctx.command_pools.get_ptr(handle), 0));
 }
 
-rhi::CommandBuffer rhi::create_command_buffer(const CommandBufferDesc&& desc)
-{
+rhi::CommandBuffer rhi::create_command_buffer(const CommandBufferDesc&& desc) {
     const VkCommandPool pool = *s_ctx.command_pools.get_ptr(desc.command_pool);
 
     const VkCommandBufferAllocateInfo cmd_buffer_allocate_info = {
@@ -1529,8 +1464,7 @@ rhi::CommandBuffer rhi::create_command_buffer(const CommandBufferDesc&& desc)
 
     cb.command_pool = pool;
 
-    if (desc.debug_name)
-    {
+    if (desc.debug_name) {
         debug_name_object(
             s_ctx.device,
             VK_OBJECT_TYPE_COMMAND_BUFFER,
@@ -1542,18 +1476,15 @@ rhi::CommandBuffer rhi::create_command_buffer(const CommandBufferDesc&& desc)
     return s_ctx.command_buffers.create_handle(cb);
 }
 
-void rhi::destroy_command_buffer(rhi::CommandBuffer handle)
-{
-    if (handle)
-    {
+void rhi::destroy_command_buffer(rhi::CommandBuffer handle) {
+    if (handle) {
         const CommandBufferImpl* const cb = s_ctx.command_buffers.get_ptr(handle);
         vkFreeCommandBuffers(s_ctx.device, cb->command_pool, 1, &cb->command_buffer);
         s_ctx.command_buffers.destroy_handle(handle);
     }
 }
 
-void rhi::begin_command_buffer(rhi::CommandBuffer handle)
-{
+void rhi::begin_command_buffer(rhi::CommandBuffer handle) {
     DEBUG_ASSERT(handle);
 
     const VkCommandBufferBeginInfo begin_info = {
@@ -1565,17 +1496,14 @@ void rhi::begin_command_buffer(rhi::CommandBuffer handle)
     );
 }
 
-void rhi::end_command_buffer(rhi::CommandBuffer handle)
-{
+void rhi::end_command_buffer(rhi::CommandBuffer handle) {
     DEBUG_ASSERT(handle);
 
     VK_CHECK(vkEndCommandBuffer(s_ctx.command_buffers.get_ptr(handle)->command_buffer));
 }
 
-rhi::Queue rhi::create_queue(const QueueDesc&& desc)
-{
-    if (desc.type == rhi::QUEUE_TYPE_GRAPHICS)
-    {
+rhi::Queue rhi::create_queue(const QueueDesc&& desc) {
+    if (desc.type == rhi::QUEUE_TYPE_GRAPHICS) {
         QueueImpl queue = {.type = rhi::QUEUE_TYPE_GRAPHICS};
 
         const bool found = find_queue_index(queue.idx, s_ctx.graphics_queue_idxs);
@@ -1591,9 +1519,7 @@ rhi::Queue rhi::create_queue(const QueueDesc&& desc)
         );
 
         return s_ctx.queues.create_handle(queue);
-    }
-    else if (desc.type == rhi::QUEUE_TYPE_COMPUTE)
-    {
+    } else if (desc.type == rhi::QUEUE_TYPE_COMPUTE) {
         QueueImpl queue = {.type = rhi::QUEUE_TYPE_COMPUTE};
 
         const bool found = find_queue_index(queue.idx, s_ctx.compute_queue_idxs);
@@ -1609,55 +1535,62 @@ rhi::Queue rhi::create_queue(const QueueDesc&& desc)
         );
 
         return s_ctx.queues.create_handle(queue);
-    }
-    else
-    {
+    } else if (desc.type == rhi::QUEUE_TYPE_TRANSFER) {
+        QueueImpl queue = {.type = rhi::QUEUE_TYPE_TRANSFER};
+
+        const bool found = find_queue_index(queue.idx, s_ctx.transfer_queue_idxs);
+        ASSERT(found);
+
+        vkGetDeviceQueue(s_ctx.device, s_ctx.transfer_queue_family_idx, queue.idx, &queue.queue);
+
+        debug_name_object(
+            s_ctx.device,
+            VK_OBJECT_TYPE_QUEUE,
+            reinterpret_cast<u64>(queue.queue),
+            desc.debug_name
+        );
+
+        return s_ctx.queues.create_handle(queue);
+    } else {
         UNREACHABLE();
     }
 }
 
-void rhi::destroy_queue(Queue handle)
-{
-    if (handle)
-    {
+void rhi::destroy_queue(Queue handle) {
+    if (handle) {
         const QueueImpl& queue = *s_ctx.queues.get_ptr(handle);
 
-        if (queue.type == rhi::QUEUE_TYPE_GRAPHICS)
-        {
+        if (queue.type == rhi::QUEUE_TYPE_GRAPHICS) {
             s_ctx.graphics_queue_idxs[queue.idx] = 0;
             s_ctx.queues.destroy_handle(handle);
-        }
-        else if (queue.type == rhi::QUEUE_TYPE_COMPUTE)
-        {
+        } else if (queue.type == rhi::QUEUE_TYPE_COMPUTE) {
             s_ctx.compute_queue_idxs[queue.idx] = 0;
             s_ctx.queues.destroy_handle(handle);
-        }
-        else
-        {
+        } else if (queue.type == rhi::QUEUE_TYPE_TRANSFER) {
+            s_ctx.transfer_queue_idxs[queue.idx] = 0;
+            s_ctx.queues.destroy_handle(handle);
+        } else {
             UNREACHABLE();
         }
     }
 }
 
-void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
-{
+void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc) {
     DEBUG_ASSERT(desc.count > 0);
 
     Arena scratch_arena = s_ctx.scratch_arena;
 
     VkSubmitInfo2* const submit_infos = scratch_arena.alloc_or_die<VkSubmitInfo2>(desc.count);
 
-    for (int i = 0; i < desc.count; ++i)
-    {
+    for (int i = 0; i < desc.count; ++i) {
         const CommandBufferImpl* const cb = s_ctx.command_buffers.get_ptr(desc[i].cb);
 
         // +1 for optional image acquire binary semaphore.
-        VkSemaphoreSubmitInfo* const sem_wait_submit_infos
-            = scratch_arena.alloc_or_die<VkSemaphoreSubmitInfo>(desc[i].wait_semaphores.count + 1);
+        VkSemaphoreSubmitInfo* const sem_wait_submit_infos =
+            scratch_arena.alloc_or_die<VkSemaphoreSubmitInfo>(desc[i].wait_semaphores.count + 1);
 
         int wait_semaphore_count = desc[i].wait_semaphores.count;
-        for (int j = 0; j < wait_semaphore_count; ++j)
-        {
+        for (int j = 0; j < wait_semaphore_count; ++j) {
             sem_wait_submit_infos[j] = {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .semaphore = *s_ctx.semaphores.get_ptr(desc[i].wait_semaphores[j].semaphore),
@@ -1666,8 +1599,7 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
             };
         };
 
-        if (desc[i].wait_for_texture_acquire)
-        {
+        if (desc[i].wait_for_texture_acquire) {
             sem_wait_submit_infos[wait_semaphore_count++] = {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .semaphore = s_ctx.frames[s_ctx.frame_idx].image_acquire_semaphore,
@@ -1676,14 +1608,11 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
         }
 
         // +1 for optional present binary semaphore.
-        VkSemaphoreSubmitInfo* const sem_signal_submit_infos
-            = scratch_arena.alloc_or_die<VkSemaphoreSubmitInfo>(
-                desc[i].signal_semaphores.count + 1
-            );
+        VkSemaphoreSubmitInfo* const sem_signal_submit_infos =
+            scratch_arena.alloc_or_die<VkSemaphoreSubmitInfo>(desc[i].signal_semaphores.count + 1);
 
         int signal_semaphore_count = desc[i].signal_semaphores.count;
-        for (int j = 0; j < desc[i].signal_semaphores.count; ++j)
-        {
+        for (int j = 0; j < desc[i].signal_semaphores.count; ++j) {
             sem_signal_submit_infos[j] = {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .semaphore = *s_ctx.semaphores.get_ptr(desc[i].signal_semaphores[j].semaphore),
@@ -1692,8 +1621,7 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
             };
         };
 
-        if (desc[i].signal_ready_to_present)
-        {
+        if (desc[i].signal_ready_to_present) {
             sem_signal_submit_infos[signal_semaphore_count++] = {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .semaphore = s_ctx.swapchain.ready_to_present_semaphores[s_ctx.image_idx],
@@ -1702,8 +1630,8 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
         }
 
         // NOTE: To prevent a dangling pointer, since submitInfos takes a pointer to this.
-        VkCommandBufferSubmitInfo* const cb_submit_info
-            = scratch_arena.alloc_or_die<VkCommandBufferSubmitInfo>(1);
+        VkCommandBufferSubmitInfo* const cb_submit_info =
+            scratch_arena.alloc_or_die<VkCommandBufferSubmitInfo>(1);
         *cb_submit_info = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
             .commandBuffer = cb->command_buffer,
@@ -1728,8 +1656,7 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
     ));
 }
 
-rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc)
-{
+rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc) {
     DEBUG_ASSERT(desc.bytecode.count > 0);
 
     std::vector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings;
@@ -1737,8 +1664,7 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
     ShaderImpl shader{};
     DEFER(vkDestroyShaderModule(s_ctx.device, shader.module, nullptr));
 
-    if (!create_shader(shader, descriptor_set_layout_bindings, s_ctx.device, desc.bytecode))
-    {
+    if (!create_shader(shader, descriptor_set_layout_bindings, s_ctx.device, desc.bytecode)) {
         return rhi::Pipeline::invalid();
     }
 
@@ -1748,11 +1674,9 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
         descriptor_set_layout_bindings.size()
     );
     size_t unique_binding_count = 0;
-    for (const VkDescriptorSetLayoutBinding& b : descriptor_set_layout_bindings)
-    {
+    for (const VkDescriptorSetLayoutBinding& b: descriptor_set_layout_bindings) {
         ASSERT(b.binding < ARRAY_SIZE(binding_used));
-        if (!binding_used[b.binding])
-        {
+        if (!binding_used[b.binding]) {
             unique_descriptor_set_layout_bindings[unique_binding_count] = b;
             binding_used[b.binding] = true;
             ++unique_binding_count;
@@ -1764,8 +1688,9 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
     std::sort(
         unique_descriptor_set_layout_bindings.begin(),
         unique_descriptor_set_layout_bindings.end(),
-        [](VkDescriptorSetLayoutBinding a, VkDescriptorSetLayoutBinding b)
-        { return a.binding < b.binding; }
+        [](VkDescriptorSetLayoutBinding a, VkDescriptorSetLayoutBinding b) {
+            return a.binding < b.binding;
+        }
     );
 
     const VkDescriptorSetLayoutCreateInfo descriptor_set_layout_info = {
@@ -1801,8 +1726,7 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
 
     VkPushConstantRange push_constant_range{};
     const bool uses_push_constants = shader.push_constant_size > 0;
-    if (uses_push_constants)
-    {
+    if (uses_push_constants) {
         push_constant_range.stageFlags = VK_SHADER_STAGE_ALL;
         push_constant_range.size = shader.push_constant_size;
         pipeline.push_constant_size = shader.push_constant_size;
@@ -1847,8 +1771,7 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
         unique_descriptor_set_layout_bindings.size()
     );
 
-    for (size_t i = 0; i < unique_descriptor_set_layout_bindings.size(); ++i)
-    {
+    for (size_t i = 0; i < unique_descriptor_set_layout_bindings.size(); ++i) {
         const VkDescriptorUpdateTemplateEntry entry = {
             .dstBinding = unique_descriptor_set_layout_bindings[i].binding,
             .descriptorCount = 1,
@@ -1869,8 +1792,7 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
         .pipelineLayout = pipeline.layout,
     };
 
-    if (!descriptor_update_template_entries.empty())
-    {
+    if (!descriptor_update_template_entries.empty()) {
         VK_CHECK_HANDLE(vkCreateDescriptorUpdateTemplate(
             s_ctx.device,
             &descriptor_update_template_info,
@@ -1879,8 +1801,7 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
         ));
     }
 
-    if (desc.debug_name)
-    {
+    if (desc.debug_name) {
         debug_name_object(
             s_ctx.device,
             VK_OBJECT_TYPE_PIPELINE,
@@ -1896,8 +1817,7 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
     return s_ctx.pipelines.create_handle(pipeline);
 }
 
-rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& desc)
-{
+rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& desc) {
     DEBUG_ASSERT(desc.bytecodes.count > 0);
 
     std::vector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings;
@@ -1925,8 +1845,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     );
     // clang-format on
 
-    for (int i = 0; i < desc.bytecodes.count; ++i)
-    {
+    for (int i = 0; i < desc.bytecodes.count; ++i) {
         if (!create_shader(
                 shaders[size_t(i)],
                 descriptor_set_layout_bindings,
@@ -1939,14 +1858,13 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     }
 
     u32 push_constant_size = 0;
-    for (ShaderImpl& shader : shaders)
-    {
+    for (ShaderImpl& shader: shaders) {
         ASSERT(
             (push_constant_size == 0 || shader.push_constant_size == 0)
             || (push_constant_size == shader.push_constant_size)
         );
-        push_constant_size
-            = push_constant_size == 0 ? shader.push_constant_size : push_constant_size;
+        push_constant_size =
+            push_constant_size == 0 ? shader.push_constant_size : push_constant_size;
     }
 
     // Remove duplicates.
@@ -1955,11 +1873,9 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         descriptor_set_layout_bindings.size()
     );
     size_t unique_binding_count = 0;
-    for (const VkDescriptorSetLayoutBinding& b : descriptor_set_layout_bindings)
-    {
+    for (const VkDescriptorSetLayoutBinding& b: descriptor_set_layout_bindings) {
         ASSERT(b.binding < ARRAY_SIZE(binding_used));
-        if (!binding_used[b.binding])
-        {
+        if (!binding_used[b.binding]) {
             unique_descriptor_set_layout_bindings[unique_binding_count] = b;
             binding_used[b.binding] = true;
             ++unique_binding_count;
@@ -1971,8 +1887,9 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     std::sort(
         unique_descriptor_set_layout_bindings.begin(),
         unique_descriptor_set_layout_bindings.end(),
-        [](VkDescriptorSetLayoutBinding a, VkDescriptorSetLayoutBinding b)
-        { return a.binding < b.binding; }
+        [](VkDescriptorSetLayoutBinding a, VkDescriptorSetLayoutBinding b) {
+            return a.binding < b.binding;
+        }
     );
 
     const VkDescriptorSetLayoutCreateInfo descriptor_set_layout_info = {
@@ -1991,8 +1908,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
 
     VkPushConstantRange push_constant_range{};
     const bool uses_push_constants = push_constant_size > 0;
-    if (uses_push_constants)
-    {
+    if (uses_push_constants) {
         push_constant_range.stageFlags = VK_SHADER_STAGE_ALL;
         push_constant_range.size = push_constant_size;
         pipeline.push_constant_size = push_constant_size;
@@ -2013,8 +1929,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     VK_CHECK_HANDLE(vkCreatePipelineLayout(s_ctx.device, &layout_info, nullptr, &pipeline.layout));
 
     std::vector<VkPipelineShaderStageCreateInfo> shader_stage_infos(shaders.size());
-    for (size_t i = 0; i < shaders.size(); ++i)
-    {
+    for (size_t i = 0; i < shaders.size(); ++i) {
         shader_stage_infos[i] = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = shaders[i].stage,
@@ -2027,10 +1942,9 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     // function, if not then std::vector is fine.
     Arena scratch_arena = s_ctx.scratch_arena;
 
-    VkFormat* const color_attachment_formats
-        = scratch_arena.alloc_or_die<VkFormat>(desc.color_targets.count);
-    for (int i = 0; i < desc.color_targets.count; ++i)
-    {
+    VkFormat* const color_attachment_formats =
+        scratch_arena.alloc_or_die<VkFormat>(desc.color_targets.count);
+    for (int i = 0; i < desc.color_targets.count; ++i) {
         color_attachment_formats[i] = format_to_vk(desc.color_targets[i].format);
     }
 
@@ -2078,11 +1992,10 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         .depthCompareOp = VK_COMPARE_OP_GREATER,
     };
 
-    VkPipelineColorBlendAttachmentState* const color_blend_attachments
-        = scratch_arena.alloc_or_die<VkPipelineColorBlendAttachmentState>(desc.color_targets.count);
+    VkPipelineColorBlendAttachmentState* const color_blend_attachments =
+        scratch_arena.alloc_or_die<VkPipelineColorBlendAttachmentState>(desc.color_targets.count);
 
-    for (int i = 0; i < desc.color_targets.count; ++i)
-    {
+    for (int i = 0; i < desc.color_targets.count; ++i) {
         const rhi::PipelineColorTarget& t = desc.color_targets[i];
         color_blend_attachments[i] = {
             .blendEnable = t.blend_enable,
@@ -2106,10 +2019,11 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         VK_DYNAMIC_STATE_SCISSOR,
     };
 
-    const VkPipelineDynamicStateCreateInfo dynamic_state_info
-        = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-           .dynamicStateCount = u32(ARRAY_SIZE(dynamic_states)),
-           .pDynamicStates = dynamic_states};
+    const VkPipelineDynamicStateCreateInfo dynamic_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = u32(ARRAY_SIZE(dynamic_states)),
+        .pDynamicStates = dynamic_states
+    };
 
     const VkGraphicsPipelineCreateInfo pipeline_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -2140,8 +2054,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         unique_descriptor_set_layout_bindings.size()
     );
 
-    for (size_t i = 0; i < unique_descriptor_set_layout_bindings.size(); ++i)
-    {
+    for (size_t i = 0; i < unique_descriptor_set_layout_bindings.size(); ++i) {
         const VkDescriptorUpdateTemplateEntry entry = {
             .dstBinding = unique_descriptor_set_layout_bindings[i].binding,
             .descriptorCount = 1,
@@ -2162,8 +2075,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         .pipelineLayout = pipeline.layout,
     };
 
-    if (!descriptor_update_template_entries.empty())
-    {
+    if (!descriptor_update_template_entries.empty()) {
         VK_CHECK_HANDLE(vkCreateDescriptorUpdateTemplate(
             s_ctx.device,
             &descriptor_update_template_info,
@@ -2172,8 +2084,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         ));
     }
 
-    if (desc.debug_name)
-    {
+    if (desc.debug_name) {
         debug_name_object(
             s_ctx.device,
             VK_OBJECT_TYPE_PIPELINE,
@@ -2187,17 +2098,14 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     return s_ctx.pipelines.create_handle(pipeline);
 }
 
-Vec3U32 rhi::get_pipeline_local_size(rhi::Pipeline handle)
-{
+Vec3U32 rhi::get_pipeline_local_size(rhi::Pipeline handle) {
     DEBUG_ASSERT(handle);
 
     return s_ctx.pipelines.get_ptr(handle)->local_size;
 }
 
-void rhi::destroy_pipeline(rhi::Pipeline handle)
-{
-    if (!handle)
-    {
+void rhi::destroy_pipeline(rhi::Pipeline handle) {
+    if (!handle) {
         return;
     }
 
@@ -2217,8 +2125,7 @@ void rhi::cmd_barrier(
     rhi::AccessFlags src_access_mask,
     rhi::StageFlags dst_stage_mask,
     rhi::AccessFlags dst_access_mask
-)
-{
+) {
     DEBUG_ASSERT(cb);
 
     const VkMemoryBarrier2 barrier = {
@@ -2240,18 +2147,16 @@ void rhi::cmd_barrier(
 void rhi::cmd_texture_barrier(
     rhi::CommandBuffer handle,
     const SliceArg<rhi::TextureBarrierDesc>&& desc
-)
-{
+) {
     DEBUG_ASSERT(handle);
     DEBUG_ASSERT(desc.count > 0);
 
     Arena scratchArena = s_ctx.scratch_arena;
 
-    VkImageMemoryBarrier2* const barriers
-        = scratchArena.alloc_or_die<VkImageMemoryBarrier2>(desc.count);
+    VkImageMemoryBarrier2* const barriers =
+        scratchArena.alloc_or_die<VkImageMemoryBarrier2>(desc.count);
 
-    for (int i = 0; i < desc.count; ++i)
-    {
+    for (int i = 0; i < desc.count; ++i) {
         const rhi::TextureBarrierDesc& d = desc[i];
 
         const TextureImpl* const texture = s_ctx.textures.get_ptr(d.texture);
@@ -2294,18 +2199,16 @@ void rhi::cmd_texture_invalidate_barrier(
     StageFlags dst_stage_mask,
     AccessFlags dst_access_mask,
     const SliceArg<Texture>&& textures
-)
-{
+) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(textures.count > 0);
 
     Arena scratch_arena = s_ctx.scratch_arena;
 
-    VkImageMemoryBarrier2* const barriers
-        = scratch_arena.alloc_or_die<VkImageMemoryBarrier2>(textures.count);
+    VkImageMemoryBarrier2* const barriers =
+        scratch_arena.alloc_or_die<VkImageMemoryBarrier2>(textures.count);
 
-    for (int i = 0; i < textures.count; ++i)
-    {
+    for (int i = 0; i < textures.count; ++i) {
         const TextureImpl* const texture = s_ctx.textures.get_ptr(textures[i]);
 
         barriers[i] = {
@@ -2343,8 +2246,7 @@ void rhi::cmd_copy_buffer_to_texture(
     rhi::Buffer buffer,
     rhi::Texture texture,
     const SliceArg<rhi::BufferTextureCopy>&& copy_regions
-)
-{
+) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(buffer);
     DEBUG_ASSERT(texture);
@@ -2352,24 +2254,24 @@ void rhi::cmd_copy_buffer_to_texture(
 
     Arena scratchArena = s_ctx.scratch_arena;
 
-    VkBufferImageCopy* const regions
-        = scratchArena.alloc_or_die<VkBufferImageCopy>(copy_regions.count);
+    VkBufferImageCopy* const regions =
+        scratchArena.alloc_or_die<VkBufferImageCopy>(copy_regions.count);
 
     const TextureImpl* const tex = s_ctx.textures.get_ptr(texture);
 
-    for (int i = 0; i < copy_regions.count; ++i)
-    {
+    for (int i = 0; i < copy_regions.count; ++i) {
         const rhi::BufferTextureCopy& c = copy_regions[i];
         regions[i] = VkBufferImageCopy{
             .bufferOffset = c.buffer_offset,
             .bufferRowLength = c.buffer_row_length,
             .bufferImageHeight = c.buffer_texture_height,
-            .imageSubresource = {
-                .aspectMask = vk_aspect_flags_from_format(format_to_vk(tex->format)),
-                .mipLevel = c.texture_subresource.mip_level,
-                .baseArrayLayer = c.texture_subresource.base_array_layer,
-                .layerCount = c.texture_subresource.layer_count,
-            },
+            .imageSubresource =
+                {
+                    .aspectMask = vk_aspect_flags_from_format(format_to_vk(tex->format)),
+                    .mipLevel = c.texture_subresource.mip_level,
+                    .baseArrayLayer = c.texture_subresource.base_array_layer,
+                    .layerCount = c.texture_subresource.layer_count,
+                },
             .imageOffset = {c.texture_offset.x, c.texture_offset.y, c.texture_offset.z},
             .imageExtent = {c.texture_dimensions.x, c.texture_dimensions.y, c.texture_dimensions.z},
         };
@@ -2385,8 +2287,13 @@ void rhi::cmd_copy_buffer_to_texture(
     );
 }
 
-void rhi::cmd_fill_buffer(rhi::CommandBuffer cb, rhi::Buffer buffer, u64 offset, u64 size, u32 data)
-{
+void rhi::cmd_fill_buffer(
+    rhi::CommandBuffer cb,
+    rhi::Buffer buffer,
+    u64 offset,
+    u64 size,
+    u32 data
+) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(buffer);
     DEBUG_ASSERT(size > 0);
@@ -2400,8 +2307,7 @@ void rhi::cmd_fill_buffer(rhi::CommandBuffer cb, rhi::Buffer buffer, u64 offset,
     );
 }
 
-void rhi::cmd_bind_pipeline(rhi::CommandBuffer cb, rhi::Pipeline pipeline)
-{
+void rhi::cmd_bind_pipeline(rhi::CommandBuffer cb, rhi::Pipeline pipeline) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(pipeline);
 
@@ -2414,8 +2320,7 @@ void rhi::cmd_bind_pipeline(rhi::CommandBuffer cb, rhi::Pipeline pipeline)
     );
 }
 
-void rhi::cmd_dispatch(rhi::CommandBuffer cb, Vec3U32 group_count)
-{
+void rhi::cmd_dispatch(rhi::CommandBuffer cb, Vec3U32 group_count) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(group_count.x > 0);
     DEBUG_ASSERT(group_count.y > 0);
@@ -2433,39 +2338,35 @@ void rhi::cmd_push_descriptors(
     rhi::CommandBuffer cb,
     rhi::Pipeline pipeline,
     const SliceArg<rhi::DescriptorInfo>&& descriptors
-)
-{
+) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(pipeline);
 
     Arena scratch_arena = s_ctx.scratch_arena;
 
-    DescriptorInfoImpl* const infos
-        = scratch_arena.alloc_or_die<DescriptorInfoImpl>(descriptors.count);
+    DescriptorInfoImpl* const infos =
+        scratch_arena.alloc_or_die<DescriptorInfoImpl>(descriptors.count);
 
-    for (int i = 0; i < descriptors.count; ++i)
-    {
+    for (int i = 0; i < descriptors.count; ++i) {
         const rhi::DescriptorInfo& d = descriptors[i];
-        switch (d.type)
-        {
-        case rhi::DescriptorInfo::TYPE_NONE:
-            ASSERT(0);
-            break;
-        case rhi::DescriptorInfo::TYPE_TEXTURE:
-            infos[i] = {s_ctx.textures.get_ptr(d.resource.texture)->view};
-            break;
-        case rhi::DescriptorInfo::TYPE_TEXTURE_DESCRIPTOR:
-            infos[i] = {s_ctx.texture_descriptors.get_ptr(d.resource.texture_descriptor)->view};
-            break;
-        case rhi::DescriptorInfo::TYPE_SAMPLER:
-            infos[i] = {*s_ctx.samplers.get_ptr(d.resource.sampler)};
-            break;
-        case rhi::DescriptorInfo::TYPE_BUFFER:
-        {
-            const auto& info = d.resource.buffer;
-            infos[i] = {s_ctx.buffers.get_ptr(info.buffer)->buffer, info.offset, info.range};
-            break;
-        }
+        switch (d.type) {
+            case rhi::DescriptorInfo::TYPE_NONE:
+                ASSERT(0);
+                break;
+            case rhi::DescriptorInfo::TYPE_TEXTURE:
+                infos[i] = {s_ctx.textures.get_ptr(d.resource.texture)->view};
+                break;
+            case rhi::DescriptorInfo::TYPE_TEXTURE_DESCRIPTOR:
+                infos[i] = {s_ctx.texture_descriptors.get_ptr(d.resource.texture_descriptor)->view};
+                break;
+            case rhi::DescriptorInfo::TYPE_SAMPLER:
+                infos[i] = {*s_ctx.samplers.get_ptr(d.resource.sampler)};
+                break;
+            case rhi::DescriptorInfo::TYPE_BUFFER: {
+                const auto& info = d.resource.buffer;
+                infos[i] = {s_ctx.buffers.get_ptr(info.buffer)->buffer, info.offset, info.range};
+                break;
+            }
         }
     }
 
@@ -2480,8 +2381,7 @@ void rhi::cmd_push_descriptors(
     );
 }
 
-void rhi::cmd_push_constants(rhi::CommandBuffer cb, rhi::Pipeline pipeline, const void* data)
-{
+void rhi::cmd_push_constants(rhi::CommandBuffer cb, rhi::Pipeline pipeline, const void* data) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(pipeline);
     DEBUG_ASSERT(data);
@@ -2498,8 +2398,7 @@ void rhi::cmd_push_constants(rhi::CommandBuffer cb, rhi::Pipeline pipeline, cons
     );
 }
 
-void rhi::cmd_set_viewport(const rhi::SetViewportDesc&& desc)
-{
+void rhi::cmd_set_viewport(const rhi::SetViewportDesc&& desc) {
     DEBUG_ASSERT(desc.cb);
     DEBUG_ASSERT(desc.width >= 0.0f);
     DEBUG_ASSERT(desc.min_depth >= 0.0f);
@@ -2517,8 +2416,7 @@ void rhi::cmd_set_viewport(const rhi::SetViewportDesc&& desc)
     vkCmdSetViewport(s_ctx.command_buffers.get_ptr(desc.cb)->command_buffer, 0, 1, &viewport);
 }
 
-void rhi::cmd_set_scissor(const rhi::SetScissorDesc&& desc)
-{
+void rhi::cmd_set_scissor(const rhi::SetScissorDesc&& desc) {
     DEBUG_ASSERT(desc.cb);
 
     const VkRect2D scissor = {
@@ -2529,17 +2427,15 @@ void rhi::cmd_set_scissor(const rhi::SetScissorDesc&& desc)
     vkCmdSetScissor(s_ctx.command_buffers.get_ptr(desc.cb)->command_buffer, 0, 1, &scissor);
 }
 
-void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc)
-{
+void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc) {
     DEBUG_ASSERT(desc.cb);
 
     Arena scratch_arena = s_ctx.scratch_arena;
 
-    VkRenderingAttachmentInfo* const rendering_attachment_infos
-        = scratch_arena.alloc_or_die<VkRenderingAttachmentInfo>(desc.color_targets.count);
+    VkRenderingAttachmentInfo* const rendering_attachment_infos =
+        scratch_arena.alloc_or_die<VkRenderingAttachmentInfo>(desc.color_targets.count);
 
-    for (int i = 0; i < desc.color_targets.count; ++i)
-    {
+    for (int i = 0; i < desc.color_targets.count; ++i) {
         const rhi::Attachment& t = desc.color_targets[i];
 
         rendering_attachment_infos[i] = {
@@ -2553,13 +2449,12 @@ void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc)
         };
     }
 
-    const bool depth_attachment_exists
-        = desc.depth_target.attachment.type != rhi::Attachment::TextureOrDescriptor::TYPE_NONE;
+    const bool depth_attachment_exists =
+        desc.depth_target.attachment.type != rhi::Attachment::TextureOrDescriptor::TYPE_NONE;
 
     VkRenderingAttachmentInfo depth_attachment_info{};
 
-    if (depth_attachment_exists)
-    {
+    if (depth_attachment_exists) {
         depth_attachment_info = {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .imageView = desc.depth_target.attachment.type
@@ -2574,10 +2469,11 @@ void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc)
 
     const VkRenderingInfo rendering_info = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = {
-            .offset = {desc.offset.x, desc.offset.y},
-            .extent = {desc.extent.x, desc.extent.y},
-        },
+        .renderArea =
+            {
+                .offset = {desc.offset.x, desc.offset.y},
+                .extent = {desc.extent.x, desc.extent.y},
+            },
         .layerCount = 1,
         .colorAttachmentCount = u32(desc.color_targets.count),
         .pColorAttachments = rendering_attachment_infos,
@@ -2587,8 +2483,7 @@ void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc)
     vkCmdBeginRendering(s_ctx.command_buffers.get_ptr(desc.cb)->command_buffer, &rendering_info);
 }
 
-void rhi::cmd_end_rendering(rhi::CommandBuffer cb)
-{
+void rhi::cmd_end_rendering(rhi::CommandBuffer cb) {
     DEBUG_ASSERT(cb);
 
     vkCmdEndRendering(s_ctx.command_buffers.get_ptr(cb)->command_buffer);
@@ -2599,8 +2494,7 @@ void rhi::cmd_bind_index_buffer(
     rhi::Buffer buffer,
     u64 offset,
     rhi::IndexType index_type
-)
-{
+) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(buffer);
 
@@ -2618,8 +2512,7 @@ void rhi::cmd_draw(
     u32 instance_count,
     u32 first_vertex,
     u32 first_instance
-)
-{
+) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(vertex_count > 0);
     DEBUG_ASSERT(instance_count > 0);
@@ -2640,8 +2533,7 @@ void rhi::cmd_draw_indexed(
     u32 first_index,
     i32 vertex_offset,
     u32 first_instance
-)
-{
+) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(index_count > 0);
     DEBUG_ASSERT(instance_count > 0);
@@ -2656,8 +2548,13 @@ void rhi::cmd_draw_indexed(
     );
 }
 
-void rhi::cmd_draw_indirect(CommandBuffer cb, Buffer buffer, u64 offset, u32 draw_count, u32 stride)
-{
+void rhi::cmd_draw_indirect(
+    CommandBuffer cb,
+    Buffer buffer,
+    u64 offset,
+    u32 draw_count,
+    u32 stride
+) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(buffer);
     DEBUG_ASSERT(draw_count > 0);
@@ -2679,8 +2576,7 @@ void rhi::cmd_draw_indexed_indirect_count(
     u64 count_buffer_offset,
     u32 max_draw_count,
     u32 stride
-)
-{
+) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(buffer);
     DEBUG_ASSERT(count_buffer);
@@ -2697,8 +2593,7 @@ void rhi::cmd_draw_indexed_indirect_count(
     );
 }
 
-void rhi::cmd_bind_texture_descriptor_set(CommandBuffer cb, rhi::Pipeline pipeline)
-{
+void rhi::cmd_bind_texture_descriptor_set(CommandBuffer cb, rhi::Pipeline pipeline) {
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(pipeline);
 
@@ -2716,8 +2611,7 @@ void rhi::cmd_bind_texture_descriptor_set(CommandBuffer cb, rhi::Pipeline pipeli
     );
 }
 
-void rhi::create_swapchain(Vec2U32 size)
-{
+void rhi::create_swapchain(Vec2U32 size) {
     rhi::device_wait_idle();
 
     rhi::destroy_swapchain();
@@ -2728,18 +2622,15 @@ void rhi::create_swapchain(Vec2U32 size)
         s_ctx.surface,
         &surface_capabilities
     ));
-    if (surface_capabilities.currentExtent.width != UINT32_MAX)
-    {
+    if (surface_capabilities.currentExtent.width != UINT32_MAX) {
         s_ctx.swapchain.extent = surface_capabilities.currentExtent;
-    }
-    else
-    {
-        s_ctx.swapchain.extent.width = Clamp(
+    } else {
+        s_ctx.swapchain.extent.width = math::clamp(
             size.x,
             surface_capabilities.minImageExtent.width,
             surface_capabilities.maxImageExtent.width
         );
-        s_ctx.swapchain.extent.height = Clamp(
+        s_ctx.swapchain.extent.height = math::clamp(
             size.y,
             surface_capabilities.minImageExtent.height,
             surface_capabilities.maxImageExtent.height
@@ -2766,8 +2657,7 @@ void rhi::create_swapchain(Vec2U32 size)
     // https://forums.developer.nvidia.com/t/vulkan-extensions-needed-for-hdr-is-missing/334268/13
     bool swapchain_surface_format_found = false;
 
-    for (u32 i = 0; i < surface_format_count; ++i)
-    {
+    for (u32 i = 0; i < surface_format_count; ++i) {
         const VkFormat format = surface_formats[i].format;
         if ((format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_B8G8R8A8_UNORM)
             && (surface_formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR))
@@ -2777,8 +2667,7 @@ void rhi::create_swapchain(Vec2U32 size)
             break;
         }
     }
-    if (!swapchain_surface_format_found)
-    {
+    if (!swapchain_surface_format_found) {
         fprintf(stderr, "vulkan: failed to find a suitable swapchain surface format\n");
         ASSERT(0);
     }
@@ -2792,17 +2681,14 @@ void rhi::create_swapchain(Vec2U32 size)
 
     // The spec guarantees that at least one bit will be set.
     VkCompositeAlphaFlagBitsKHR surface_composite_alpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
-    if (surface_capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
-    {
+    if (surface_capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
         surface_composite_alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    }
-    else if (
+    } else if (
         surface_capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR
     )
     {
         surface_composite_alpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
-    }
-    else if (
+    } else if (
         surface_capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR
     )
     {
@@ -2846,8 +2732,7 @@ void rhi::create_swapchain(Vec2U32 size)
 
     std::vector<TextureImpl> textures(swapchain_texture_count);
 
-    for (u32 i = 0; i < swapchain_texture_count; ++i)
-    {
+    for (u32 i = 0; i < swapchain_texture_count; ++i) {
         textures[i].image = images[i];
         textures[i].type = rhi::TEXTURE_TYPE_2D;
         textures[i].format = format_to_rhi(s_ctx.swapchain.surface_format.format);
@@ -2866,8 +2751,7 @@ void rhi::create_swapchain(Vec2U32 size)
         },
     };
 
-    for (u32 i = 0; i < swapchain_texture_count; ++i)
-    {
+    for (u32 i = 0; i < swapchain_texture_count; ++i) {
         image_view_info.image = textures[i].image;
         VkImageView image_view{};
         VK_CHECK(vkCreateImageView(s_ctx.device, &image_view_info, nullptr, &image_view));
@@ -2875,14 +2759,12 @@ void rhi::create_swapchain(Vec2U32 size)
     }
 
     s_ctx.swapchain.textures.resize(swapchain_texture_count);
-    for (u32 i = 0; i < swapchain_texture_count; ++i)
-    {
+    for (u32 i = 0; i < swapchain_texture_count; ++i) {
         s_ctx.swapchain.textures[i] = s_ctx.textures.create_handle(textures[i]);
     }
 
     s_ctx.swapchain.ready_to_present_semaphores.resize(swapchain_texture_count);
-    for (u32 i = 0; i < swapchain_texture_count; ++i)
-    {
+    for (u32 i = 0; i < swapchain_texture_count; ++i) {
         const VkSemaphoreCreateInfo semaphore_info = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
@@ -2901,12 +2783,10 @@ void rhi::create_swapchain(Vec2U32 size)
     }
 }
 
-void rhi::destroy_swapchain()
-{
+void rhi::destroy_swapchain() {
     rhi::device_wait_idle();
 
-    for (size_t i = 0; i < s_ctx.swapchain.textures.size(); ++i)
-    {
+    for (size_t i = 0; i < s_ctx.swapchain.textures.size(); ++i) {
         TextureImpl* const t = s_ctx.textures.get_ptr(s_ctx.swapchain.textures[i]);
         vkDestroyImageView(s_ctx.device, t->view, nullptr);
         vkDestroySemaphore(s_ctx.device, s_ctx.swapchain.ready_to_present_semaphores[i], nullptr);
@@ -2917,8 +2797,7 @@ void rhi::destroy_swapchain()
     s_ctx.swapchain.swapchain = VK_NULL_HANDLE;
 }
 
-rhi::SwapchainResult rhi::acquire_next_swapchain_texture(rhi::Texture& swapchain_texture)
-{
+rhi::SwapchainResult rhi::acquire_next_swapchain_texture(rhi::Texture& swapchain_texture) {
     const VkResult vulkan_result = vkAcquireNextImageKHR(
         s_ctx.device,
         s_ctx.swapchain.swapchain,
@@ -2930,27 +2809,24 @@ rhi::SwapchainResult rhi::acquire_next_swapchain_texture(rhi::Texture& swapchain
 
     swapchain_texture = s_ctx.swapchain.textures[s_ctx.image_idx];
 
-    switch (vulkan_result)
-    {
-    case VK_SUCCESS:
-        return rhi::SWAPCHAIN_SUCCESS;
-    case VK_ERROR_OUT_OF_DATE_KHR:
-        return rhi::SWAPCHAIN_OUT_OF_DATE;
-    case VK_SUBOPTIMAL_KHR:
-        return rhi::SWAPCHAIN_SUBOPTIMAL;
-    default:
-        return rhi::SWAPCHAIN_ERROR;
+    switch (vulkan_result) {
+        case VK_SUCCESS:
+            return rhi::SWAPCHAIN_SUCCESS;
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            return rhi::SWAPCHAIN_OUT_OF_DATE;
+        case VK_SUBOPTIMAL_KHR:
+            return rhi::SWAPCHAIN_SUBOPTIMAL;
+        default:
+            return rhi::SWAPCHAIN_ERROR;
     }
 }
 
-rhi::Texture rhi::get_swapchain_texture(u32 idx)
-{
+rhi::Texture rhi::get_swapchain_texture(u32 idx) {
     DEBUG_ASSERT(idx < s_ctx.swapchain.textures.size());
     return s_ctx.swapchain.textures[idx];
 }
 
-rhi::SwapchainResult rhi::queue_present(Queue handle)
-{
+rhi::SwapchainResult rhi::queue_present(Queue handle) {
     const VkPresentInfoKHR present_info = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
@@ -2960,33 +2836,29 @@ rhi::SwapchainResult rhi::queue_present(Queue handle)
         .pImageIndices = &s_ctx.image_idx,
     };
 
-    const VkResult vulkan_result
-        = vkQueuePresentKHR(s_ctx.queues.get_ptr(handle)->queue, &present_info);
-    switch (vulkan_result)
-    {
-    case VK_SUCCESS:
-        return rhi::SWAPCHAIN_SUCCESS;
-    case VK_ERROR_OUT_OF_DATE_KHR:
-        return rhi::SWAPCHAIN_OUT_OF_DATE;
-    case VK_SUBOPTIMAL_KHR:
-        return rhi::SWAPCHAIN_SUBOPTIMAL;
-    default:
-        return rhi::SWAPCHAIN_ERROR;
+    const VkResult vulkan_result =
+        vkQueuePresentKHR(s_ctx.queues.get_ptr(handle)->queue, &present_info);
+    switch (vulkan_result) {
+        case VK_SUCCESS:
+            return rhi::SWAPCHAIN_SUCCESS;
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            return rhi::SWAPCHAIN_OUT_OF_DATE;
+        case VK_SUBOPTIMAL_KHR:
+            return rhi::SWAPCHAIN_SUBOPTIMAL;
+        default:
+            return rhi::SWAPCHAIN_ERROR;
     }
 }
 
-void rhi::device_wait_idle()
-{
+void rhi::device_wait_idle() {
     VK_CHECK(vkDeviceWaitIdle(s_ctx.device));
 }
 
-void rhi::queue_wait_idle(rhi::Queue handle)
-{
+void rhi::queue_wait_idle(rhi::Queue handle) {
     VK_CHECK(vkQueueWaitIdle(s_ctx.queues.get_ptr(handle)->queue));
 }
 
-void rhi::begin_new_frame(int frame_in_flight_idx)
-{
+void rhi::begin_new_frame(int frame_in_flight_idx) {
     DEBUG_ASSERT(frame_in_flight_idx >= 0);
     DEBUG_ASSERT(frame_in_flight_idx < rhi::FRAMES_IN_FLIGHT);
 

@@ -17,22 +17,18 @@ bool ImguiRenderer::init(
     rhi::Format color_format,
     rhi::Queue queue,
     rhi::CommandPool command_pool
-)
-{
+) {
     DEBUG_ASSERT(window);
 
-    if (!IMGUI_CHECKVERSION())
-    {
+    if (!IMGUI_CHECKVERSION()) {
         fprintf(stderr, "IMGUI_CHECKVERSION failed\n");
         return false;
     }
-    if (!ImGui::CreateContext())
-    {
+    if (!ImGui::CreateContext()) {
         fprintf(stderr, "ImGui::CreateContext failed\n");
         return false;
     }
-    if (!ImGui_ImplSDL3_InitForVulkan(window))
-    {
+    if (!ImGui_ImplSDL3_InitForVulkan(window)) {
         fprintf(stderr, "ImGui_ImplSDL3_InitForVulkan failed\n");
         return 1;
     }
@@ -49,14 +45,12 @@ bool ImguiRenderer::init(
     ImGui::StyleColorsDark();
 
     const SDL_DisplayID display = SDL_GetPrimaryDisplay();
-    if (display == 0)
-    {
+    if (display == 0) {
         fprintf(stderr, "SDL_GetPrimaryDisplay failed: %s\n", SDL_GetError());
         return false;
     }
     const f32 window_scale = SDL_GetDisplayContentScale(display);
-    if (window_scale == 0.0f)
-    {
+    if (window_scale == 0.0f) {
         fprintf(stderr, "SDL_GetDisplayContentScale failed: %s\n", SDL_GetError());
         return false;
     }
@@ -112,14 +106,6 @@ bool ImguiRenderer::init(
             }}
         );
 
-        rhi::cmd_barrier(
-            cb,
-            rhi::STAGE_ALL_TRANSFER_BIT,
-            rhi::ACCESS_TRANSFER_WRITE_BIT,
-            rhi::STAGE_FRAGMENT_SHADER_BIT,
-            rhi::ACCESS_SHADER_READ_BIT
-        );
-
         rhi::end_command_buffer(cb);
 
         rhi::queue_submit(queue, {{.cb = cb}});
@@ -137,10 +123,11 @@ bool ImguiRenderer::init(
         DEFER(free(frag_data.data));
 
         m_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes = {
-                {static_cast<u8*>(vert_data.data), int(vert_data.size)},
-                {static_cast<u8*>(frag_data.data), int(frag_data.size)},
-            },
+            .bytecodes =
+                {
+                    {static_cast<u8*>(vert_data.data), int(vert_data.size)},
+                    {static_cast<u8*>(frag_data.data), int(frag_data.size)},
+                },
             .stencil_format = rhi::FORMAT_S8_UINT,
             .color_targets = {{
                 .format = color_format,
@@ -152,8 +139,7 @@ bool ImguiRenderer::init(
             }},
             .debug_name = "fullscreen_pipeline",
         });
-        if (!m_pipeline)
-        {
+        if (!m_pipeline) {
             return false;
         }
     }
@@ -161,15 +147,13 @@ bool ImguiRenderer::init(
     return true;
 }
 
-void ImguiRenderer::cleanup()
-{
+void ImguiRenderer::cleanup() {
     rhi::device_wait_idle();
 
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
 
-    for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i)
-    {
+    for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i) {
         Frame& frame = m_frame[i];
         rhi::destroy_buffer(frame.vertex_buffer);
         rhi::destroy_buffer(frame.index_buffer);
@@ -179,21 +163,18 @@ void ImguiRenderer::cleanup()
     rhi::destroy_texture(m_font_texture);
 }
 
-void ImguiRenderer::update_vertex_index_buffers(u32 frame_index)
-{
+void ImguiRenderer::update_vertex_index_buffers(u32 frame_index) {
     ImGui::Render();
 
     const ImDrawData* const draw_data = ImGui::GetDrawData();
-    if (!draw_data)
-    {
+    if (!draw_data) {
         return;
     }
 
     u64 vertex_buffer_size = u64(draw_data->TotalVtxCount) * sizeof(ImDrawVert);
     u64 index_buffer_size = u64(draw_data->TotalIdxCount) * sizeof(ImDrawIdx);
 
-    if (vertex_buffer_size == 0 || index_buffer_size == 0)
-    {
+    if (vertex_buffer_size == 0 || index_buffer_size == 0) {
         return;
     }
 
@@ -204,10 +185,9 @@ void ImguiRenderer::update_vertex_index_buffers(u32 frame_index)
     vertex_buffer_size = ((vertex_buffer_size + chunk_size - 1) / chunk_size) * chunk_size;
     index_buffer_size = ((index_buffer_size + chunk_size - 1) / chunk_size) * chunk_size;
 
-    const bool should_recreate_vertex_buffer
-        = !frame.vertex_buffer || (frame.vertex_buffer_size < vertex_buffer_size);
-    if (should_recreate_vertex_buffer)
-    {
+    const bool should_recreate_vertex_buffer =
+        !frame.vertex_buffer || (frame.vertex_buffer_size < vertex_buffer_size);
+    if (should_recreate_vertex_buffer) {
         rhi::destroy_buffer(frame.vertex_buffer);
 
         frame.vertex_buffer = rhi::create_buffer({
@@ -218,10 +198,9 @@ void ImguiRenderer::update_vertex_index_buffers(u32 frame_index)
         frame.vertex_buffer_size = vertex_buffer_size;
     }
 
-    const bool should_recreate_index_buffer
-        = !frame.index_buffer || (frame.index_buffer_size < index_buffer_size);
-    if (should_recreate_index_buffer)
-    {
+    const bool should_recreate_index_buffer =
+        !frame.index_buffer || (frame.index_buffer_size < index_buffer_size);
+    if (should_recreate_index_buffer) {
         rhi::destroy_buffer(frame.index_buffer);
 
         frame.index_buffer = rhi::create_buffer({
@@ -233,11 +212,10 @@ void ImguiRenderer::update_vertex_index_buffers(u32 frame_index)
     }
 
     // Upload data.
-    ImDrawVert* vertex_dst
-        = static_cast<ImDrawVert*>(rhi::get_buffer_host_ptr(frame.vertex_buffer));
+    ImDrawVert* vertex_dst =
+        static_cast<ImDrawVert*>(rhi::get_buffer_host_ptr(frame.vertex_buffer));
     ImDrawIdx* index_dst = static_cast<ImDrawIdx*>(rhi::get_buffer_host_ptr(frame.index_buffer));
-    for (int i = 0; i < draw_data->CmdListsCount; ++i)
-    {
+    for (int i = 0; i < draw_data->CmdListsCount; ++i) {
         const ImDrawList* const cmd_list = draw_data->CmdLists[i];
         memcpy(
             vertex_dst,
@@ -254,27 +232,23 @@ void ImguiRenderer::update_vertex_index_buffers(u32 frame_index)
     }
 }
 
-void ImguiRenderer::start_new_frame() const
-{
+void ImguiRenderer::start_new_frame() const {
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 }
 
-void ImguiRenderer::render(rhi::CommandBuffer cb, u32 frame_index)
-{
+void ImguiRenderer::render(rhi::CommandBuffer cb, u32 frame_index) {
     const ImDrawData* const draw_data = ImGui::GetDrawData();
     i32 vertex_offset = 0;
     u32 index_offset = 0;
 
-    if (!draw_data || draw_data->CmdListsCount == 0)
-    {
+    if (!draw_data || draw_data->CmdListsCount == 0) {
         return;
     }
 
     Frame& frame = m_frame[frame_index];
 
-    if (!frame.vertex_buffer || !frame.index_buffer)
-    {
+    if (!frame.vertex_buffer || !frame.index_buffer) {
         return;
     }
 
@@ -306,17 +280,15 @@ void ImguiRenderer::render(rhi::CommandBuffer cb, u32 frame_index)
         .height = io.DisplaySize.y,
     });
 
-    for (int i = 0; i < draw_data->CmdListsCount; ++i)
-    {
+    for (int i = 0; i < draw_data->CmdListsCount; ++i) {
         const ImDrawList* const cmd_list = draw_data->CmdLists[i];
-        for (int j = 0; j < cmd_list->CmdBuffer.Size; ++j)
-        {
+        for (int j = 0; j < cmd_list->CmdBuffer.Size; ++j) {
             const ImDrawCmd& im_cmd = cmd_list->CmdBuffer[j];
             const ImVec4 rect = im_cmd.ClipRect;
 
             rhi::cmd_set_scissor({
                 .cb = cb,
-                .offset = {Max(i32(rect.x), 0), Max(i32(rect.y), 0)},
+                .offset = {math::max(i32(rect.x), 0), math::max(i32(rect.y), 0)},
                 .extent = {u32(rect.z - rect.x), u32(rect.w - rect.y)},
             });
 
