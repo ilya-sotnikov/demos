@@ -4,6 +4,7 @@
 #include "renderer/renderer.hpp"
 #include "time_meter.hpp"
 #include "utils.hpp"
+#include "temp_allocator.hpp"
 
 #include <SDL3/SDL.h>
 #include <imgui_impl_sdl3.h>
@@ -221,6 +222,8 @@ static void dir_to_yaw_pitch_deg(f32& yaw, f32& pitch, Vec3 dir) {
 }
 
 int main() {
+    init_temp_allocator();
+
     Renderer renderer{};
 
     if (!renderer.init()) {

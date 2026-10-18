@@ -148,8 +148,6 @@ static Vec3 calc_sun_color(Vec3 sun_direction_world) {
 }
 
 bool Renderer::init() {
-    m_scratch_arena.init(16'000'000);
-
     // SDL.
     {
 #ifdef __linux__
@@ -1292,7 +1290,7 @@ bool Renderer::upload_textures(const eastl::vector<eastl::string>& texture_paths
             cb,
             staging_buffer,
             m_textures[i],
-            {copy_regions.data(), int(copy_regions.size())}
+            {copy_regions.data(), copy_regions.size()}
         );
 
         rhi::end_command_buffer(cb);

@@ -3,6 +3,8 @@
 #include "renderer/rhi/vulkan/common.hpp"
 
 #include "arena.hpp"
+#include "temp_allocator.hpp"
+#include "containers.hpp"
 #include "math/utils.hpp"
 #include "renderer/rhi/pool.hpp"
 #include "renderer/rhi/vulkan/type_convert.hpp"
@@ -138,8 +140,6 @@ struct ContextImpl {
     struct Frame {
         VkSemaphore image_acquire_semaphore;
     } frames[rhi::FRAMES_IN_FLIGHT];
-
-    Arena scratch_arena;
 
     VkSurfaceKHR surface;
     VkInstance instance;
@@ -455,8 +455,6 @@ static void debug_name_object(
 void rhi::create(SDL_Window* window) {
     DEBUG_ASSERT(window);
 
-    s_ctx.scratch_arena.init(16'000'000);
-
     VK_CHECK(volkInitialize());
 
     // Instance.
@@ -499,7 +497,7 @@ void rhi::create(SDL_Window* window) {
 
         for (const char* ext: required_extensions) {
             const bool result =
-                extension_is_available(ext, {available_exts.data(), int(available_exts.size())});
+                extension_is_available(ext, {available_exts.data(), available_exts.size()});
             if (!result) {
                 fprintf(stderr, "required vulkan extension %s is unavailable\n", ext);
             }
@@ -623,7 +621,7 @@ void rhi::create(SDL_Window* window) {
             for (size_t j = 0; j < ARRAY_SIZE(required_device_extensions); ++j) {
                 const bool result = extension_is_available(
                     required_device_extensions[j],
-                    {extension_properties.data(), int(extension_properties.size())}
+                    {extension_properties.data(), extension_properties.size()}
                 );
                 if (!result) {
                     supports_required_extensions = false;
@@ -1579,19 +1577,21 @@ void rhi::destroy_queue(Queue handle) {
 void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc) {
     DEBUG_ASSERT(desc.count > 0);
 
-    Arena scratch_arena = s_ctx.scratch_arena;
+    TEMP_ALLOCATOR(temp);
 
-    VkSubmitInfo2* const submit_infos = scratch_arena.alloc_or_die<VkSubmitInfo2>(desc.count);
+    TempVector<VkSubmitInfo2> submit_infos{desc.count, temp};
 
     for (int i = 0; i < desc.count; ++i) {
         const CommandBufferImpl* const cb = s_ctx.command_buffers.get_ptr(desc[i].cb);
 
         // +1 for optional image acquire binary semaphore.
-        VkSemaphoreSubmitInfo* const sem_wait_submit_infos =
-            scratch_arena.alloc_or_die<VkSemaphoreSubmitInfo>(desc[i].wait_semaphores.count + 1);
+        TempVector<VkSemaphoreSubmitInfo> sem_wait_submit_infos{
+            desc[i].wait_semaphores.count + 1,
+            temp
+        };
 
-        int wait_semaphore_count = desc[i].wait_semaphores.count;
-        for (int j = 0; j < wait_semaphore_count; ++j) {
+        u64 wait_semaphore_count = desc[i].wait_semaphores.count;
+        for (u64 j = 0; j < wait_semaphore_count; ++j) {
             sem_wait_submit_infos[j] = {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .semaphore = *s_ctx.semaphores.get_ptr(desc[i].wait_semaphores[j].semaphore),
@@ -1609,11 +1609,13 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
         }
 
         // +1 for optional present binary semaphore.
-        VkSemaphoreSubmitInfo* const sem_signal_submit_infos =
-            scratch_arena.alloc_or_die<VkSemaphoreSubmitInfo>(desc[i].signal_semaphores.count + 1);
+        TempVector<VkSemaphoreSubmitInfo> sem_signal_submit_infos{
+            desc[i].signal_semaphores.count + 1,
+            temp
+        };
 
-        int signal_semaphore_count = desc[i].signal_semaphores.count;
-        for (int j = 0; j < desc[i].signal_semaphores.count; ++j) {
+        u64 signal_semaphore_count = desc[i].signal_semaphores.count;
+        for (u64 j = 0; j < desc[i].signal_semaphores.count; ++j) {
             sem_signal_submit_infos[j] = {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .semaphore = *s_ctx.semaphores.get_ptr(desc[i].signal_semaphores[j].semaphore),
@@ -1630,10 +1632,8 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
             };
         }
 
-        // NOTE: To prevent a dangling pointer, since submitInfos takes a pointer to this.
-        VkCommandBufferSubmitInfo* const cb_submit_info =
-            scratch_arena.alloc_or_die<VkCommandBufferSubmitInfo>(1);
-        *cb_submit_info = {
+        TempVector<VkCommandBufferSubmitInfo> cb_submit_info{1, temp};
+        cb_submit_info[0] = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
             .commandBuffer = cb->command_buffer,
         };
@@ -1641,18 +1641,18 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
         submit_infos[i] = {
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
             .waitSemaphoreInfoCount = u32(wait_semaphore_count),
-            .pWaitSemaphoreInfos = sem_wait_submit_infos,
+            .pWaitSemaphoreInfos = sem_wait_submit_infos.data(),
             .commandBufferInfoCount = 1,
-            .pCommandBufferInfos = cb_submit_info,
+            .pCommandBufferInfos = cb_submit_info.data(),
             .signalSemaphoreInfoCount = u32(signal_semaphore_count),
-            .pSignalSemaphoreInfos = sem_signal_submit_infos,
+            .pSignalSemaphoreInfos = sem_signal_submit_infos.data(),
         };
     }
 
     VK_CHECK(vkQueueSubmit2(
         s_ctx.queues.get_ptr(queue)->queue,
         u32(desc.count),
-        submit_infos,
+        submit_infos.data(),
         VK_NULL_HANDLE
     ));
 }
@@ -1941,10 +1941,9 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
 
     // TODO: Well, I have to choose if I care about the performance for this
     // function, if not then eastl::vector is fine.
-    Arena scratch_arena = s_ctx.scratch_arena;
+    TEMP_ALLOCATOR(temp);
 
-    VkFormat* const color_attachment_formats =
-        scratch_arena.alloc_or_die<VkFormat>(desc.color_targets.count);
+    TempVector<VkFormat> color_attachment_formats{desc.color_targets.count, temp};
     for (int i = 0; i < desc.color_targets.count; ++i) {
         color_attachment_formats[i] = format_to_vk(desc.color_targets[i].format);
     }
@@ -1952,7 +1951,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     const VkPipelineRenderingCreateInfo pipeline_rendering_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = u32(desc.color_targets.count),
-        .pColorAttachmentFormats = color_attachment_formats,
+        .pColorAttachmentFormats = color_attachment_formats.data(),
         .depthAttachmentFormat = format_to_vk(desc.depth_format),
         .stencilAttachmentFormat = format_to_vk(desc.stencil_format),
     };
@@ -1993,8 +1992,10 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         .depthCompareOp = VK_COMPARE_OP_GREATER,
     };
 
-    VkPipelineColorBlendAttachmentState* const color_blend_attachments =
-        scratch_arena.alloc_or_die<VkPipelineColorBlendAttachmentState>(desc.color_targets.count);
+    TempVector<VkPipelineColorBlendAttachmentState> color_blend_attachments{
+        desc.color_targets.count,
+        temp
+    };
 
     for (int i = 0; i < desc.color_targets.count; ++i) {
         const rhi::PipelineColorTarget& t = desc.color_targets[i];
@@ -2012,7 +2013,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
 
     const VkPipelineColorBlendStateCreateInfo color_blending_info = {
         .attachmentCount = u32(desc.color_targets.count),
-        .pAttachments = color_blend_attachments,
+        .pAttachments = color_blend_attachments.data(),
     };
 
     const VkDynamicState dynamic_states[] = {
@@ -2152,10 +2153,9 @@ void rhi::cmd_texture_barrier(
     DEBUG_ASSERT(handle);
     DEBUG_ASSERT(desc.count > 0);
 
-    Arena scratchArena = s_ctx.scratch_arena;
+    TEMP_ALLOCATOR(temp);
 
-    VkImageMemoryBarrier2* const barriers =
-        scratchArena.alloc_or_die<VkImageMemoryBarrier2>(desc.count);
+    TempVector<VkImageMemoryBarrier2> barriers{desc.count, temp};
 
     for (int i = 0; i < desc.count; ++i) {
         const rhi::TextureBarrierDesc& d = desc[i];
@@ -2188,7 +2188,7 @@ void rhi::cmd_texture_barrier(
     const VkDependencyInfo dependency_info = {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .imageMemoryBarrierCount = u32(desc.count),
-        .pImageMemoryBarriers = barriers,
+        .pImageMemoryBarriers = barriers.data(),
     };
     vkCmdPipelineBarrier2(cb->command_buffer, &dependency_info);
 }
@@ -2204,10 +2204,9 @@ void rhi::cmd_texture_invalidate_barrier(
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(textures.count > 0);
 
-    Arena scratch_arena = s_ctx.scratch_arena;
+    TEMP_ALLOCATOR(temp);
 
-    VkImageMemoryBarrier2* const barriers =
-        scratch_arena.alloc_or_die<VkImageMemoryBarrier2>(textures.count);
+    TempVector<VkImageMemoryBarrier2> barriers{textures.count, temp};
 
     for (int i = 0; i < textures.count; ++i) {
         const TextureImpl* const texture = s_ctx.textures.get_ptr(textures[i]);
@@ -2236,7 +2235,7 @@ void rhi::cmd_texture_invalidate_barrier(
     const VkDependencyInfo dependency_info = {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .imageMemoryBarrierCount = u32(textures.count),
-        .pImageMemoryBarriers = barriers,
+        .pImageMemoryBarriers = barriers.data(),
     };
 
     vkCmdPipelineBarrier2(s_ctx.command_buffers.get_ptr(cb)->command_buffer, &dependency_info);
@@ -2253,10 +2252,9 @@ void rhi::cmd_copy_buffer_to_texture(
     DEBUG_ASSERT(texture);
     DEBUG_ASSERT(copy_regions.count > 0);
 
-    Arena scratchArena = s_ctx.scratch_arena;
+    TEMP_ALLOCATOR(temp);
 
-    VkBufferImageCopy* const regions =
-        scratchArena.alloc_or_die<VkBufferImageCopy>(copy_regions.count);
+    TempVector<VkBufferImageCopy> regions{copy_regions.count, temp};
 
     const TextureImpl* const tex = s_ctx.textures.get_ptr(texture);
 
@@ -2266,13 +2264,12 @@ void rhi::cmd_copy_buffer_to_texture(
             .bufferOffset = c.buffer_offset,
             .bufferRowLength = c.buffer_row_length,
             .bufferImageHeight = c.buffer_texture_height,
-            .imageSubresource =
-                {
-                    .aspectMask = vk_aspect_flags_from_format(format_to_vk(tex->format)),
-                    .mipLevel = c.texture_subresource.mip_level,
-                    .baseArrayLayer = c.texture_subresource.base_array_layer,
-                    .layerCount = c.texture_subresource.layer_count,
-                },
+            .imageSubresource{
+                .aspectMask = vk_aspect_flags_from_format(format_to_vk(tex->format)),
+                .mipLevel = c.texture_subresource.mip_level,
+                .baseArrayLayer = c.texture_subresource.base_array_layer,
+                .layerCount = c.texture_subresource.layer_count,
+            },
             .imageOffset = {c.texture_offset.x, c.texture_offset.y, c.texture_offset.z},
             .imageExtent = {c.texture_dimensions.x, c.texture_dimensions.y, c.texture_dimensions.z},
         };
@@ -2284,7 +2281,7 @@ void rhi::cmd_copy_buffer_to_texture(
         tex->image,
         VK_IMAGE_LAYOUT_GENERAL,
         u32(copy_regions.count),
-        regions
+        regions.data()
     );
 }
 
@@ -2343,10 +2340,9 @@ void rhi::cmd_push_descriptors(
     DEBUG_ASSERT(cb);
     DEBUG_ASSERT(pipeline);
 
-    Arena scratch_arena = s_ctx.scratch_arena;
+    TEMP_ALLOCATOR(temp);
 
-    DescriptorInfoImpl* const infos =
-        scratch_arena.alloc_or_die<DescriptorInfoImpl>(descriptors.count);
+    TempVector<DescriptorInfoImpl> infos{descriptors.count, temp};
 
     for (int i = 0; i < descriptors.count; ++i) {
         const rhi::DescriptorInfo& d = descriptors[i];
@@ -2378,7 +2374,7 @@ void rhi::cmd_push_descriptors(
         vk_pipeline->descriptor_update_template,
         vk_pipeline->layout,
         0,
-        infos
+        infos.data()
     );
 }
 
@@ -2431,10 +2427,12 @@ void rhi::cmd_set_scissor(const rhi::SetScissorDesc&& desc) {
 void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc) {
     DEBUG_ASSERT(desc.cb);
 
-    Arena scratch_arena = s_ctx.scratch_arena;
+    TEMP_ALLOCATOR(temp);
 
-    VkRenderingAttachmentInfo* const rendering_attachment_infos =
-        scratch_arena.alloc_or_die<VkRenderingAttachmentInfo>(desc.color_targets.count);
+    TempVector<VkRenderingAttachmentInfo> rendering_attachment_infos{
+        desc.color_targets.count,
+        temp
+    };
 
     for (int i = 0; i < desc.color_targets.count; ++i) {
         const rhi::Attachment& t = desc.color_targets[i];
@@ -2470,14 +2468,13 @@ void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc) {
 
     const VkRenderingInfo rendering_info = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea =
-            {
-                .offset = {desc.offset.x, desc.offset.y},
-                .extent = {desc.extent.x, desc.extent.y},
-            },
+        .renderArea{
+            .offset = {desc.offset.x, desc.offset.y},
+            .extent = {desc.extent.x, desc.extent.y},
+        },
         .layerCount = 1,
         .colorAttachmentCount = u32(desc.color_targets.count),
-        .pColorAttachments = rendering_attachment_infos,
+        .pColorAttachments = rendering_attachment_infos.data(),
         .pDepthAttachment = depth_attachment_exists ? &depth_attachment_info : nullptr,
     };
 

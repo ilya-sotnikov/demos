@@ -22,11 +22,9 @@ struct Arena {
     uchar* m_buffer;
     ptrdiff_t m_buffer_size;
     ptrdiff_t m_current_offset; // Relative to &m_buffer[0].
-    ptrdiff_t m_max_offset;
-    char m_name[32];
 
-    void init(void* backing_buffer, ptrdiff_t size, const char* name = nullptr);
-    void init(ptrdiff_t size, const char* name = nullptr); // Exits on allocation failure.
+    void init(void* backing_buffer, ptrdiff_t size);
+    void init(ptrdiff_t size); // Exits on allocation failure.
     void* alloc(ptrdiff_t size, ptrdiff_t align, int flags = FLAG_NONE);
     void* alloc_or_die(ptrdiff_t size, ptrdiff_t align, int flags = FLAG_NONE);
     void free_all();

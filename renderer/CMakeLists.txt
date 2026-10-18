@@ -47,6 +47,9 @@ set(SOURCES
     src/common.hpp
     src/arena.hpp
     src/arena.cpp
+    src/temp_allocator.hpp
+    src/temp_allocator.cpp
+    src/containers.hpp
     src/camera.hpp
     src/camera.cpp
     src/extern.cpp

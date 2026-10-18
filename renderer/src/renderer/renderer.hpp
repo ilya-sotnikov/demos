@@ -48,7 +48,6 @@ struct Renderer {
         rhi::Texture resolved_render_texture;
     };
 
-    Arena m_scratch_arena;
     SDL_Window* m_window;
     rhi::Queue m_graphics_queue;
     rhi::Queue m_compute_queue;
