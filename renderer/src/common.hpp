@@ -114,21 +114,21 @@ struct Vec3I32 {
 template<typename T>
 struct Slice {
     T* data;
-    int count;
+    u64 count;
 
-    Slice(T* arr, int size) {
+    Slice(T* arr, u64 size) {
         data = arr;
         count = size;
     }
 
-    template<int N>
+    template<u64 N>
     Slice(const T (&arr)[N]) {
         data = arr;
         count = N;
     }
 
-    int get_size_bytes() const {
-        return count * int(sizeof(T));
+    u64 get_size_bytes() const {
+        return count * sizeof(T);
     }
 
     // For range-based for loops.
@@ -148,18 +148,18 @@ struct Slice {
         return data + count;
     }
 
-    T& operator[](int i) {
+    T& operator[](u64 i) {
         return data[i];
     }
 
-    const T& operator[](int i) const {
+    const T& operator[](u64 i) const {
         return data[i];
     }
 };
 
 struct MemorySlice {
     void* data;
-    ptrdiff_t count;
+    u64 count;
 };
 
 template<typename Function>

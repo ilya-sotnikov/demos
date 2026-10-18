@@ -1,6 +1,9 @@
 #include "temp_allocator.hpp"
 
 #include "utils.hpp"
+#include "math/utils.hpp"
+
+#include <EASTL/vector.h>
 
 TempAllocator::TempAllocator(const char* name): m_name{name}, m_arena{nullptr} {}
 
@@ -24,12 +27,14 @@ TempAllocator& TempAllocator::operator=(const TempAllocator& other) {
 void* TempAllocator::allocate(size_t n, int flags) {
     UNUSED(flags);
 
-    return m_arena->alloc_or_die(ptrdiff_t(n), Arena::FLAG_NO_ZERO);
+    return m_arena->alloc_or_die(ptrdiff_t(n), EASTL_ALLOCATOR_MIN_ALIGNMENT, Arena::FLAG_NO_ZERO);
 }
 
 void* TempAllocator::allocate(size_t n, size_t alignment, size_t offset, int flags) {
     ASSERT(offset == 0); // TODO
     UNUSED(flags);
+
+    alignment = math::max(alignment, size_t(EASTL_ALLOCATOR_MIN_ALIGNMENT));
 
     return m_arena->alloc_or_die(ptrdiff_t(n), ptrdiff_t(alignment), Arena::FLAG_NO_ZERO);
 }
@@ -56,26 +61,30 @@ bool operator!=(const TempAllocator& lhs, const TempAllocator& rhs) {
 }
 
 // TODO: Thread local.
-// TODO: Arena stack for nested scopes.
 // TODO: Allocate in global heap if on alloc failure.
-static Arena s_arena;
-static int s_scope_idx;
-
-void init_temp_allocator() {
-    s_arena.init(TEMP_ALLOCATOR_SIZE);
-}
+static eastl::vector<Arena*> s_arenas;
+static int s_scope;
+static int s_max_scope;
 
 TempAllocator get_temp_allocator() {
-    const TempAllocator result{&s_arena, "temp_allocator"};
-    return result;
+    DEBUG_ASSERT(s_scope > 0);
+
+    return {s_arenas[s_scope - 1], "temp_allocator"};
 }
 
 TempScope::TempScope() {
-    ++s_scope_idx;
-    s_arena.free_all();
+    const int curr_scope_idx = s_scope;
+    ++s_scope;
+    if (s_scope > s_max_scope) {
+        s_arenas.resize(s_scope);
+        s_arenas[curr_scope_idx] = new Arena{};
+        s_arenas[curr_scope_idx]->init(TEMP_ALLOCATOR_SIZE);
+        s_max_scope = s_scope;
+    }
+    s_arenas[curr_scope_idx]->free_all();
 }
 
 TempScope::~TempScope() {
-    DEBUG_ASSERT(s_scope_idx == 1);
-    --s_scope_idx;
+    DEBUG_ASSERT(s_scope > 0);
+    --s_scope;
 }

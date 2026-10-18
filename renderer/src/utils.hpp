@@ -11,7 +11,7 @@ namespace utils {
 
 struct FileData {
     void* data;
-    long size;
+    u64 size;
 };
 
 // Gives ownership, call free()

@@ -49,7 +49,7 @@ utils::FileData utils::file_read(const char* path) {
     }
 
     result.data = res;
-    result.size = file_size;
+    result.size = u64(file_size);
 
     return result;
 }

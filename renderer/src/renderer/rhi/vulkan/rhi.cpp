@@ -199,9 +199,11 @@ static bool get_queue(
 ) {
     DEBUG_ASSERT(device);
 
+    TEMP_ALLOCATOR(temp);
+
     u32 queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties2(device, &queue_family_count, nullptr);
-    eastl::vector<VkQueueFamilyProperties2> queue_families(queue_family_count);
+    TempVector<VkQueueFamilyProperties2> queue_families{queue_family_count, temp};
     for (u32 i = 0; i < queue_family_count; ++i) {
         queue_families[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
     }
@@ -248,7 +250,7 @@ static VkImageAspectFlags vk_aspect_flags_from_format(VkFormat format) {
 
 static bool create_shader(
     ShaderImpl& shader,
-    eastl::vector<VkDescriptorSetLayoutBinding>& descriptor_set_layout_bindings,
+    TempVector<VkDescriptorSetLayoutBinding>& descriptor_set_layout_bindings,
     VkDevice device,
     Slice<u8> bytecode
 ) {
@@ -257,7 +259,7 @@ static bool create_shader(
 
     const VkShaderModuleCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = size_t(bytecode.count),
+        .codeSize = bytecode.count,
         .pCode = reinterpret_cast<const u32*>(bytecode.data),
     };
 
@@ -269,7 +271,7 @@ static bool create_shader(
     // TODO: C API.
     spirv_cross::Compiler compiler{
         reinterpret_cast<const u32*>(bytecode.data),
-        size_t(bytecode.count) / sizeof(u32)
+        bytecode.count / sizeof(u32)
     };
 
     const spirv_cross::SmallVector<spirv_cross::EntryPoint> entry_points =
@@ -459,6 +461,8 @@ void rhi::create(SDL_Window* window) {
 
     // Instance.
     {
+        TEMP_ALLOCATOR(temp);
+
         u32 vulkan_api_version = 0;
         VK_CHECK(vkEnumerateInstanceVersion(&vulkan_api_version));
         if (vulkan_api_version < VK_API_VERSION_1_4) {
@@ -483,14 +487,14 @@ void rhi::create(SDL_Window* window) {
             SDL_ERROR("SDL_Vulkan_GetInstanceExtensions");
         }
 
-        eastl::vector<const char*> required_extensions{sdl_exts, sdl_exts + sdl_ext_count};
+        TempVector<const char*> required_extensions{sdl_exts, sdl_exts + sdl_ext_count, temp};
 #ifdef RHI_ENABLE_DEBUG_UTILS
         required_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
         u32 ext_count = 0;
         VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, nullptr));
-        eastl::vector<VkExtensionProperties> available_exts(ext_count);
+        TempVector<VkExtensionProperties> available_exts{ext_count, temp};
         VK_CHECK(
             vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, available_exts.data())
         );
@@ -526,9 +530,11 @@ void rhi::create(SDL_Window* window) {
 
     // Physical device.
     {
+        TEMP_ALLOCATOR(temp);
+
         u32 physical_device_count = 0;
         VK_CHECK(vkEnumeratePhysicalDevices(s_ctx.instance, &physical_device_count, nullptr));
-        eastl::vector<VkPhysicalDevice> physical_devices(physical_device_count);
+        TempVector<VkPhysicalDevice> physical_devices{physical_device_count, temp};
         VK_CHECK(vkEnumeratePhysicalDevices(
             s_ctx.instance,
             &physical_device_count,
@@ -564,9 +570,10 @@ void rhi::create(SDL_Window* window) {
                 &queue_family_property_count,
                 nullptr
             );
-            eastl::vector<VkQueueFamilyProperties2> queue_family_properties(
-                queue_family_property_count
-            );
+            TempVector<VkQueueFamilyProperties2> queue_family_properties{
+                queue_family_property_count,
+                temp
+            };
             for (u32 j = 0; j < queue_family_property_count; ++j) {
                 queue_family_properties[j].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
             }
@@ -746,6 +753,8 @@ void rhi::create(SDL_Window* window) {
 
     // Logical device, queue.
     {
+        TEMP_ALLOCATOR(temp);
+
         // Already checked when picking a physical device.
         u32 graphics_queue_count = 0;
         bool result = get_queue(
@@ -844,7 +853,7 @@ void rhi::create(SDL_Window* window) {
             },
         };
 
-        eastl::vector<f32> queue_priorities;
+        TempVector<f32> queue_priorities{temp};
         queue_priorities.resize(
             math::max(
                 s_ctx.graphics_queue_idxs.size(),
@@ -1660,7 +1669,9 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
 rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc) {
     DEBUG_ASSERT(desc.bytecode.count > 0);
 
-    eastl::vector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings;
+    TEMP_ALLOCATOR(temp);
+
+    TempVector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings{temp};
     descriptor_set_layout_bindings.reserve(32);
     ShaderImpl shader{};
     DEFER(vkDestroyShaderModule(s_ctx.device, shader.module, nullptr));
@@ -1671,9 +1682,10 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
 
     // Remove duplicates.
     bool binding_used[32]{};
-    eastl::vector<VkDescriptorSetLayoutBinding> unique_descriptor_set_layout_bindings(
-        descriptor_set_layout_bindings.size()
-    );
+    TempVector<VkDescriptorSetLayoutBinding> unique_descriptor_set_layout_bindings{
+        descriptor_set_layout_bindings.size(),
+        temp
+    };
     size_t unique_binding_count = 0;
     for (const VkDescriptorSetLayoutBinding& b: descriptor_set_layout_bindings) {
         ASSERT(b.binding < ARRAY_SIZE(binding_used));
@@ -1768,9 +1780,10 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
         &pipeline.pipeline
     ));
 
-    eastl::vector<VkDescriptorUpdateTemplateEntry> descriptor_update_template_entries(
-        unique_descriptor_set_layout_bindings.size()
-    );
+    TempVector<VkDescriptorUpdateTemplateEntry> descriptor_update_template_entries{
+        unique_descriptor_set_layout_bindings.size(),
+        temp
+    };
 
     for (size_t i = 0; i < unique_descriptor_set_layout_bindings.size(); ++i) {
         const VkDescriptorUpdateTemplateEntry entry = {
@@ -1821,9 +1834,11 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
 rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& desc) {
     DEBUG_ASSERT(desc.bytecodes.count > 0);
 
-    eastl::vector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings;
+    TEMP_ALLOCATOR(temp);
+
+    TempVector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings{temp};
     descriptor_set_layout_bindings.reserve(32);
-    eastl::vector<ShaderImpl> shaders(size_t(desc.bytecodes.count));
+    TempVector<ShaderImpl> shaders{desc.bytecodes.count, temp};
 
     bool failed = true;
     PipelineImpl pipeline{};
@@ -1846,9 +1861,9 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     );
     // clang-format on
 
-    for (int i = 0; i < desc.bytecodes.count; ++i) {
+    for (size_t i = 0; i < desc.bytecodes.count; ++i) {
         if (!create_shader(
-                shaders[size_t(i)],
+                shaders[i],
                 descriptor_set_layout_bindings,
                 s_ctx.device,
                 *(desc.bytecodes.begin() + i)
@@ -1870,9 +1885,10 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
 
     // Remove duplicates.
     bool binding_used[32]{};
-    eastl::vector<VkDescriptorSetLayoutBinding> unique_descriptor_set_layout_bindings(
-        descriptor_set_layout_bindings.size()
-    );
+    TempVector<VkDescriptorSetLayoutBinding> unique_descriptor_set_layout_bindings{
+        descriptor_set_layout_bindings.size(),
+        temp
+    };
     size_t unique_binding_count = 0;
     for (const VkDescriptorSetLayoutBinding& b: descriptor_set_layout_bindings) {
         ASSERT(b.binding < ARRAY_SIZE(binding_used));
@@ -1929,7 +1945,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     };
     VK_CHECK_HANDLE(vkCreatePipelineLayout(s_ctx.device, &layout_info, nullptr, &pipeline.layout));
 
-    eastl::vector<VkPipelineShaderStageCreateInfo> shader_stage_infos(shaders.size());
+    TempVector<VkPipelineShaderStageCreateInfo> shader_stage_infos{shaders.size(), temp};
     for (size_t i = 0; i < shaders.size(); ++i) {
         shader_stage_infos[i] = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -1938,10 +1954,6 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
             .pName = "main",
         };
     }
-
-    // TODO: Well, I have to choose if I care about the performance for this
-    // function, if not then eastl::vector is fine.
-    TEMP_ALLOCATOR(temp);
 
     TempVector<VkFormat> color_attachment_formats{desc.color_targets.count, temp};
     for (int i = 0; i < desc.color_targets.count; ++i) {
@@ -2052,9 +2064,10 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         &pipeline.pipeline
     ));
 
-    eastl::vector<VkDescriptorUpdateTemplateEntry> descriptor_update_template_entries(
-        unique_descriptor_set_layout_bindings.size()
-    );
+    TempVector<VkDescriptorUpdateTemplateEntry> descriptor_update_template_entries{
+        unique_descriptor_set_layout_bindings.size(),
+        temp
+    };
 
     for (size_t i = 0; i < unique_descriptor_set_layout_bindings.size(); ++i) {
         const VkDescriptorUpdateTemplateEntry entry = {
@@ -2610,6 +2623,8 @@ void rhi::cmd_bind_texture_descriptor_set(CommandBuffer cb, rhi::Pipeline pipeli
 }
 
 void rhi::create_swapchain(Vec2U32 size) {
+    TEMP_ALLOCATOR(temp);
+
     rhi::device_wait_idle();
 
     rhi::destroy_swapchain();
@@ -2643,7 +2658,7 @@ void rhi::create_swapchain(Vec2U32 size) {
         nullptr
     );
     DEBUG_ASSERT(surface_format_count > 0);
-    eastl::vector<VkSurfaceFormatKHR> surface_formats(surface_format_count);
+    TempVector<VkSurfaceFormatKHR> surface_formats{surface_format_count, temp};
     vkGetPhysicalDeviceSurfaceFormatsKHR(
         s_ctx.physical_device,
         s_ctx.surface,
@@ -2670,7 +2685,7 @@ void rhi::create_swapchain(Vec2U32 size) {
         ASSERT(0);
     }
 
-    s_ctx.swapchain.min_image_count = eastl::max(3u, surface_capabilities.minImageCount);
+    s_ctx.swapchain.min_image_count = math::max(3u, surface_capabilities.minImageCount);
     const u32 max_image_count = surface_capabilities.maxImageCount;
     if (surface_capabilities.maxImageCount > 0 && max_image_count < s_ctx.swapchain.min_image_count)
     {
@@ -2720,7 +2735,7 @@ void rhi::create_swapchain(Vec2U32 size) {
         &swapchain_texture_count,
         nullptr
     ));
-    eastl::vector<VkImage> images(swapchain_texture_count);
+    TempVector<VkImage> images{swapchain_texture_count, temp};
     VK_CHECK(vkGetSwapchainImagesKHR(
         s_ctx.device,
         s_ctx.swapchain.swapchain,
@@ -2728,7 +2743,7 @@ void rhi::create_swapchain(Vec2U32 size) {
         images.data()
     ));
 
-    eastl::vector<TextureImpl> textures(swapchain_texture_count);
+    TempVector<TextureImpl> textures{swapchain_texture_count, temp};
 
     for (u32 i = 0; i < swapchain_texture_count; ++i) {
         textures[i].image = images[i];

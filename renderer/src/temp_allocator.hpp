@@ -33,7 +33,6 @@ struct TempScope {
     ~TempScope();
 };
 
-void init_temp_allocator();
 TempAllocator get_temp_allocator();
 
 #define TEMP_ALLOCATOR(temp_) \

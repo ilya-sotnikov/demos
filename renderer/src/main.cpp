@@ -222,8 +222,6 @@ static void dir_to_yaw_pitch_deg(f32& yaw, f32& pitch, Vec3 dir) {
 }
 
 int main() {
-    init_temp_allocator();
-
     Renderer renderer{};
 
     if (!renderer.init()) {
