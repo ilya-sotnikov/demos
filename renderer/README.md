@@ -47,41 +47,42 @@ Also, task shaders are very slow on RDNA 3 (and probably others, including RDNA 
 - debug passes are not shown
 
 ```
-CullEarly (C)
+cull_early (C)
   |
-VisBufEarly (G)
+vis_buf_early (G)
   |
-DepthReduce (C)
+depth_reduce (C)
   |
-CullLate (C)
+cull_late (C)
   |
-VisBufLate (G)
+vis_buf_late (G)
   |
-  +-------------------------+
-  |                         |
-CsmCull (C)               DepthViewQuarterRes (C)
-  |                         |
-CSM (G)                   SSAO (C)
-  |                         |
-  +--------------------+  BlurX (C)
-  |                    |    |
-Fog (C)                |  BlurY (C)
-  |                    |    |
-BlurX (C)              |  Upsample (C)
-  |                    |    |
-BlurY (C)              +----+
+  +--------------------------+
+  |                          |
+csm_cull (C)               depth_view_quarter_res (C)
+  |                          |
+csm (G)                    ssao (C)
+  |                          |
+  +---------------------+  blur_x (C)
+  |                     |    |
+fog (C)                 |  blur_y (C)
+  |                     |    |
+blur_x (C)              |  upsample (C)
+  |                     |    |
+blur_y (C)              +----+
   |
-Render (C)
+render (C)
   |
-TaaResolve (C)
+taa_resolve (C)
   |
-Fullscreen (G)
+fullscreen (G)
 ```
 
 ## Build and run
 
 Dependencies (included as git submodules):
 
+- EASTL
 - SDL
 - volk
 - VulkanMemoryAllocator

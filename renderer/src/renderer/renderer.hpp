@@ -11,6 +11,8 @@
 #include "shaders/shared_def.hlsli"
 #include "uniform_buffer_manager.hpp"
 
+#include <EASTL/vector.h>
+
 struct SDL_Window;
 
 struct Renderer {
@@ -70,7 +72,7 @@ struct Renderer {
     rhi::Texture m_depth_texture;
     rhi::Texture m_depth_view_quarter_res_texture;
     rhi::Texture m_depth_pyramid_texture;
-    std::vector<rhi::TextureDescriptor> m_depth_pyramid_mip_texture_descriptors;
+    eastl::vector<rhi::TextureDescriptor> m_depth_pyramid_mip_texture_descriptors;
     rhi::Pipeline m_visibility_pipeline;
     rhi::Pipeline m_depth_view_quarter_res_pipeline;
     rhi::Pipeline m_ambient_occlusion_pipeline;
@@ -112,7 +114,7 @@ struct Renderer {
     rhi::Sampler m_min_sampler;
     rhi::Sampler m_shadow_sampler;
     rhi::Sampler m_shadow_pcf_jitter_sampler;
-    std::vector<rhi::Texture> m_textures;
+    eastl::vector<rhi::Texture> m_textures;
     Vec2U32 m_window_size;
     Frame m_frame[rhi::FRAMES_IN_FLIGHT];
     f32 m_shadow_cascade_radii[RENDERER_SHADOW_MAP_CASCADE_COUNT];
@@ -145,7 +147,7 @@ struct Renderer {
     void set_sun_direction(f32 yaw, f32 pitch);
 
 private:
-    bool upload_textures(const std::vector<std::string>& texture_paths);
+    bool upload_textures(const eastl::vector<eastl::string>& texture_paths);
     void update_shadow_cascades();
 
     void visibility_buffer_pass(rhi::CommandBuffer cb, bool cull_late);

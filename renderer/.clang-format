@@ -26,6 +26,7 @@ BinPackParameters: false
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeBraces: Custom
 BreakBeforeTernaryOperators: true
+BreakAfterAttributes: Always
 BraceWrapping:
   AfterControlStatement: MultiLine
   AfterEnum: false

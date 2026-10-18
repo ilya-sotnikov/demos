@@ -9,8 +9,6 @@
 #include <ktxvulkan.h>
 #include <stdio.h>
 
-#include <vector>
-
 #include "math/mat4.hpp"
 #include "math/vec2.hpp"
 #include "utils.hpp"
@@ -65,14 +63,14 @@ static void cmd_full_barrier(rhi::CommandBuffer cb) {
 }
 
 // GPU gems 2, Chapter 17, Efficient Soft-Edged Shadows Using Pixel Shader Branching, Yury Uralsky.
-static std::vector<i8> create_shadow_jitter_offsets(
+static eastl::vector<i8> create_shadow_jitter_offsets(
     size_t size,
     size_t samples_u,
     size_t samples_v
 ) {
     u32 random_u32 = 1337;
 
-    std::vector<i8> result(size * size * samples_u * samples_v * 4 / 2);
+    eastl::vector<i8> result(size * size * samples_u * samples_v * 4 / 2);
 
     const size_t grid_size = samples_u * samples_v / 2;
 
@@ -325,7 +323,7 @@ bool Renderer::init() {
                 .debug_name = "shadow_pcf_jitter_texture",
             });
 
-            const std::vector<i8> jitter_offsets = create_shadow_jitter_offsets(
+            const eastl::vector<i8> jitter_offsets = create_shadow_jitter_offsets(
                 RENDERER_SHADOW_MAP_JITTER_OFFSETS_SIZE,
                 RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_U,
                 RENDERER_SHADOW_MAP_JITTER_OFFSETS_SAMPLES_V
@@ -417,15 +415,15 @@ bool Renderer::init() {
 
     // Scene.
     {
-        const std::string gltf_path = "../assets/main_sponza/NewSponza_Main_glTF_003.gltf";
+        const eastl::string gltf_path = "../assets/main_sponza/NewSponza_Main_glTF_003.gltf";
 
-        std::vector<Vertex> vertices;
-        std::vector<u32> indices;
-        std::vector<MeshPrimitive> mesh_primitives;
-        std::vector<rhi::DrawIndexedIndirectCommand> draw_cmds;
-        std::vector<DrawData> draw_data;
-        std::vector<Material> materials;
-        std::vector<std::string> texture_paths;
+        eastl::vector<Vertex> vertices;
+        eastl::vector<u32> indices;
+        eastl::vector<MeshPrimitive> mesh_primitives;
+        eastl::vector<rhi::DrawIndexedIndirectCommand> draw_cmds;
+        eastl::vector<DrawData> draw_data;
+        eastl::vector<Material> materials;
+        eastl::vector<eastl::string> texture_paths;
 
         if (!load_scene(
                 vertices,
@@ -1204,7 +1202,7 @@ void Renderer::set_sun_direction(f32 yaw, f32 pitch) {
     m_uniform_data.sun_color = calc_sun_color(m_uniform_data.sun_direction_world);
 }
 
-bool Renderer::upload_textures(const std::vector<std::string>& texture_paths) {
+bool Renderer::upload_textures(const eastl::vector<eastl::string>& texture_paths) {
     DEBUG_ASSERT(!texture_paths.empty());
 
     m_textures.resize(texture_paths.size());
@@ -1247,7 +1245,7 @@ bool Renderer::upload_textures(const std::vector<std::string>& texture_paths) {
         });
         DEFER(rhi::destroy_buffer(staging_buffer));
 
-        std::vector<rhi::BufferTextureCopy> copy_regions(mip_levels);
+        eastl::vector<rhi::BufferTextureCopy> copy_regions(mip_levels);
 
         for (u32 mip_level = 0; mip_level < mip_levels; ++mip_level) {
             ktx_size_t offset = 0;

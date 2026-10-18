@@ -2,7 +2,7 @@
 
 #include "common.hpp"
 
-#include <vector>
+#include <EASTL/vector.h>
 
 template<typename Handle, typename Resource>
 struct Pool {
@@ -64,7 +64,7 @@ private:
     // TODO: Fixed size.
     // TODO: Split to cold and hot data?
     // TODO: Generations are only relevant in debug builds.
-    std::vector<Resource> m_data;
-    std::vector<u32> m_generations;
-    std::vector<u32> m_free_list;
+    eastl::vector<Resource> m_data;
+    eastl::vector<u32> m_generations;
+    eastl::vector<u32> m_free_list;
 };

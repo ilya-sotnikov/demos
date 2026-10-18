@@ -14,6 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(BUILD_SHARED_LIBS OFF)
 
+add_subdirectory(lib/EASTL)
 add_subdirectory(lib/SDL)
 add_subdirectory(lib/volk)
 add_subdirectory(lib/VulkanMemoryAllocator)
@@ -94,6 +95,7 @@ set(SOURCES
 )
 
 set(LIBS
+    EASTL
     SDL3::SDL3
     volk
     cgltf
