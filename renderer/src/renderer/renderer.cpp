@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 
+#include "containers.hpp"
 #include "renderer/rhi/vulkan/type_convert.hpp"
 
 #include <SDL3/SDL.h>
@@ -148,8 +149,6 @@ static Vec3 calc_sun_color(Vec3 sun_direction_world) {
 }
 
 bool Renderer::init() {
-    m_scratch_arena.init(16'000'000);
-
     // SDL.
     {
 #ifdef __linux__
@@ -909,11 +908,10 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(frag_data.data));
 
         m_visibility_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes =
-                {
-                    {static_cast<u8*>(vert_data.data), int(vert_data.size)},
-                    {static_cast<u8*>(frag_data.data), int(frag_data.size)},
-                },
+            .bytecodes{
+                {static_cast<u8*>(vert_data.data), vert_data.size},
+                {static_cast<u8*>(frag_data.data), frag_data.size},
+            },
             .cull = rhi::CULL_CW,
             .depth_format = rhi::get_texture_format(m_depth_texture),
             .depth_mask = rhi::DEPTH_READ_BIT | rhi::DEPTH_WRITE_BIT,
@@ -935,15 +933,13 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(frag_data.data));
 
         m_debug_draw_rect_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes =
-                {
-                    {static_cast<u8*>(vert_data.data), int(vert_data.size)},
-                    {static_cast<u8*>(frag_data.data), int(frag_data.size)},
-                },
-            .color_targets =
-                {
-                    {.format = rhi::get_texture_format(m_render_texture)},
-                },
+            .bytecodes{
+                {static_cast<u8*>(vert_data.data), vert_data.size},
+                {static_cast<u8*>(frag_data.data), frag_data.size},
+            },
+            .color_targets{
+                {.format = rhi::get_texture_format(m_render_texture)},
+            },
             .debug_name = "debug_draw_rect_pass",
         });
         if (!m_debug_draw_rect_pipeline) {
@@ -958,11 +954,10 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(frag_data.data));
 
         m_fullscreen_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes =
-                {
-                    {static_cast<u8*>(vert_data.data), int(vert_data.size)},
-                    {static_cast<u8*>(frag_data.data), int(frag_data.size)},
-                },
+            .bytecodes{
+                {static_cast<u8*>(vert_data.data), vert_data.size},
+                {static_cast<u8*>(frag_data.data), frag_data.size},
+            },
             .color_targets = {{.format = rhi::get_texture_format(rhi::get_swapchain_texture(0))}},
             .debug_name = "fullscreen_pass",
         });
@@ -978,11 +973,10 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(frag_data.data));
 
         m_debug_grad_error_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes =
-                {
-                    {static_cast<u8*>(vert_data.data), int(vert_data.size)},
-                    {static_cast<u8*>(frag_data.data), int(frag_data.size)},
-                },
+            .bytecodes{
+                {static_cast<u8*>(vert_data.data), vert_data.size},
+                {static_cast<u8*>(frag_data.data), frag_data.size},
+            },
             .cull = rhi::CULL_CW,
             .depth_format = rhi::get_texture_format(m_depth_texture),
             .depth_mask = rhi::DEPTH_READ_BIT | rhi::DEPTH_WRITE_BIT,
@@ -1001,11 +995,10 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(frag_data.data));
 
         m_shadow_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes =
-                {
-                    {static_cast<u8*>(vert_data.data), int(vert_data.size)},
-                    {static_cast<u8*>(frag_data.data), int(frag_data.size)},
-                },
+            .bytecodes{
+                {static_cast<u8*>(vert_data.data), vert_data.size},
+                {static_cast<u8*>(frag_data.data), frag_data.size},
+            },
             .cull = rhi::CULL_CW,
             .depth_format = rhi::get_texture_format(m_shadow_texture),
             .depth_mask = rhi::DEPTH_READ_BIT | rhi::DEPTH_WRITE_BIT,
@@ -1023,7 +1016,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_cull_early_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "cull_early_pass",
         });
         if (!m_cull_early_pipeline) {
@@ -1036,7 +1029,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_cull_late_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "cull_late_pass",
         });
         if (!m_cull_late_pipeline) {
@@ -1049,7 +1042,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_shadow_cull_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "shadow_cull_pass",
         });
         if (!m_cull_late_pipeline) {
@@ -1062,7 +1055,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_visibility_render_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .uses_bindless_textures = true,
             .debug_name = "visibility_render_pass",
         });
@@ -1076,7 +1069,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_taa_resolve_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "taa_resolve_pass",
         });
         if (!m_taa_resolve_pipeline) {
@@ -1089,7 +1082,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_depth_reduce_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "depth_reduce_pass",
         });
         if (!m_depth_reduce_pipeline) {
@@ -1102,7 +1095,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_depth_view_quarter_res_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "depth_view_quarter_res_pass",
         });
         if (!m_depth_view_quarter_res_pipeline) {
@@ -1115,7 +1108,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_ambient_occlusion_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "ambient_occlusion_pass",
         });
         if (!m_ambient_occlusion_pipeline) {
@@ -1128,7 +1121,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_ambient_occlusion_blur_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "ambient_occlusion_blur_pass",
         });
         if (!m_ambient_occlusion_blur_pipeline) {
@@ -1141,7 +1134,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_ambient_occlusion_upsample_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "ambient_occlusion_upsample_pass",
         });
         if (!m_ambient_occlusion_upsample_pipeline) {
@@ -1154,7 +1147,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_fog_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "fog_pass",
         });
         if (!m_fog_pipeline) {
@@ -1167,7 +1160,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_blur_fog_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "blur_fog_pass",
         });
         if (!m_blur_fog_pipeline) {
@@ -1180,7 +1173,7 @@ bool Renderer::recompile_pipelines() {
         DEFER(free(comp_data.data));
 
         m_debug_draw_fill_cmd_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), int(comp_data.size)},
+            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
             .debug_name = "debug_draw_fill_cmd_pass",
         });
         if (!m_debug_draw_fill_cmd_pipeline) {
@@ -1204,6 +1197,8 @@ void Renderer::set_sun_direction(f32 yaw, f32 pitch) {
 
 bool Renderer::upload_textures(const eastl::vector<eastl::string>& texture_paths) {
     DEBUG_ASSERT(!texture_paths.empty());
+
+    TEMP_ALLOCATOR(temp);
 
     m_textures.resize(texture_paths.size());
 
@@ -1245,7 +1240,7 @@ bool Renderer::upload_textures(const eastl::vector<eastl::string>& texture_paths
         });
         DEFER(rhi::destroy_buffer(staging_buffer));
 
-        eastl::vector<rhi::BufferTextureCopy> copy_regions(mip_levels);
+        TempVector<rhi::BufferTextureCopy> copy_regions{mip_levels, temp};
 
         for (u32 mip_level = 0; mip_level < mip_levels; ++mip_level) {
             ktx_size_t offset = 0;
@@ -1292,7 +1287,7 @@ bool Renderer::upload_textures(const eastl::vector<eastl::string>& texture_paths
             cb,
             staging_buffer,
             m_textures[i],
-            {copy_regions.data(), int(copy_regions.size())}
+            {copy_regions.data(), copy_regions.size()}
         );
 
         rhi::end_command_buffer(cb);

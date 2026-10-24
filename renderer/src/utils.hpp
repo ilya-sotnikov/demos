@@ -5,12 +5,13 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 namespace utils {
 
 struct FileData {
     void* data;
-    long size;
+    u64 size;
 };
 
 // Gives ownership, call free()

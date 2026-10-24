@@ -4,6 +4,7 @@
 #include "renderer/renderer.hpp"
 #include "time_meter.hpp"
 #include "utils.hpp"
+#include "temp_allocator.hpp"
 
 #include <SDL3/SDL.h>
 #include <imgui_impl_sdl3.h>

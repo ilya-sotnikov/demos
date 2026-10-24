@@ -9,9 +9,9 @@
 template<typename T>
 struct SliceArg {
     const T* data;
-    int count;
+    u64 count;
 
-    SliceArg(T* arr, int size) {
+    SliceArg(T* arr, u64 size) {
         data = arr;
         count = size;
     }
@@ -49,11 +49,11 @@ struct SliceArg {
         return data + count;
     }
 
-    T& operator[](int i) {
+    T& operator[](u64 i) {
         return data[i];
     }
 
-    const T& operator[](int i) const {
+    const T& operator[](u64 i) const {
         return data[i];
     }
 };

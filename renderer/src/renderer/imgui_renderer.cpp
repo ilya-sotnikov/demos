@@ -123,11 +123,10 @@ bool ImguiRenderer::init(
         DEFER(free(frag_data.data));
 
         m_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes =
-                {
-                    {static_cast<u8*>(vert_data.data), int(vert_data.size)},
-                    {static_cast<u8*>(frag_data.data), int(frag_data.size)},
-                },
+            .bytecodes{
+                {static_cast<u8*>(vert_data.data), vert_data.size},
+                {static_cast<u8*>(frag_data.data), frag_data.size},
+            },
             .stencil_format = rhi::FORMAT_S8_UINT,
             .color_targets = {{
                 .format = color_format,
