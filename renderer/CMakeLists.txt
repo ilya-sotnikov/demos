@@ -18,8 +18,10 @@ add_subdirectory(lib/EASTL)
 add_subdirectory(lib/SDL)
 add_subdirectory(lib/volk)
 add_subdirectory(lib/VulkanMemoryAllocator)
-add_subdirectory(lib/SPIRV-Cross)
 add_subdirectory(lib/meshoptimizer)
+
+set(SPIRV_REFLECT_STATIC_LIB ON)
+add_subdirectory(lib/SPIRV-Reflect)
 
 set(KTX_FEATURE_TESTS OFF)
 add_subdirectory(lib/KTX-Software)
@@ -106,7 +108,7 @@ set(LIBS
     ktx
     imgui
     meshoptimizer
-    spirv-cross-cpp
+    spirv-reflect-static
 )
 
 add_executable(${PROJECT_NAME}

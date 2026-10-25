@@ -34,7 +34,7 @@
 
 struct SDL_Window;
 
-// #define RHI_ENABLE_DEBUG_UTILS
+#define RHI_ENABLE_DEBUG_UTILS
 
 namespace rhi {
 

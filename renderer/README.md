@@ -86,7 +86,7 @@ Dependencies (included as git submodules):
 - SDL
 - volk
 - VulkanMemoryAllocator
-- SPIRV-Cross
+- SPIRV-Reflect
 - imgui
 - cgltf
 - KTX-Software

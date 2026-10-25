@@ -10,17 +10,7 @@
 #include "renderer/rhi/vulkan/type_convert.hpp"
 #include "utils.hpp"
 
-#if defined(__clang__)
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wsign-conversion"
-#endif
-
-#include <spirv_cross/spirv_cross.hpp>
-
-#if defined(__clang__)
-    #pragma clang diagnostic pop
-#endif
-
+#include <spirv_reflect.h>
 #include <SDL3/SDL_vulkan.h>
 
 #include <string.h>
@@ -268,156 +258,67 @@ static bool create_shader(
         return false;
     }
 
-    // TODO: C API.
-    spirv_cross::Compiler compiler{
-        reinterpret_cast<const u32*>(bytecode.data),
-        bytecode.count / sizeof(u32)
-    };
-
-    const spirv_cross::SmallVector<spirv_cross::EntryPoint> entry_points =
-        compiler.get_entry_points_and_stages();
+    SpvReflectShaderModule module{};
+    SpvReflectResult result = spvReflectCreateShaderModule(bytecode.count, bytecode.data, &module);
+    ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
+    DEFER(spvReflectDestroyShaderModule(&module));
 
     // NOTE: AFAIK in dxc multiple entry points are buggy. Also, I've encountered a strange bug (?)
     // with multiple compute shader entry points in Nsight Graphics, when profiling, some samples
     // always end up in the first entry point in a file when in reality it should not execute at
     // all. Maybe PEBKAC, but for now I'll just always use 1 entry point per file.
-    ASSERT(entry_points.size() == 1);
+    ASSERT(module.entry_point_count == 1);
 
-    switch (entry_points[0].execution_model) {
-        case spirv_cross::ExecutionModelVertex:
-            shader.stage = VK_SHADER_STAGE_VERTEX_BIT;
-            break;
-        case spirv_cross::ExecutionModelFragment:
-            shader.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-            break;
-        case spirv_cross::ExecutionModelGLCompute:
-            shader.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-            break;
-        case spirv_cross::ExecutionModelMeshEXT:
-            shader.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
-            break;
-        case spirv_cross::ExecutionModelTaskEXT:
-            shader.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
-            break;
-        default:
-            fprintf(
-                stderr,
-                "unhandled shader execution model: %d",
-                entry_points[0].execution_model
-            );
-            return false;
-    }
+    const SpvReflectEntryPoint* const entry_point = spvReflectGetEntryPoint(&module, "main");
+    ASSERT(entry_point);
 
-    // TODO: would probably fail when specified by specialization constants,
-    // idk, not using them for it so far.
+    shader.stage = static_cast<VkShaderStageFlagBits>(entry_point->shader_stage);
     shader.local_size = {
-        compiler.get_execution_mode_argument(spirv_cross::ExecutionMode::ExecutionModeLocalSize, 0),
-        compiler.get_execution_mode_argument(spirv_cross::ExecutionMode::ExecutionModeLocalSize, 1),
-        compiler.get_execution_mode_argument(spirv_cross::ExecutionMode::ExecutionModeLocalSize, 2),
+        entry_point->local_size.x,
+        entry_point->local_size.y,
+        entry_point->local_size.z,
     };
 
-    spirv_cross::ShaderResources shader_resources = compiler.get_shader_resources();
+    u32 set_count = 0;
+    result = spvReflectEnumerateDescriptorSets(&module, &set_count, nullptr);
+    ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
+    ASSERT(set_count <= 2);
 
-    for (const spirv_cross::Resource& r: shader_resources.separate_images) {
-        if (compiler.get_decoration(r.id, spv::DecorationDescriptorSet) == 1) {
+    TEMP_ALLOCATOR(temp);
+
+    TempVector<SpvReflectDescriptorSet*> sets{set_count, temp};
+    result = spvReflectEnumerateDescriptorSets(&module, &set_count, sets.data());
+    ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
+
+    for (u64 set_idx = 0; set_idx < set_count; ++set_idx) {
+        const SpvReflectDescriptorSet* const set = sets[set_idx];
+
+        if (set->set == 1) {
             // Skip descriptor set 1 (bindless textures).
+            // TODO: Remove explicit bool uses_bindless_textures.
             continue;
         }
 
-        const VkDescriptorSetLayoutBinding binding = {
-            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
-            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-        };
+        for (u64 binding_idx = 0; binding_idx < set->binding_count; ++binding_idx) {
+            const SpvReflectDescriptorBinding* const b = set->bindings[binding_idx];
 
-        descriptor_set_layout_bindings.push_back(binding);
-    }
+            ASSERT(b->count == 1);
 
-    for (const spirv_cross::Resource& r: shader_resources.separate_samplers) {
-        const VkDescriptorSetLayoutBinding binding = {
-            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
-            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-        };
+            const VkDescriptorSetLayoutBinding binding = {
+                .binding = b->binding,
+                .descriptorType = static_cast<VkDescriptorType>(b->descriptor_type),
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_ALL,
+            };
 
-        descriptor_set_layout_bindings.push_back(binding);
-    }
-
-    for (const spirv_cross::Resource& r: shader_resources.storage_images) {
-        const VkDescriptorSetLayoutBinding binding = {
-            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-        };
-
-        descriptor_set_layout_bindings.push_back(binding);
-    }
-
-    for (const spirv_cross::Resource& r: shader_resources.sampled_images) {
-        const VkDescriptorSetLayoutBinding binding = {
-            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-        };
-
-        descriptor_set_layout_bindings.push_back(binding);
-    }
-
-    for (const spirv_cross::Resource& r: shader_resources.uniform_buffers) {
-        const VkDescriptorSetLayoutBinding binding = {
-            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-        };
-
-        descriptor_set_layout_bindings.push_back(binding);
-    }
-
-    for (const spirv_cross::Resource& r: shader_resources.storage_buffers) {
-        const VkDescriptorSetLayoutBinding binding = {
-            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-        };
-
-        descriptor_set_layout_bindings.push_back(binding);
-    }
-
-    for (const spirv_cross::Resource& r: shader_resources.acceleration_structures) {
-        const VkDescriptorSetLayoutBinding binding = {
-            .binding = compiler.get_decoration(r.id, spv::DecorationBinding),
-            .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-        };
-
-        descriptor_set_layout_bindings.push_back(binding);
-    }
-
-    if (!shader_resources.push_constant_buffers.empty()) {
-        ASSERT(shader_resources.push_constant_buffers.size() == 1);
-
-        const spirv_cross::SPIRType type =
-            compiler.get_type(shader_resources.push_constant_buffers[0].base_type_id);
-        const size_t size = compiler.get_declared_struct_size(type);
-
-        if (size > size_t(rhi::PUSH_CONSTANTS_MAX_SIZE_BYTES)) {
-            fprintf(
-                stderr,
-                "vulkan: push constant size %zu > %d\n",
-                size,
-                rhi::PUSH_CONSTANTS_MAX_SIZE_BYTES
-            );
-            return false;
+            descriptor_set_layout_bindings.push_back(binding);
         }
+    }
 
-        shader.push_constant_size = u32(size);
+    const SpvReflectBlockVariable* const push_constant_block =
+        spvReflectGetPushConstantBlock(&module, 0, &result);
+    if (push_constant_block) {
+        shader.push_constant_size = push_constant_block->size;
     }
 
     return true;
