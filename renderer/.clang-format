@@ -45,7 +45,7 @@ DerivePointerAlignment: false
 FixNamespaceComments: true
 IncludeBlocks: Preserve
 IncludeIsMainRegex: '([-_](test|unittest))?$'
-IndentCaseLabels: true
+IndentCaseLabels: false
 IndentPPDirectives: BeforeHash
 IndentWidth: 4
 IndentWrappedFunctionNames: false

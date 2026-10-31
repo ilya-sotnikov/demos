@@ -8,24 +8,24 @@ void Camera::move(MoveDirection move, f32 delta_time) {
     const f32 delta_pos = m_speed * delta_time;
 
     switch (move) {
-        case MoveDirection::FORWARD:
-            m_position += m_direction * delta_pos;
-            break;
-        case MoveDirection::BACKWARD:
-            m_position -= m_direction * delta_pos;
-            break;
-        case MoveDirection::RIGHT:
-            m_position += m_right * delta_pos;
-            break;
-        case MoveDirection::LEFT:
-            m_position -= m_right * delta_pos;
-            break;
-        case MoveDirection::UP:
-            m_position += m_world_up * delta_pos;
-            break;
-        case MoveDirection::DOWN:
-            m_position -= m_world_up * delta_pos;
-            break;
+    case MoveDirection::FORWARD:
+        m_position += m_direction * delta_pos;
+        break;
+    case MoveDirection::BACKWARD:
+        m_position -= m_direction * delta_pos;
+        break;
+    case MoveDirection::RIGHT:
+        m_position += m_right * delta_pos;
+        break;
+    case MoveDirection::LEFT:
+        m_position -= m_right * delta_pos;
+        break;
+    case MoveDirection::UP:
+        m_position += m_world_up * delta_pos;
+        break;
+    case MoveDirection::DOWN:
+        m_position -= m_world_up * delta_pos;
+        break;
     }
 }
 

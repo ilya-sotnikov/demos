@@ -34,7 +34,7 @@
 
 struct SDL_Window;
 
-#define RHI_ENABLE_DEBUG_UTILS
+// #define RHI_ENABLE_DEBUG_UTILS
 
 namespace rhi {
 
@@ -63,6 +63,7 @@ enum MemoryType {
     MEMORY_TYPE_DEFAULT, // Device-local, host-visible, host-coherent.
     MEMORY_TYPE_DEFAULT_UNIFORM, // Device-local, host-visible, host-coherent, uniform.
     MEMORY_TYPE_DEVICE, // Device-local.
+    MEMORY_TYPE_COUNT,
 };
 
 enum Cull {
@@ -70,6 +71,7 @@ enum Cull {
     CULL_CW,
     CULL_ALL,
     CULL_NONE,
+    CULL_COUNT,
 };
 
 // clang-format off
@@ -98,6 +100,7 @@ enum BlendOp {
     BLEND_OP_REVERSE_SUBTRACT,
     BLEND_OP_MIN,
     BLEND_OP_MAX,
+    BLEND_OP_COUNT,
 };
 
 enum BlendFactor {
@@ -107,6 +110,7 @@ enum BlendFactor {
     BLEND_FACTOR_DST_COLOR,
     BLEND_FACTOR_SRC_ALPHA,
     BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+    BLEND_FACTOR_COUNT,
 };
 
 enum ColorComponentFlagBits : u32 {
@@ -124,6 +128,7 @@ enum Topology {
     TOPOLOGY_TRIANGLE_LIST,
     TOPOLOGY_TRIANGLE_STRIP,
     TOPOLOGY_TRIANGLE_FAN,
+    TOPOLOGY_COUNT,
 };
 
 enum TextureType {
@@ -131,16 +136,19 @@ enum TextureType {
     TEXTURE_TYPE_2D,
     TEXTURE_TYPE_3D,
     TEXTURE_TYPE_2D_ARRAY,
+    TEXTURE_TYPE_COUNT,
 };
 
 enum Filter {
     FILTER_NEAREST,
     FILTER_LINEAR,
+    FILTER_COUNT,
 };
 
 enum SamplerMipmapMode {
     SAMPLER_MIPMAP_MODE_NEAREST,
     SAMPLER_MIPMAP_MODE_LINEAR,
+    SAMPLER_MIPMAP_MODE_COUNT,
 };
 
 enum SamplerAddressMode {
@@ -149,6 +157,7 @@ enum SamplerAddressMode {
     SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
     SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+    SAMPLER_ADDRESS_MODE_COUNT,
 };
 
 enum CompareOp {
@@ -160,6 +169,7 @@ enum CompareOp {
     COMPARE_OP_NOT_EQUAL,
     COMPARE_OP_GREATER_OR_EQUAL,
     COMPARE_OP_ALWAYS,
+    COMPARE_OP_COUNT,
 };
 
 enum SamplerReductionMode {
@@ -168,10 +178,26 @@ enum SamplerReductionMode {
     SAMPLER_REDUCTION_MODE_MAX,
 };
 
-// TODO: Honestly, not worth it.
 enum Format {
-#define RHI_XFMT(rhi_format, vulkanFormat) rhi_format,
-#include "format_table.hpp"
+    FORMAT_UNDEFINED,
+    FORMAT_R8_UNORM,
+    FORMAT_R8G8B8A8_UNORM,
+    FORMAT_R8G8B8A8_SNORM,
+    FORMAT_B8G8R8A8_UNORM,
+    FORMAT_R16_SFLOAT,
+    FORMAT_R16G16_SFLOAT,
+    FORMAT_R32_SFLOAT,
+    FORMAT_R32G32_UINT,
+    FORMAT_R32G32_SFLOAT,
+    FORMAT_E5B9G9R9_UFLOAT_PACK32,
+    FORMAT_B10G11R11_UFLOAT_PACK32,
+    FORMAT_D32_SFLOAT,
+    FORMAT_D16_UNORM,
+    FORMAT_S8_UINT,
+    FORMAT_BC7_UNORM_BLOCK,
+    FORMAT_BC7_SRGB_BLOCK,
+    FORMAT_BC5_UNORM_BLOCK,
+    FORMAT_COUNT,
 };
 
 // clang-format off
@@ -187,22 +213,62 @@ enum TextureUsageFlagBits : u32
 using TextureUsageFlags = Flags;
 // clang-format on
 
+// clang-format off
 enum StageFlagBits : u32 {
-#define RHI_XSTAGE(rhi, bit, vulkan) rhi = bit,
-#include "stage_table.hpp"
+    STAGE_NONE =                        (1U << 0),
+    STAGE_DRAW_INDIRECT_BIT =           (1U << 1),
+    STAGE_VERTEX_INPUT_BIT =            (1U << 2),
+    STAGE_VERTEX_SHADER_BIT =           (1U << 3),
+    STAGE_FRAGMENT_SHADER_BIT =         (1U << 4),
+    STAGE_EARLY_FRAGMENT_TESTS_BIT =    (1U << 5),
+    STAGE_LATE_FRAGMENT_TESTS_BIT =     (1U << 6),
+    STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = (1U << 7),
+    STAGE_COMPUTE_SHADER_BIT =          (1U << 8),
+    STAGE_ALL_TRANSFER_BIT =            (1U << 9),
+    STAGE_TRANSFER_BIT =                (1U << 10),
+    STAGE_HOST_BIT =                    (1U << 11),
+    STAGE_ALL_GRAPHICS_BIT =            (1U << 12),
+    STAGE_ALL_COMMANDS_BIT =            (1U << 13),
+    STAGE_COPY_BIT =                    (1U << 14),
+    STAGE_RESOLVE_BIT =                 (1U << 15),
+    STAGE_BLIT_BIT =                    (1U << 16),
+    STAGE_CLEAR_BIT =                   (1U << 17),
 };
 using StageFlags = Flags;
+// clang-format on
 
+// clang-format off
 enum AccessFlagBits : u32 {
-#define RHI_XACCESS(rhi, bit, vulkan) rhi = bit,
-#include "access_table.hpp"
+    ACCESS_NONE =                               (1U << 0),
+    ACCESS_INDIRECT_COMMAND_READ_BIT =          (1U << 1),
+    ACCESS_INDEX_READ_BIT =                     (1U << 2),
+    ACCESS_VERTEX_ATTRIBUTE_READ_BIT =          (1U << 3),
+    ACCESS_UNIFORM_READ_BIT =                   (1U << 4),
+    ACCESS_INPUT_ATTACHMENT_READ_BIT =          (1U << 5),
+    ACCESS_SHADER_READ_BIT =                    (1U << 6),
+    ACCESS_SHADER_WRITE_BIT =                   (1U << 7),
+    ACCESS_COLOR_ATTACHMENT_READ_BIT =          (1U << 8),
+    ACCESS_COLOR_ATTACHMENT_WRITE_BIT =         (1U << 9),
+    ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT =  (1U << 10),
+    ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT = (1U << 11),
+    ACCESS_TRANSFER_READ_BIT =                  (1U << 12),
+    ACCESS_TRANSFER_WRITE_BIT =                 (1U << 13),
+    ACCESS_HOST_READ_BIT =                      (1U << 14),
+    ACCESS_HOST_WRITE_BIT =                     (1U << 15),
+    ACCESS_MEMORY_READ_BIT =                    (1U << 16),
+    ACCESS_MEMORY_WRITE_BIT =                   (1U << 17),
+    ACCESS_SHADER_SAMPLED_READ_BIT =            (1U << 18),
+    ACCESS_SHADER_STORAGE_READ_BIT =            (1U << 19),
+    ACCESS_SHADER_STORAGE_WRITE_BIT =           (1U << 20),
 };
 using AccessFlags = Flags;
+// clang-format on
 
 enum TextureLayout {
     TEXTURE_LAYOUT_UNDEFINED,
     TEXTURE_LAYOUT_GENERAL,
     TEXTURE_LAYOUT_PRESENT_SRC,
+    TEXTURE_LAYOUT_COUNT,
 };
 
 enum AttachmentLoadOp {
@@ -210,24 +276,28 @@ enum AttachmentLoadOp {
     ATTACHMENT_LOAD_OP_CLEAR,
     ATTACHMENT_LOAD_OP_DONT_CARE,
     ATTACHMENT_LOAD_OP_NONE,
+    ATTACHMENT_LOAD_OP_COUNT,
 };
 
 enum AttachmentStoreOp {
     ATTACHMENT_STORE_OP_STORE,
     ATTACHMENT_STORE_OP_DONT_CARE,
     ATTACHMENT_STORE_OP_NONE,
+    ATTACHMENT_STORE_OP_COUNT,
 };
 
 enum IndexType {
     INDEX_TYPE_U8,
     INDEX_TYPE_U16,
     INDEX_TYPE_U32,
+    INDEX_TYPE_COUNT,
 };
 
 enum QueueType {
     QUEUE_TYPE_GRAPHICS,
     QUEUE_TYPE_COMPUTE,
     QUEUE_TYPE_TRANSFER,
+    QUEUE_TYPE_COUNT,
 };
 
 // clang-format off

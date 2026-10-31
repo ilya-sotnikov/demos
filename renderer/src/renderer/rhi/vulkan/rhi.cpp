@@ -7,7 +7,6 @@
 #include "containers.hpp"
 #include "math/utils.hpp"
 #include "renderer/rhi/pool.hpp"
-#include "renderer/rhi/vulkan/type_convert.hpp"
 #include "utils.hpp"
 
 #include <spirv_reflect.h>
@@ -169,6 +168,331 @@ struct ContextImpl {
 // I don't see any situation where duplicating this stuff would be useful in practice.
 ContextImpl s_ctx;
 
+static VkMemoryPropertyFlags s_vk_memory_property_translator[] = {
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+        | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+        | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+};
+static_assert(ARRAY_SIZE(s_vk_memory_property_translator) == rhi::MEMORY_TYPE_COUNT);
+
+static VkImageType s_vk_image_type_translator[] = {
+    VK_IMAGE_TYPE_1D,
+    VK_IMAGE_TYPE_2D,
+    VK_IMAGE_TYPE_3D,
+    VK_IMAGE_TYPE_2D,
+};
+static_assert(ARRAY_SIZE(s_vk_image_type_translator) == rhi::TEXTURE_TYPE_COUNT);
+
+static VkImageViewType s_vk_image_view_type_translator[] = {
+    VK_IMAGE_VIEW_TYPE_1D,
+    VK_IMAGE_VIEW_TYPE_2D,
+    VK_IMAGE_VIEW_TYPE_3D,
+    VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+};
+static_assert(ARRAY_SIZE(s_vk_image_view_type_translator) == rhi::TEXTURE_TYPE_COUNT);
+
+static const VkFormat s_vk_format_translator[] = {
+    VK_FORMAT_UNDEFINED,
+    VK_FORMAT_R8_UNORM,
+    VK_FORMAT_R8G8B8A8_UNORM,
+    VK_FORMAT_R8G8B8A8_SNORM,
+    VK_FORMAT_B8G8R8A8_UNORM,
+    VK_FORMAT_R16_SFLOAT,
+    VK_FORMAT_R16G16_SFLOAT,
+    VK_FORMAT_R32_SFLOAT,
+    VK_FORMAT_R32G32_UINT,
+    VK_FORMAT_R32G32_SFLOAT,
+    VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+    VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+    VK_FORMAT_D32_SFLOAT,
+    VK_FORMAT_D16_UNORM,
+    VK_FORMAT_S8_UINT,
+    VK_FORMAT_BC7_UNORM_BLOCK,
+    VK_FORMAT_BC7_SRGB_BLOCK,
+    VK_FORMAT_BC5_UNORM_BLOCK,
+};
+static_assert(ARRAY_SIZE(s_vk_format_translator) == rhi::FORMAT_COUNT);
+
+static const VkImageLayout s_vk_image_layout_translator[] = {
+    VK_IMAGE_LAYOUT_UNDEFINED,
+    VK_IMAGE_LAYOUT_GENERAL,
+    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+};
+static_assert(ARRAY_SIZE(s_vk_image_layout_translator) == rhi::TEXTURE_LAYOUT_COUNT);
+
+static const VkPrimitiveTopology s_vk_primitive_topology_translator[] = {
+    VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+    VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+};
+static_assert(ARRAY_SIZE(s_vk_primitive_topology_translator) == rhi::TOPOLOGY_COUNT);
+
+static const VkCullModeFlags s_vk_cull_mode_translator[] = {
+    VK_CULL_MODE_FRONT_BIT,
+    VK_CULL_MODE_BACK_BIT,
+    VK_CULL_MODE_FRONT_AND_BACK,
+    VK_CULL_MODE_NONE,
+};
+static_assert(ARRAY_SIZE(s_vk_cull_mode_translator) == rhi::CULL_COUNT);
+
+static const VkFilter s_vk_filter_translator[] = {
+    VK_FILTER_NEAREST,
+    VK_FILTER_LINEAR,
+};
+static_assert(ARRAY_SIZE(s_vk_filter_translator) == rhi::FILTER_COUNT);
+
+static const VkSamplerMipmapMode s_vk_sampler_mipmap_mode_translator[] = {
+    VK_SAMPLER_MIPMAP_MODE_NEAREST,
+    VK_SAMPLER_MIPMAP_MODE_LINEAR,
+};
+static_assert(ARRAY_SIZE(s_vk_sampler_mipmap_mode_translator) == rhi::SAMPLER_MIPMAP_MODE_COUNT);
+
+static const VkSamplerAddressMode s_vk_sampler_address_mode_translator[] = {
+    VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+    VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+};
+static_assert(ARRAY_SIZE(s_vk_sampler_address_mode_translator) == rhi::SAMPLER_ADDRESS_MODE_COUNT);
+
+static const VkCompareOp s_vk_compare_op_translator[] = {
+    VK_COMPARE_OP_NEVER,
+    VK_COMPARE_OP_LESS,
+    VK_COMPARE_OP_EQUAL,
+    VK_COMPARE_OP_LESS_OR_EQUAL,
+    VK_COMPARE_OP_GREATER,
+    VK_COMPARE_OP_NOT_EQUAL,
+    VK_COMPARE_OP_GREATER_OR_EQUAL,
+    VK_COMPARE_OP_ALWAYS,
+};
+static_assert(ARRAY_SIZE(s_vk_compare_op_translator) == rhi::COMPARE_OP_COUNT);
+
+static const VkAttachmentLoadOp s_vk_attachment_load_op_translator[] = {
+    VK_ATTACHMENT_LOAD_OP_LOAD,
+    VK_ATTACHMENT_LOAD_OP_CLEAR,
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+    VK_ATTACHMENT_LOAD_OP_NONE,
+};
+static_assert(ARRAY_SIZE(s_vk_attachment_load_op_translator) == rhi::ATTACHMENT_LOAD_OP_COUNT);
+
+static const VkAttachmentStoreOp s_vk_attachment_store_op_translator[] = {
+    VK_ATTACHMENT_STORE_OP_STORE,
+    VK_ATTACHMENT_STORE_OP_DONT_CARE,
+    VK_ATTACHMENT_STORE_OP_NONE,
+};
+static_assert(ARRAY_SIZE(s_vk_attachment_store_op_translator) == rhi::ATTACHMENT_STORE_OP_COUNT);
+
+static const VkIndexType s_vk_index_type_translator[] = {
+    VK_INDEX_TYPE_UINT8,
+    VK_INDEX_TYPE_UINT16,
+    VK_INDEX_TYPE_UINT32,
+};
+static_assert(ARRAY_SIZE(s_vk_index_type_translator) == rhi::INDEX_TYPE_COUNT);
+
+static const VkBlendFactor s_vk_blend_factor_translator[] = {
+    VK_BLEND_FACTOR_ZERO,
+    VK_BLEND_FACTOR_ONE,
+    VK_BLEND_FACTOR_SRC_COLOR,
+    VK_BLEND_FACTOR_DST_COLOR,
+    VK_BLEND_FACTOR_SRC_ALPHA,
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+};
+static_assert(ARRAY_SIZE(s_vk_blend_factor_translator) == rhi::BLEND_FACTOR_COUNT);
+
+static const VkBlendOp s_vk_blend_op_translator[] = {
+    VK_BLEND_OP_ADD,
+    VK_BLEND_OP_SUBTRACT,
+    VK_BLEND_OP_REVERSE_SUBTRACT,
+    VK_BLEND_OP_MIN,
+    VK_BLEND_OP_MAX,
+};
+static_assert(ARRAY_SIZE(s_vk_blend_op_translator) == rhi::BLEND_OP_COUNT);
+
+static const VkQueueFlags s_vk_queue_translator[] = {
+    VK_QUEUE_GRAPHICS_BIT,
+    VK_QUEUE_COMPUTE_BIT,
+    VK_QUEUE_TRANSFER_BIT,
+};
+static_assert(ARRAY_SIZE(s_vk_queue_translator) == rhi::QUEUE_TYPE_COUNT);
+
+static VkImageUsageFlags texture_usage_to_vk(rhi::TextureUsageFlags usage) {
+    VkImageUsageFlags vk_usage{};
+
+    if (usage & rhi::TEXTURE_USAGE_TRANSFER_SRC_BIT) {
+        vk_usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    }
+    if (usage & rhi::TEXTURE_USAGE_TRANSFER_DST_BIT) {
+        vk_usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    }
+    if (usage & rhi::TEXTURE_USAGE_SAMPLED_BIT) {
+        vk_usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    }
+    if (usage & rhi::TEXTURE_USAGE_STORAGE_BIT) {
+        vk_usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+    }
+    if (usage & rhi::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
+        vk_usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    }
+    if (usage & rhi::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+        vk_usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    }
+
+    return vk_usage;
+}
+
+static VkPipelineStageFlags2 stage_to_vk(rhi::StageFlags stage) {
+    VkPipelineStageFlags2 result{};
+
+    if (stage & rhi::STAGE_NONE) {
+        result |= VK_PIPELINE_STAGE_2_NONE;
+    }
+    if (stage & rhi::STAGE_DRAW_INDIRECT_BIT) {
+        result |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+    }
+    if (stage & rhi::STAGE_VERTEX_INPUT_BIT) {
+        result |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+    }
+    if (stage & rhi::STAGE_VERTEX_SHADER_BIT) {
+        result |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
+    }
+    if (stage & rhi::STAGE_FRAGMENT_SHADER_BIT) {
+        result |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    }
+    if (stage & rhi::STAGE_EARLY_FRAGMENT_TESTS_BIT) {
+        result |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+    }
+    if (stage & rhi::STAGE_LATE_FRAGMENT_TESTS_BIT) {
+        result |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    }
+    if (stage & rhi::STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) {
+        result |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    }
+    if (stage & rhi::STAGE_COMPUTE_SHADER_BIT) {
+        result |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    }
+    if (stage & rhi::STAGE_ALL_TRANSFER_BIT) {
+        result |= VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+    }
+    if (stage & rhi::STAGE_TRANSFER_BIT) {
+        result |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    }
+    if (stage & rhi::STAGE_HOST_BIT) {
+        result |= VK_PIPELINE_STAGE_2_HOST_BIT;
+    }
+    if (stage & rhi::STAGE_ALL_GRAPHICS_BIT) {
+        result |= VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
+    }
+    if (stage & rhi::STAGE_ALL_COMMANDS_BIT) {
+        result |= VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    }
+    if (stage & rhi::STAGE_COPY_BIT) {
+        result |= VK_PIPELINE_STAGE_2_COPY_BIT;
+    }
+    if (stage & rhi::STAGE_RESOLVE_BIT) {
+        result |= VK_PIPELINE_STAGE_2_RESOLVE_BIT;
+    }
+    if (stage & rhi::STAGE_BLIT_BIT) {
+        result |= VK_PIPELINE_STAGE_2_BLIT_BIT;
+    }
+    if (stage & rhi::STAGE_CLEAR_BIT) {
+        result |= VK_PIPELINE_STAGE_2_CLEAR_BIT;
+    }
+
+    return result;
+}
+
+static VkAccessFlags2 access_to_vk(rhi::AccessFlags access) {
+    VkAccessFlags2 result{};
+
+    if (access & rhi::ACCESS_NONE) {
+        result |= VK_ACCESS_2_NONE;
+    }
+    if (access & rhi::ACCESS_INDIRECT_COMMAND_READ_BIT) {
+        result |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+    }
+    if (access & rhi::ACCESS_INDEX_READ_BIT) {
+        result |= VK_ACCESS_2_INDEX_READ_BIT;
+    }
+    if (access & rhi::ACCESS_VERTEX_ATTRIBUTE_READ_BIT) {
+        result |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+    }
+    if (access & rhi::ACCESS_UNIFORM_READ_BIT) {
+        result |= VK_ACCESS_2_UNIFORM_READ_BIT;
+    }
+    if (access & rhi::ACCESS_INPUT_ATTACHMENT_READ_BIT) {
+        result |= VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT;
+    }
+    if (access & rhi::ACCESS_SHADER_READ_BIT) {
+        result |= VK_ACCESS_2_SHADER_READ_BIT;
+    }
+    if (access & rhi::ACCESS_SHADER_WRITE_BIT) {
+        result |= VK_ACCESS_2_SHADER_WRITE_BIT;
+    }
+    if (access & rhi::ACCESS_COLOR_ATTACHMENT_READ_BIT) {
+        result |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+    }
+    if (access & rhi::ACCESS_COLOR_ATTACHMENT_WRITE_BIT) {
+        result |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+    if (access & rhi::ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT) {
+        result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    }
+    if (access & rhi::ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) {
+        result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+    if (access & rhi::ACCESS_TRANSFER_READ_BIT) {
+        result |= VK_ACCESS_2_TRANSFER_READ_BIT;
+    }
+    if (access & rhi::ACCESS_TRANSFER_WRITE_BIT) {
+        result |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    }
+    if (access & rhi::ACCESS_HOST_READ_BIT) {
+        result |= VK_ACCESS_2_HOST_READ_BIT;
+    }
+    if (access & rhi::ACCESS_HOST_WRITE_BIT) {
+        result |= VK_ACCESS_2_HOST_WRITE_BIT;
+    }
+    if (access & rhi::ACCESS_MEMORY_READ_BIT) {
+        result |= VK_ACCESS_2_MEMORY_READ_BIT;
+    }
+    if (access & rhi::ACCESS_MEMORY_WRITE_BIT) {
+        result |= VK_ACCESS_2_MEMORY_WRITE_BIT;
+    }
+    if (access & rhi::ACCESS_SHADER_SAMPLED_READ_BIT) {
+        result |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+    }
+    if (access & rhi::ACCESS_SHADER_STORAGE_READ_BIT) {
+        result |= VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+    }
+    if (access & rhi::ACCESS_SHADER_STORAGE_WRITE_BIT) {
+        result |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+    }
+
+    return result;
+}
+
+static VkColorComponentFlags color_component_to_vk(rhi::ColorComponentFlags flags) {
+    VkColorComponentFlags result{};
+
+    if (flags & rhi::COLOR_COMPONENT_R_BIT) {
+        result |= VK_COLOR_COMPONENT_R_BIT;
+    }
+    if (flags & rhi::COLOR_COMPONENT_G_BIT) {
+        result |= VK_COLOR_COMPONENT_G_BIT;
+    }
+    if (flags & rhi::COLOR_COMPONENT_B_BIT) {
+        result |= VK_COLOR_COMPONENT_B_BIT;
+    }
+    if (flags & rhi::COLOR_COMPONENT_A_BIT) {
+        result |= VK_COLOR_COMPONENT_A_BIT;
+    }
+
+    return result;
+}
+
 static bool extension_is_available(const char* name, SliceArg<VkExtensionProperties> extensions) {
     DEBUG_ASSERT(name);
 
@@ -230,11 +554,11 @@ static bool find_queue_index(u32& idx, eastl::vector<u32>& idxs) {
 
 static VkImageAspectFlags vk_aspect_flags_from_format(VkFormat format) {
     switch (format) {
-        case VK_FORMAT_D32_SFLOAT:
-        case VK_FORMAT_D16_UNORM:
-            return VK_IMAGE_ASPECT_DEPTH_BIT;
-        default:
-            return VK_IMAGE_ASPECT_COLOR_BIT;
+    case VK_FORMAT_D32_SFLOAT:
+    case VK_FORMAT_D16_UNORM:
+        return VK_IMAGE_ASPECT_DEPTH_BIT;
+    default:
+        return VK_IMAGE_ASPECT_COLOR_BIT;
     }
 }
 
@@ -963,7 +1287,7 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc) {
     };
 
     const VmaAllocationCreateInfo allocation_info = {
-        .requiredFlags = memory_type_to_vk(desc.type),
+        .requiredFlags = s_vk_memory_property_translator[desc.type],
     };
 
     if (desc.min_alignment > 0) {
@@ -1060,10 +1384,10 @@ rhi::Texture rhi::create_texture(const TextureDesc&& desc) {
 
     TextureImpl texture{};
 
-    const VkImageType type = texture_type_to_vk(desc.type);
-    const VkImageViewType view_type = texture_type_to_view_vk(desc.type);
+    const VkImageType type = s_vk_image_type_translator[desc.type];
+    const VkImageViewType view_type = s_vk_image_view_type_translator[desc.type];
     const VkImageUsageFlags usage = texture_usage_to_vk(desc.usage);
-    const VkFormat format = format_to_vk(desc.format);
+    const VkFormat format = s_vk_format_translator[desc.format];
 
     // NOTE: won't check format availability since vkCreateImage should fail in this case.
 
@@ -1165,12 +1489,12 @@ rhi::TextureDescriptor rhi::create_texture_descriptor(const TextureDescriptorDes
 
     TextureViewImpl view{};
 
-    const VkFormat format = format_to_vk(texture->format);
+    const VkFormat format = s_vk_format_translator[texture->format];
 
     const VkImageViewCreateInfo view_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = texture->image,
-        .viewType = texture_type_to_view_vk(desc.type),
+        .viewType = s_vk_image_view_type_translator[desc.type],
         .format = format,
         .subresourceRange = {
             .aspectMask = vk_aspect_flags_from_format(format),
@@ -1237,16 +1561,16 @@ rhi::Sampler rhi::create_sampler(const rhi::SamplerDesc&& desc) {
         .pNext = desc.reduction_mode != rhi::SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE
             ? &reductionModeInfo
             : nullptr,
-        .magFilter = filter_to_vk(desc.mag_filter),
-        .minFilter = filter_to_vk(desc.mag_filter),
-        .mipmapMode = sampler_mipmap_mode_to_vk(desc.mipmap_mode),
-        .addressModeU = sampler_address_mode_to_vk(desc.address_mode_u),
-        .addressModeV = sampler_address_mode_to_vk(desc.address_mode_v),
-        .addressModeW = sampler_address_mode_to_vk(desc.address_mode_w),
+        .magFilter = s_vk_filter_translator[desc.mag_filter],
+        .minFilter = s_vk_filter_translator[desc.mag_filter],
+        .mipmapMode = s_vk_sampler_mipmap_mode_translator[desc.mipmap_mode],
+        .addressModeU = s_vk_sampler_address_mode_translator[desc.address_mode_u],
+        .addressModeV = s_vk_sampler_address_mode_translator[desc.address_mode_v],
+        .addressModeW = s_vk_sampler_address_mode_translator[desc.address_mode_w],
         .anisotropyEnable = desc.anisotropy_enable,
         .maxAnisotropy = desc.max_anisotropy,
         .compareEnable = desc.compare_enable,
-        .compareOp = compare_op_to_vk(desc.compare_op),
+        .compareOp = s_vk_compare_op_translator[desc.compare_op],
         .minLod = desc.min_lod,
         .maxLod = desc.max_lod,
     };
@@ -1322,15 +1646,15 @@ rhi::CommandPool rhi::create_command_pool(const CommandPoolDesc&& desc) {
 
     u32 family_idx = UINT32_MAX;
     switch (queue.type) {
-        case rhi::QUEUE_TYPE_GRAPHICS:
-            family_idx = s_ctx.graphics_queue_family_idx;
-            break;
-        case rhi::QUEUE_TYPE_COMPUTE:
-            family_idx = s_ctx.compute_queue_family_idx;
-            break;
-        case rhi::QUEUE_TYPE_TRANSFER:
-            family_idx = s_ctx.transfer_queue_family_idx;
-            break;
+    case rhi::QUEUE_TYPE_GRAPHICS:
+        family_idx = s_ctx.graphics_queue_family_idx;
+        break;
+    case rhi::QUEUE_TYPE_COMPUTE:
+        family_idx = s_ctx.compute_queue_family_idx;
+        break;
+    case rhi::QUEUE_TYPE_TRANSFER:
+        family_idx = s_ctx.transfer_queue_family_idx;
+        break;
     }
     ASSERT(family_idx != UINT32_MAX);
 
@@ -1494,6 +1818,8 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
     for (int i = 0; i < desc.count; ++i) {
         const CommandBufferImpl* const cb = s_ctx.command_buffers.get_ptr(desc[i].cb);
 
+        // TODO: It's only safe with the TempAllocator, will break if I decide to
+        // implement a debug mode where it allocates on heap (for asan).
         // +1 for optional image acquire binary semaphore.
         TempVector<VkSemaphoreSubmitInfo> sem_wait_submit_infos{
             desc[i].wait_semaphores.count + 1,
@@ -1858,15 +2184,15 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
 
     TempVector<VkFormat> color_attachment_formats{desc.color_targets.count, temp};
     for (int i = 0; i < desc.color_targets.count; ++i) {
-        color_attachment_formats[i] = format_to_vk(desc.color_targets[i].format);
+        color_attachment_formats[i] = s_vk_format_translator[desc.color_targets[i].format];
     }
 
     const VkPipelineRenderingCreateInfo pipeline_rendering_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = u32(desc.color_targets.count),
         .pColorAttachmentFormats = color_attachment_formats.data(),
-        .depthAttachmentFormat = format_to_vk(desc.depth_format),
-        .stencilAttachmentFormat = format_to_vk(desc.stencil_format),
+        .depthAttachmentFormat = s_vk_format_translator[desc.depth_format],
+        .stencilAttachmentFormat = s_vk_format_translator[desc.stencil_format],
     };
 
     const VkPipelineVertexInputStateCreateInfo vertex_input_info = {
@@ -1875,7 +2201,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
 
     const VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = primitive_topology_to_vk(desc.topology),
+        .topology = s_vk_primitive_topology_translator[desc.topology],
     };
 
     const VkPipelineViewportStateCreateInfo viewport_info = {
@@ -1888,7 +2214,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .depthClampEnable = desc.depth_clamp_enable,
         .polygonMode = VK_POLYGON_MODE_FILL,
-        .cullMode = cull_to_vk(desc.cull),
+        .cullMode = s_vk_cull_mode_translator[desc.cull],
         .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .lineWidth = 1.0f,
     };
@@ -1914,12 +2240,12 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         const rhi::PipelineColorTarget& t = desc.color_targets[i];
         color_blend_attachments[i] = {
             .blendEnable = t.blend_enable,
-            .srcColorBlendFactor = blend_factor_to_vk(t.src_color_factor),
-            .dstColorBlendFactor = blend_factor_to_vk(t.dst_color_factor),
-            .colorBlendOp = blend_op_to_vk(t.color_op),
-            .srcAlphaBlendFactor = blend_factor_to_vk(t.dst_alpha_factor),
-            .dstAlphaBlendFactor = blend_factor_to_vk(t.dst_alpha_factor),
-            .alphaBlendOp = blend_op_to_vk(t.alpha_op),
+            .srcColorBlendFactor = s_vk_blend_factor_translator[t.src_color_factor],
+            .dstColorBlendFactor = s_vk_blend_factor_translator[t.dst_color_factor],
+            .colorBlendOp = s_vk_blend_op_translator[t.color_op],
+            .srcAlphaBlendFactor = s_vk_blend_factor_translator[t.dst_alpha_factor],
+            .dstAlphaBlendFactor = s_vk_blend_factor_translator[t.dst_alpha_factor],
+            .alphaBlendOp = s_vk_blend_op_translator[t.alpha_op],
             .colorWriteMask = color_component_to_vk(t.color_component_mask),
         };
     }
@@ -2082,13 +2408,13 @@ void rhi::cmd_texture_barrier(
             .srcAccessMask = access_to_vk(d.src_access_mask),
             .dstStageMask = stage_to_vk(d.dst_stage_mask),
             .dstAccessMask = access_to_vk(d.dst_access_mask),
-            .oldLayout = texture_layout_to_vk(d.old_layout),
-            .newLayout = texture_layout_to_vk(d.new_layout),
+            .oldLayout = s_vk_image_layout_translator[d.old_layout],
+            .newLayout = s_vk_image_layout_translator[d.new_layout],
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = texture->image,
             .subresourceRange = {
-                .aspectMask = vk_aspect_flags_from_format(format_to_vk(texture->format)),
+                .aspectMask = vk_aspect_flags_from_format(s_vk_format_translator[texture->format]),
                 .baseMipLevel = 0,
                 .levelCount = d.mip_count,
                 .baseArrayLayer = 0,
@@ -2137,7 +2463,7 @@ void rhi::cmd_texture_invalidate_barrier(
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = texture->image,
             .subresourceRange = {
-                .aspectMask = vk_aspect_flags_from_format(format_to_vk(texture->format)),
+                .aspectMask = vk_aspect_flags_from_format(s_vk_format_translator[texture->format]),
                 .baseMipLevel = 0,
                 .levelCount = rhi::ALL_MIPS,
                 .baseArrayLayer = 0,
@@ -2179,7 +2505,7 @@ void rhi::cmd_copy_buffer_to_texture(
             .bufferRowLength = c.buffer_row_length,
             .bufferImageHeight = c.buffer_texture_height,
             .imageSubresource{
-                .aspectMask = vk_aspect_flags_from_format(format_to_vk(tex->format)),
+                .aspectMask = vk_aspect_flags_from_format(s_vk_format_translator[tex->format]),
                 .mipLevel = c.texture_subresource.mip_level,
                 .baseArrayLayer = c.texture_subresource.base_array_layer,
                 .layerCount = c.texture_subresource.layer_count,
@@ -2261,23 +2587,23 @@ void rhi::cmd_push_descriptors(
     for (int i = 0; i < descriptors.count; ++i) {
         const rhi::DescriptorInfo& d = descriptors[i];
         switch (d.type) {
-            case rhi::DescriptorInfo::TYPE_NONE:
-                ASSERT(0);
-                break;
-            case rhi::DescriptorInfo::TYPE_TEXTURE:
-                infos[i] = {s_ctx.textures.get_ptr(d.resource.texture)->view};
-                break;
-            case rhi::DescriptorInfo::TYPE_TEXTURE_DESCRIPTOR:
-                infos[i] = {s_ctx.texture_descriptors.get_ptr(d.resource.texture_descriptor)->view};
-                break;
-            case rhi::DescriptorInfo::TYPE_SAMPLER:
-                infos[i] = {*s_ctx.samplers.get_ptr(d.resource.sampler)};
-                break;
-            case rhi::DescriptorInfo::TYPE_BUFFER: {
-                const auto& info = d.resource.buffer;
-                infos[i] = {s_ctx.buffers.get_ptr(info.buffer)->buffer, info.offset, info.range};
-                break;
-            }
+        case rhi::DescriptorInfo::TYPE_NONE:
+            ASSERT(0);
+            break;
+        case rhi::DescriptorInfo::TYPE_TEXTURE:
+            infos[i] = {s_ctx.textures.get_ptr(d.resource.texture)->view};
+            break;
+        case rhi::DescriptorInfo::TYPE_TEXTURE_DESCRIPTOR:
+            infos[i] = {s_ctx.texture_descriptors.get_ptr(d.resource.texture_descriptor)->view};
+            break;
+        case rhi::DescriptorInfo::TYPE_SAMPLER:
+            infos[i] = {*s_ctx.samplers.get_ptr(d.resource.sampler)};
+            break;
+        case rhi::DescriptorInfo::TYPE_BUFFER: {
+            const auto& info = d.resource.buffer;
+            infos[i] = {s_ctx.buffers.get_ptr(info.buffer)->buffer, info.offset, info.range};
+            break;
+        }
         }
     }
 
@@ -2357,8 +2683,8 @@ void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc) {
                 ? s_ctx.textures.get_ptr(t.attachment.texture)->view
                 : s_ctx.texture_descriptors.get_ptr(t.attachment.descriptor)->view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .loadOp = attachment_load_op_to_vk(t.load_op),
-            .storeOp = attachment_store_op_to_vk(t.store_op),
+            .loadOp = s_vk_attachment_load_op_translator[t.load_op],
+            .storeOp = s_vk_attachment_store_op_translator[t.store_op],
         };
     }
 
@@ -2375,8 +2701,8 @@ void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc) {
                 ? s_ctx.textures.get_ptr(desc.depth_target.attachment.texture)->view
                 : s_ctx.texture_descriptors.get_ptr(desc.depth_target.attachment.descriptor)->view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .loadOp = attachment_load_op_to_vk(desc.depth_target.load_op),
-            .storeOp = attachment_store_op_to_vk(desc.depth_target.store_op),
+            .loadOp = s_vk_attachment_load_op_translator[desc.depth_target.load_op],
+            .storeOp = s_vk_attachment_store_op_translator[desc.depth_target.store_op],
         };
     }
 
@@ -2414,7 +2740,7 @@ void rhi::cmd_bind_index_buffer(
         s_ctx.command_buffers.get_ptr(cb)->command_buffer,
         s_ctx.buffers.get_ptr(buffer)->buffer,
         offset,
-        index_type_to_vk(index_type)
+        s_vk_index_type_translator[index_type]
     );
 }
 
@@ -2649,8 +2975,23 @@ void rhi::create_swapchain(Vec2U32 size) {
     for (u32 i = 0; i < swapchain_texture_count; ++i) {
         textures[i].image = images[i];
         textures[i].type = rhi::TEXTURE_TYPE_2D;
-        textures[i].format = format_to_rhi(s_ctx.swapchain.surface_format.format);
         textures[i].dimensions = {s_ctx.swapchain.extent.width, s_ctx.swapchain.extent.height, 1};
+
+        switch (s_ctx.swapchain.surface_format.format) {
+        case VK_FORMAT_B8G8R8A8_UNORM:
+            textures[i].format = rhi::FORMAT_B8G8R8A8_UNORM;
+            break;
+        case VK_FORMAT_R8G8B8A8_UNORM:
+            textures[i].format = rhi::FORMAT_R8G8B8A8_UNORM;
+            break;
+        default:
+            fprintf(
+                stderr,
+                "unhandled vk format: %s\n",
+                string_VkFormat(s_ctx.swapchain.surface_format.format)
+            );
+            ASSERT(0);
+        }
     }
 
     // Creating image views for every swapchain image.
@@ -2724,14 +3065,14 @@ rhi::SwapchainResult rhi::acquire_next_swapchain_texture(rhi::Texture& swapchain
     swapchain_texture = s_ctx.swapchain.textures[s_ctx.image_idx];
 
     switch (vulkan_result) {
-        case VK_SUCCESS:
-            return rhi::SWAPCHAIN_SUCCESS;
-        case VK_ERROR_OUT_OF_DATE_KHR:
-            return rhi::SWAPCHAIN_OUT_OF_DATE;
-        case VK_SUBOPTIMAL_KHR:
-            return rhi::SWAPCHAIN_SUBOPTIMAL;
-        default:
-            return rhi::SWAPCHAIN_ERROR;
+    case VK_SUCCESS:
+        return rhi::SWAPCHAIN_SUCCESS;
+    case VK_ERROR_OUT_OF_DATE_KHR:
+        return rhi::SWAPCHAIN_OUT_OF_DATE;
+    case VK_SUBOPTIMAL_KHR:
+        return rhi::SWAPCHAIN_SUBOPTIMAL;
+    default:
+        return rhi::SWAPCHAIN_ERROR;
     }
 }
 
@@ -2753,14 +3094,14 @@ rhi::SwapchainResult rhi::queue_present(Queue handle) {
     const VkResult vulkan_result =
         vkQueuePresentKHR(s_ctx.queues.get_ptr(handle)->queue, &present_info);
     switch (vulkan_result) {
-        case VK_SUCCESS:
-            return rhi::SWAPCHAIN_SUCCESS;
-        case VK_ERROR_OUT_OF_DATE_KHR:
-            return rhi::SWAPCHAIN_OUT_OF_DATE;
-        case VK_SUBOPTIMAL_KHR:
-            return rhi::SWAPCHAIN_SUBOPTIMAL;
-        default:
-            return rhi::SWAPCHAIN_ERROR;
+    case VK_SUCCESS:
+        return rhi::SWAPCHAIN_SUCCESS;
+    case VK_ERROR_OUT_OF_DATE_KHR:
+        return rhi::SWAPCHAIN_OUT_OF_DATE;
+    case VK_SUBOPTIMAL_KHR:
+        return rhi::SWAPCHAIN_SUBOPTIMAL;
+    default:
+        return rhi::SWAPCHAIN_ERROR;
     }
 }
 

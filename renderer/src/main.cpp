@@ -99,24 +99,24 @@ static void process_event(SDL_Window* window, const SDL_Event& event, Renderer& 
     ImGui_ImplSDL3_ProcessEvent(&event);
 
     switch (event.type) {
-        case SDL_EVENT_QUIT:
-            s_should_window_close = true;
-            break;
-        case SDL_EVENT_KEY_DOWN:
-            s_keys[event.key.scancode] = 1;
-            break;
-        case SDL_EVENT_KEY_UP:
-            s_keys[event.key.scancode] = 0;
-            break;
-        case SDL_EVENT_MOUSE_MOTION:
-            process_mouse(window);
-            break;
-        case SDL_EVENT_WINDOW_MINIMIZED:
-            renderer.pause_rendering(true);
-            break;
-        case SDL_EVENT_WINDOW_RESTORED:
-            renderer.pause_rendering(false);
-            break;
+    case SDL_EVENT_QUIT:
+        s_should_window_close = true;
+        break;
+    case SDL_EVENT_KEY_DOWN:
+        s_keys[event.key.scancode] = 1;
+        break;
+    case SDL_EVENT_KEY_UP:
+        s_keys[event.key.scancode] = 0;
+        break;
+    case SDL_EVENT_MOUSE_MOTION:
+        process_mouse(window);
+        break;
+    case SDL_EVENT_WINDOW_MINIMIZED:
+        renderer.pause_rendering(true);
+        break;
+    case SDL_EVENT_WINDOW_RESTORED:
+        renderer.pause_rendering(false);
+        break;
     }
 }
 

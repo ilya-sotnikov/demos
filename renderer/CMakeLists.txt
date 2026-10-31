@@ -77,15 +77,10 @@ set(SOURCES
     src/math/vec3.hpp
     src/math/vec4.hpp
 
-    src/renderer/rhi/access_table.hpp
-    src/renderer/rhi/format_table.hpp
     src/renderer/rhi/pool.hpp
     src/renderer/rhi/rhi.hpp
-    src/renderer/rhi/stage_table.hpp
     src/renderer/rhi/vulkan/common.hpp
     src/renderer/rhi/vulkan/rhi.cpp
-    src/renderer/rhi/vulkan/type_convert.hpp
-    src/renderer/rhi/vulkan/type_convert.cpp
     src/renderer/imgui_renderer.hpp
     src/renderer/imgui_renderer.cpp
     src/renderer/renderer.hpp

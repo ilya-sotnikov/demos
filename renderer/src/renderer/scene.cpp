@@ -12,28 +12,28 @@
 
 static const char* cgltf_result_to_string(cgltf_result result) {
     switch (result) {
-        case cgltf_result_success:
-            return "success";
-        case cgltf_result_data_too_short:
-            return "data too short";
-        case cgltf_result_unknown_format:
-            return "unknown format";
-        case cgltf_result_invalid_json:
-            return "invalid json";
-        case cgltf_result_invalid_gltf:
-            return "invalid gltf";
-        case cgltf_result_invalid_options:
-            return "invalid options";
-        case cgltf_result_file_not_found:
-            return "file not found";
-        case cgltf_result_io_error:
-            return "io error";
-        case cgltf_result_out_of_memory:
-            return "out of memory";
-        case cgltf_result_legacy_gltf:
-            return "legacy gltf";
-        case cgltf_result_max_enum:
-            return "max enum (invalid enum value)";
+    case cgltf_result_success:
+        return "success";
+    case cgltf_result_data_too_short:
+        return "data too short";
+    case cgltf_result_unknown_format:
+        return "unknown format";
+    case cgltf_result_invalid_json:
+        return "invalid json";
+    case cgltf_result_invalid_gltf:
+        return "invalid gltf";
+    case cgltf_result_invalid_options:
+        return "invalid options";
+    case cgltf_result_file_not_found:
+        return "file not found";
+    case cgltf_result_io_error:
+        return "io error";
+    case cgltf_result_out_of_memory:
+        return "out of memory";
+    case cgltf_result_legacy_gltf:
+        return "legacy gltf";
+    case cgltf_result_max_enum:
+        return "max enum (invalid enum value)";
     }
 
     return "unhandled enum value";

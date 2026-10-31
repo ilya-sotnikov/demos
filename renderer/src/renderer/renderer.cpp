@@ -1,7 +1,8 @@
 #include "renderer.hpp"
 
 #include "containers.hpp"
-#include "renderer/rhi/vulkan/type_convert.hpp"
+
+#include "renderer/rhi/vulkan/common.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -825,12 +826,12 @@ bool Renderer::render(f32 delta_time) {
         frame.uniform_buffer_manager.push(&m_shadow_pass_data, sizeof(m_shadow_pass_data));
 
     switch (m_uniform_data.render_mode) {
-        case RENDER_MODE_GRAD_ERROR:
-            record_and_submit_debug_grad_error(swapchain_texture_handle);
-            break;
-        default:
-            record_and_submit_visibility(swapchain_texture_handle);
-            break;
+    case RENDER_MODE_GRAD_ERROR:
+        record_and_submit_debug_grad_error(swapchain_texture_handle);
+        break;
+    default:
+        record_and_submit_visibility(swapchain_texture_handle);
+        break;
     }
 
     swapchain_result = rhi::queue_present(m_graphics_queue);
@@ -1220,7 +1221,26 @@ bool Renderer::upload_textures(const eastl::vector<eastl::string>& texture_paths
         }
         DEFER(ktxTexture2_Destroy(ktx_tex));
 
-        const rhi::Format format = format_to_rhi(ktxTexture2_GetVkFormat(ktx_tex));
+        rhi::Format format = rhi::FORMAT_COUNT;
+        switch (ktxTexture2_GetVkFormat(ktx_tex)) {
+        case VK_FORMAT_BC7_UNORM_BLOCK:
+            format = rhi::FORMAT_BC7_UNORM_BLOCK;
+            break;
+        case VK_FORMAT_BC7_SRGB_BLOCK:
+            format = rhi::FORMAT_BC7_SRGB_BLOCK;
+            break;
+        case VK_FORMAT_BC5_UNORM_BLOCK:
+            format = rhi::FORMAT_BC5_UNORM_BLOCK;
+            break;
+        default:
+            fprintf(
+                stderr,
+                "unhandled vk format: %s\n",
+                string_VkFormat(ktxTexture2_GetVkFormat(ktx_tex))
+            );
+            ASSERT(0);
+        }
+
         const Vec3U32 extent{ktx_tex->baseWidth, ktx_tex->baseHeight, ktx_tex->baseDepth};
         const u32 mip_levels = ktx_tex->numLevels;
         const ktx_size_t size = ktxTexture_GetDataSize(ktxTexture(ktx_tex));
