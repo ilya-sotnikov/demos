@@ -63,8 +63,8 @@ bool operator!=(const TempAllocator& lhs, const TempAllocator& rhs) {
 // TODO: Allocate in global heap if on alloc failure.
 struct Context {
     eastl::vector<Arena*> arenas;
-    int scope;
-    int max_scope;
+    u32 scope;
+    u32 max_scope;
 };
 
 static thread_local Context s_ctx;
@@ -76,7 +76,7 @@ TempAllocator get_temp_allocator() {
 }
 
 void start_temp() {
-    const int curr_scope_idx = s_ctx.scope;
+    const u32 curr_scope_idx = s_ctx.scope;
     ++s_ctx.scope;
     if (s_ctx.scope > s_ctx.max_scope) {
         s_ctx.arenas.resize(s_ctx.scope);

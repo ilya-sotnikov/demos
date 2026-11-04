@@ -40,7 +40,6 @@ struct Renderer {
         Semaphore ssao_semaphore;
         rhi::CommandPool graphics_command_pool;
         rhi::CommandPool compute_command_pool;
-        rhi::CommandPool transfer_command_pool;
         rhi::CommandBuffer start_command_buffer;
         rhi::CommandBuffer shadow_command_buffer;
         rhi::CommandBuffer ssao_command_buffer;
@@ -51,7 +50,6 @@ struct Renderer {
     SDL_Window* m_window;
     rhi::Queue m_graphics_queue;
     rhi::Queue m_compute_queue;
-    rhi::Queue m_transfer_queue;
     rhi::DescriptorInfo m_uniform_buffer_descriptor;
     rhi::DescriptorInfo m_shadow_pass_uniform_buffer_descriptor;
     rhi::Semaphore m_frame_semaphore;

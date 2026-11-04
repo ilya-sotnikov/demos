@@ -296,7 +296,6 @@ enum IndexType {
 enum QueueType {
     QUEUE_TYPE_GRAPHICS,
     QUEUE_TYPE_COMPUTE,
-    QUEUE_TYPE_TRANSFER,
     QUEUE_TYPE_COUNT,
 };
 
@@ -331,7 +330,6 @@ struct BufferDesc {
 // Creates a default descriptor.
 Buffer create_buffer(const BufferDesc&& desc);
 void* get_buffer_host_ptr(Buffer buffer);
-u64 get_buffer_device_ptr(Buffer buffer);
 void unmap_buffer(Buffer buffer);
 void destroy_buffer(Buffer buffer);
 

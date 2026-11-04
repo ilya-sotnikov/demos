@@ -145,20 +145,20 @@ void utils::FpsCounter::update(f64& fps, f64 time) {
     ++m_frame_count;
 }
 
-void utils::MemoryDivider::init(void* memory, ptrdiff_t size) {
+void utils::MemoryDivider::init(void* memory, u64 size) {
     m_memory = memory;
     m_size = size;
     m_current_offset = 0;
 }
 
-MemorySlice utils::MemoryDivider::take(ptrdiff_t bytes) {
+MemorySlice utils::MemoryDivider::take(u64 bytes) {
     DEBUG_ASSERT(m_size > 0);
     DEBUG_ASSERT(m_memory);
     DEBUG_ASSERT(m_current_offset < m_size);
 
     MemorySlice result{};
 
-    const ptrdiff_t available = m_size - m_current_offset;
+    const u64 available = m_size - m_current_offset;
     if (bytes <= available) {
         result.count = bytes;
         result.data = static_cast<uchar*>(m_memory) + m_current_offset;

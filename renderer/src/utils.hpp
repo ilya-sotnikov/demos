@@ -44,11 +44,11 @@ struct FpsCounter {
 
 struct MemoryDivider {
     void* m_memory;
-    ptrdiff_t m_current_offset;
-    ptrdiff_t m_size;
+    u64 m_current_offset;
+    u64 m_size;
 
-    void init(void* memory, ptrdiff_t size);
-    MemorySlice take(ptrdiff_t bytes);
+    void init(void* memory, u64 size);
+    MemorySlice take(u64 bytes);
     MemorySlice take_rest();
 };
 

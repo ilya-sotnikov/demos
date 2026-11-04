@@ -10,6 +10,7 @@
 #include <imgui_impl_sdl3.h>
 
 #include <stdio.h>
+#include <errno.h>
 
 static u8 s_keys[SDL_SCANCODE_COUNT + 1];
 static Camera s_camera;

@@ -26,11 +26,11 @@ struct SliceArg {
     // is short, never use it outside of function arguments.
     SliceArg(std::initializer_list<T> list) {
         data = list.begin();
-        count = int(list.size());
+        count = list.size();
     }
 
-    int get_size_bytes() const {
-        return count * int(sizeof(T));
+    u64 get_size_bytes() const {
+        return count * sizeof(T);
     }
 
     T* begin() {

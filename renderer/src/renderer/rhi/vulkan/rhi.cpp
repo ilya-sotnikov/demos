@@ -2,7 +2,6 @@
 
 #include "renderer/rhi/vulkan/common.hpp"
 
-#include "arena.hpp"
 #include "temp_allocator.hpp"
 #include "containers.hpp"
 #include "math/utils.hpp"
@@ -46,7 +45,6 @@ struct QueueImpl {
 struct BufferImpl {
     VkBuffer buffer;
     void* mapped;
-    VkDeviceAddress device_address;
     VmaAllocation allocation;
 };
 
@@ -140,8 +138,6 @@ struct ContextImpl {
     eastl::vector<u32> graphics_queue_idxs; // TODO: Might as well count them?
     u32 compute_queue_family_idx;
     eastl::vector<u32> compute_queue_idxs;
-    u32 transfer_queue_family_idx;
-    eastl::vector<u32> transfer_queue_idxs;
 
     VkDescriptorSetLayout bindless_textures_descriptor_set_layout;
     VkDescriptorSet bindless_textures_descriptor_set;
@@ -311,10 +307,10 @@ static const VkBlendOp s_vk_blend_op_translator[] = {
 };
 static_assert(ARRAY_SIZE(s_vk_blend_op_translator) == rhi::BLEND_OP_COUNT);
 
+[[maybe_unused]]
 static const VkQueueFlags s_vk_queue_translator[] = {
     VK_QUEUE_GRAPHICS_BIT,
     VK_QUEUE_COMPUTE_BIT,
-    VK_QUEUE_TRANSFER_BIT,
 };
 static_assert(ARRAY_SIZE(s_vk_queue_translator) == rhi::QUEUE_TYPE_COUNT);
 
@@ -496,7 +492,7 @@ static VkColorComponentFlags color_component_to_vk(rhi::ColorComponentFlags flag
 static bool extension_is_available(const char* name, SliceArg<VkExtensionProperties> extensions) {
     DEBUG_ASSERT(name);
 
-    for (int i = 0; i < extensions.count; ++i) {
+    for (u64 i = 0; i < extensions.count; ++i) {
         if (!strcmp(name, extensions.data[i].extensionName)) {
             return true;
         }
@@ -753,6 +749,8 @@ void rhi::create(SDL_Window* window) {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     };
 
+    bool unified_image_layout_supported = false;
+
     // Physical device.
     {
         TEMP_ALLOCATOR(temp);
@@ -779,8 +777,8 @@ void rhi::create(SDL_Window* window) {
                 .pNext = &subgroup_properties,
             };
             vkGetPhysicalDeviceProperties2(physical_device, &physical_device_properties);
-            const bool supports_vulkan13 =
-                physical_device_properties.properties.apiVersion >= VK_API_VERSION_1_3;
+            const bool supports_vulkan14 =
+                physical_device_properties.properties.apiVersion >= VK_API_VERSION_1_4;
             bool supports_subgroup = true;
             {
                 const VkSubgroupFeatureFlags flag = subgroup_properties.supportedOperations;
@@ -809,7 +807,6 @@ void rhi::create(SDL_Window* window) {
             );
             bool supports_graphics_and_presentation = false;
             bool supports_compute_queue = false;
-            bool supports_transfer_queue = false;
             for (u32 j = 0; j < queue_family_property_count; ++j) {
                 const VkQueueFlags flags =
                     queue_family_properties[j].queueFamilyProperties.queueFlags;
@@ -827,8 +824,6 @@ void rhi::create(SDL_Window* window) {
                     }
                 } else if (flags & VK_QUEUE_COMPUTE_BIT) {
                     supports_compute_queue = true;
-                } else if (flags & VK_QUEUE_TRANSFER_BIT) {
-                    supports_transfer_queue = true;
                 }
             }
 
@@ -915,7 +910,6 @@ void rhi::create(SDL_Window* window) {
             supports_required_features &= vulkan_features12.samplerFilterMinmax;
             supports_required_features &= vulkan_features12.timelineSemaphore;
             supports_required_features &= vulkan_features11.shaderDrawParameters;
-            supports_required_features &= vulkan_features11.storagePushConstant16;
             supports_required_features &= vulkan_features11.storageBuffer16BitAccess;
             supports_required_features &= vulkan_features11.uniformAndStorageBuffer16BitAccess;
             supports_required_features &= physical_device_features.features.multiDrawIndirect;
@@ -939,12 +933,12 @@ void rhi::create(SDL_Window* window) {
                     VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME
                 );
             }
+            unified_image_layout_supported = unified_image_layout_features.unifiedImageLayouts;
 
             bool device_ok = true;
-            device_ok &= supports_vulkan13;
+            device_ok &= supports_vulkan14;
             device_ok &= supports_graphics_and_presentation;
             device_ok &= supports_compute_queue;
-            device_ok &= supports_transfer_queue;
             device_ok &= supports_required_extensions;
             device_ok &= bool(supports_required_features);
             device_ok &= supports_subgroup;
@@ -1002,22 +996,13 @@ void rhi::create(SDL_Window* window) {
         ASSERT(result);
         s_ctx.compute_queue_idxs.resize(compute_queue_count);
 
-        u32 transfer_queue_count = 0;
-        result = get_queue(
-            s_ctx.transfer_queue_family_idx,
-            transfer_queue_count,
-            s_ctx.physical_device,
-            VK_QUEUE_TRANSFER_BIT,
-            VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT
-        );
-        ASSERT(result);
-        s_ctx.transfer_queue_idxs.resize(transfer_queue_count);
+        // TODO: Cleanup unused features.
 
         // NOTE: did not find any info if I should enable it or just checking it's availability
         // should be enough (which is probably the case), but did it anyway.
         VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR unified_image_layout_features = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFIED_IMAGE_LAYOUTS_FEATURES_KHR,
-            .unifiedImageLayouts = VK_TRUE,
+            .unifiedImageLayouts = unified_image_layout_supported,
         };
         VkPhysicalDeviceVulkan14Features vulkan_features14 = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
@@ -1055,7 +1040,6 @@ void rhi::create(SDL_Window* window) {
             .pNext = &vulkan_features12,
             .storageBuffer16BitAccess = VK_TRUE,
             .uniformAndStorageBuffer16BitAccess = VK_TRUE,
-            .storagePushConstant16 = VK_TRUE,
             .shaderDrawParameters = VK_TRUE,
         };
         const VkPhysicalDeviceFeatures2 physical_device_features = {
@@ -1080,11 +1064,7 @@ void rhi::create(SDL_Window* window) {
 
         TempVector<f32> queue_priorities{temp};
         queue_priorities.resize(
-            math::max(
-                s_ctx.graphics_queue_idxs.size(),
-                s_ctx.compute_queue_idxs.size(),
-                s_ctx.transfer_queue_idxs.size()
-            )
+            math::max(s_ctx.graphics_queue_idxs.size(), s_ctx.compute_queue_idxs.size())
         );
         for (f32& p: queue_priorities) {
             p = 1.0f;
@@ -1101,12 +1081,6 @@ void rhi::create(SDL_Window* window) {
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                 .queueFamilyIndex = s_ctx.compute_queue_family_idx,
                 .queueCount = u32(s_ctx.compute_queue_idxs.size()),
-                .pQueuePriorities = queue_priorities.data(),
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                .queueFamilyIndex = s_ctx.transfer_queue_family_idx,
-                .queueCount = u32(s_ctx.transfer_queue_idxs.size()),
                 .pQueuePriorities = queue_priorities.data(),
             },
         };
@@ -1128,7 +1102,6 @@ void rhi::create(SDL_Window* window) {
     // VMA.
     {
         VmaAllocatorCreateInfo vma_allocator_info = {
-            .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
             .physicalDevice = s_ctx.physical_device,
             .device = s_ctx.device,
             .instance = s_ctx.instance,
@@ -1266,15 +1239,14 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc) {
     BufferImpl buffer{};
 
     const VkBufferUsageFlags usage = desc.type == rhi::MEMORY_TYPE_DEFAULT_UNIFORM
-        ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+        ? VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
         : VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-            | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
-            | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+            | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+            | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
 
     const u32 queue_family_indices[] = {
         s_ctx.graphics_queue_family_idx,
         s_ctx.compute_queue_family_idx,
-        s_ctx.transfer_queue_family_idx,
     };
 
     const VkBufferCreateInfo buffer_info = {
@@ -1315,12 +1287,6 @@ rhi::Buffer rhi::create_buffer(const BufferDesc&& desc) {
         VK_CHECK(vmaMapMemory(s_ctx.vma_allocator, buffer.allocation, &buffer.mapped));
     }
 
-    const VkBufferDeviceAddressInfo address_info = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = buffer.buffer,
-    };
-    buffer.device_address = vkGetBufferDeviceAddress(s_ctx.device, &address_info);
-
     if (desc.debug_name) {
         debug_name_object(
             s_ctx.device,
@@ -1337,12 +1303,6 @@ void* rhi::get_buffer_host_ptr(Buffer handle) {
     DEBUG_ASSERT(handle);
 
     return s_ctx.buffers.get_ptr(handle)->mapped;
-}
-
-u64 rhi::get_buffer_device_ptr(Buffer handle) {
-    DEBUG_ASSERT(handle);
-
-    return static_cast<u64>(s_ctx.buffers.get_ptr(handle)->device_address);
 }
 
 void rhi::unmap_buffer(Buffer handle) {
@@ -1394,7 +1354,6 @@ rhi::Texture rhi::create_texture(const TextureDesc&& desc) {
     const u32 queue_family_indices[] = {
         s_ctx.graphics_queue_family_idx,
         s_ctx.compute_queue_family_idx,
-        s_ctx.transfer_queue_family_idx,
     };
 
     const VkImageCreateInfo image_info = {
@@ -1652,8 +1611,7 @@ rhi::CommandPool rhi::create_command_pool(const CommandPoolDesc&& desc) {
     case rhi::QUEUE_TYPE_COMPUTE:
         family_idx = s_ctx.compute_queue_family_idx;
         break;
-    case rhi::QUEUE_TYPE_TRANSFER:
-        family_idx = s_ctx.transfer_queue_family_idx;
+    default:
         break;
     }
     ASSERT(family_idx != UINT32_MAX);
@@ -1768,22 +1726,6 @@ rhi::Queue rhi::create_queue(const QueueDesc&& desc) {
         );
 
         return s_ctx.queues.create_handle(queue);
-    } else if (desc.type == rhi::QUEUE_TYPE_TRANSFER) {
-        QueueImpl queue = {.type = rhi::QUEUE_TYPE_TRANSFER};
-
-        const bool found = find_queue_index(queue.idx, s_ctx.transfer_queue_idxs);
-        ASSERT(found);
-
-        vkGetDeviceQueue(s_ctx.device, s_ctx.transfer_queue_family_idx, queue.idx, &queue.queue);
-
-        debug_name_object(
-            s_ctx.device,
-            VK_OBJECT_TYPE_QUEUE,
-            reinterpret_cast<u64>(queue.queue),
-            desc.debug_name
-        );
-
-        return s_ctx.queues.create_handle(queue);
     } else {
         UNREACHABLE();
     }
@@ -1799,9 +1741,6 @@ void rhi::destroy_queue(Queue handle) {
         } else if (queue.type == rhi::QUEUE_TYPE_COMPUTE) {
             s_ctx.compute_queue_idxs[queue.idx] = 0;
             s_ctx.queues.destroy_handle(handle);
-        } else if (queue.type == rhi::QUEUE_TYPE_TRANSFER) {
-            s_ctx.transfer_queue_idxs[queue.idx] = 0;
-            s_ctx.queues.destroy_handle(handle);
         } else {
             UNREACHABLE();
         }
@@ -1815,7 +1754,7 @@ void rhi::queue_submit(rhi::Queue queue, const SliceArg<QueueSubmitDesc>&& desc)
 
     TempVector<VkSubmitInfo2> submit_infos{desc.count, temp};
 
-    for (int i = 0; i < desc.count; ++i) {
+    for (u64 i = 0; i < desc.count; ++i) {
         const CommandBufferImpl* const cb = s_ctx.command_buffers.get_ptr(desc[i].cb);
 
         // TODO: It's only safe with the TempAllocator, will break if I decide to
@@ -2183,7 +2122,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
     }
 
     TempVector<VkFormat> color_attachment_formats{desc.color_targets.count, temp};
-    for (int i = 0; i < desc.color_targets.count; ++i) {
+    for (u64 i = 0; i < desc.color_targets.count; ++i) {
         color_attachment_formats[i] = s_vk_format_translator[desc.color_targets[i].format];
     }
 
@@ -2236,7 +2175,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         temp
     };
 
-    for (int i = 0; i < desc.color_targets.count; ++i) {
+    for (u64 i = 0; i < desc.color_targets.count; ++i) {
         const rhi::PipelineColorTarget& t = desc.color_targets[i];
         color_blend_attachments[i] = {
             .blendEnable = t.blend_enable,
@@ -2397,7 +2336,7 @@ void rhi::cmd_texture_barrier(
 
     TempVector<VkImageMemoryBarrier2> barriers{desc.count, temp};
 
-    for (int i = 0; i < desc.count; ++i) {
+    for (u64 i = 0; i < desc.count; ++i) {
         const rhi::TextureBarrierDesc& d = desc[i];
 
         const TextureImpl* const texture = s_ctx.textures.get_ptr(d.texture);
@@ -2448,7 +2387,7 @@ void rhi::cmd_texture_invalidate_barrier(
 
     TempVector<VkImageMemoryBarrier2> barriers{textures.count, temp};
 
-    for (int i = 0; i < textures.count; ++i) {
+    for (u64 i = 0; i < textures.count; ++i) {
         const TextureImpl* const texture = s_ctx.textures.get_ptr(textures[i]);
 
         barriers[i] = {
@@ -2498,7 +2437,7 @@ void rhi::cmd_copy_buffer_to_texture(
 
     const TextureImpl* const tex = s_ctx.textures.get_ptr(texture);
 
-    for (int i = 0; i < copy_regions.count; ++i) {
+    for (u64 i = 0; i < copy_regions.count; ++i) {
         const rhi::BufferTextureCopy& c = copy_regions[i];
         regions[i] = VkBufferImageCopy{
             .bufferOffset = c.buffer_offset,
@@ -2584,7 +2523,7 @@ void rhi::cmd_push_descriptors(
 
     TempVector<DescriptorInfoImpl> infos{descriptors.count, temp};
 
-    for (int i = 0; i < descriptors.count; ++i) {
+    for (u64 i = 0; i < descriptors.count; ++i) {
         const rhi::DescriptorInfo& d = descriptors[i];
         switch (d.type) {
         case rhi::DescriptorInfo::TYPE_NONE:
@@ -2674,7 +2613,7 @@ void rhi::cmd_begin_rendering(const BeginRenderingDesc&& desc) {
         temp
     };
 
-    for (int i = 0; i < desc.color_targets.count; ++i) {
+    for (u64 i = 0; i < desc.color_targets.count; ++i) {
         const rhi::Attachment& t = desc.color_targets[i];
 
         rendering_attachment_infos[i] = {

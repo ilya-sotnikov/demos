@@ -197,10 +197,6 @@ bool Renderer::init() {
         .type = rhi::QUEUE_TYPE_COMPUTE,
         .debug_name = "compute_queue",
     });
-    m_transfer_queue = rhi::create_queue({
-        .type = rhi::QUEUE_TYPE_TRANSFER,
-        .debug_name = "transfer_queue",
-    });
 
     for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i) {
         m_frame[i].graphics_command_pool = rhi::create_command_pool({
@@ -210,10 +206,6 @@ bool Renderer::init() {
         m_frame[i].compute_command_pool = rhi::create_command_pool({
             .queue = m_compute_queue,
             .debug_name = "compute_command_pool",
-        });
-        m_frame[i].transfer_command_pool = rhi::create_command_pool({
-            .queue = m_transfer_queue,
-            .debug_name = "transfer_command_pool",
         });
     }
 
@@ -339,7 +331,7 @@ bool Renderer::init() {
             memcpy(rhi::get_buffer_host_ptr(staging_buffer), jitter_offsets.data(), upload_size);
 
             rhi::CommandBuffer cb = rhi::create_command_buffer({
-                .command_pool = m_frame[0].transfer_command_pool,
+                .command_pool = m_frame[0].graphics_command_pool,
                 .debug_name = "upload_shadow_pcf_jitter_cb",
             });
             DEFER(rhi::destroy_command_buffer(cb));
@@ -374,7 +366,7 @@ bool Renderer::init() {
 
             rhi::end_command_buffer(cb);
 
-            rhi::queue_submit(m_transfer_queue, {{.cb = cb}});
+            rhi::queue_submit(m_graphics_queue, {{.cb = cb}});
 
             rhi::device_wait_idle();
 
@@ -559,8 +551,8 @@ bool Renderer::init() {
     if (!m_imgui_renderer.init(
             m_window,
             rhi::get_texture_format(rhi::get_swapchain_texture(0)),
-            m_transfer_queue,
-            m_frame[0].transfer_command_pool
+            m_graphics_queue,
+            m_frame[0].graphics_command_pool
         ))
     {
         fprintf(stderr, "failed to initialize ImGui renderer\n");
@@ -570,7 +562,7 @@ bool Renderer::init() {
     // Initializing resources.
     {
         rhi::CommandBuffer cb = rhi::create_command_buffer({
-            .command_pool = m_frame[0].transfer_command_pool,
+            .command_pool = m_frame[0].graphics_command_pool,
             .debug_name = "init_cb",
         });
         DEFER(rhi::destroy_command_buffer(cb));
@@ -587,8 +579,8 @@ bool Renderer::init() {
 
         rhi::end_command_buffer(cb);
 
-        rhi::queue_submit(m_transfer_queue, {{.cb = cb}});
-        rhi::queue_wait_idle(m_transfer_queue);
+        rhi::queue_submit(m_graphics_queue, {{.cb = cb}});
+        rhi::queue_wait_idle(m_graphics_queue);
     }
 
     m_swapchain_needs_recreating = true;
@@ -625,9 +617,8 @@ bool Renderer::init() {
 void Renderer::cleanup() {
     rhi::device_wait_idle();
 
-    rhi::destroy_queue(m_graphics_queue);
     rhi::destroy_queue(m_compute_queue);
-    rhi::destroy_queue(m_transfer_queue);
+    rhi::destroy_queue(m_graphics_queue);
 
     m_imgui_renderer.cleanup();
 
@@ -668,7 +659,6 @@ void Renderer::cleanup() {
     for (int i = 0; i < rhi::FRAMES_IN_FLIGHT; ++i) {
         rhi::destroy_command_pool(m_frame[i].graphics_command_pool);
         rhi::destroy_command_pool(m_frame[i].compute_command_pool);
-        rhi::destroy_command_pool(m_frame[i].transfer_command_pool);
 
         rhi::destroy_semaphore(m_frame[i].start_semaphore.semaphore);
         rhi::destroy_semaphore(m_frame[i].shadow_semaphore.semaphore);
@@ -1284,7 +1274,7 @@ bool Renderer::upload_textures(const eastl::vector<eastl::string>& texture_paths
         rhi::unmap_buffer(staging_buffer);
 
         rhi::CommandBuffer cb = rhi::create_command_buffer({
-            .command_pool = m_frame[0].transfer_command_pool,
+            .command_pool = m_frame[0].graphics_command_pool,
             .debug_name = "upload_textures_cb",
         });
         DEFER(rhi::destroy_command_buffer(cb));
@@ -1312,8 +1302,8 @@ bool Renderer::upload_textures(const eastl::vector<eastl::string>& texture_paths
 
         rhi::end_command_buffer(cb);
 
-        rhi::queue_submit(m_transfer_queue, {{.cb = cb}});
-        rhi::queue_wait_idle(m_transfer_queue);
+        rhi::queue_submit(m_graphics_queue, {{.cb = cb}});
+        rhi::queue_wait_idle(m_graphics_queue);
     }
 
     for (size_t i = 0; i < m_textures.size(); ++i) {
