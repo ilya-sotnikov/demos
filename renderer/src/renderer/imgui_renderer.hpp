@@ -3,8 +3,8 @@
 #include "common.hpp"
 #include "math/types.hpp"
 #include "renderer/rhi/rhi.hpp"
-#include "renderer/shaders/shared_config.hlsli"
-#include "renderer/shaders/shared_def.hlsli"
+#include "renderer/shaders/shared_config.h.slang"
+#include "renderer/shaders/shared_def.h.slang"
 
 #include "math/types.hpp"
 

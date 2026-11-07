@@ -10,7 +10,7 @@
 namespace utils {
 
 struct FileData {
-    void* data;
+    u8* data;
     u64 size;
 };
 

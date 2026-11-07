@@ -1,8 +1,8 @@
 #pragma once
 
-#include "common.hlsli"
+#include "common.h.slang"
 
-static float sample_shadow(float3 position_shadow, uint cascade_idx) {
+float sample_shadow(float3 position_shadow, uint cascade_idx) {
     return shadow_texture.SampleCmpLevel(
         shadow_sampler,
         float3(position_shadow.xy, cascade_idx), position_shadow.z,
@@ -11,7 +11,7 @@ static float sample_shadow(float3 position_shadow, uint cascade_idx) {
 }
 
 // GPU gems 2, Chapter 17, Efficient Soft-Edged Shadows Using Pixel Shader Branching, Yury Uralsky.
-static float calc_shadow(
+float calc_shadow(
     uint32_t enable_pcf,
     float pcf_kernel_scale,
     float pcf_kernel_cascade_scale,

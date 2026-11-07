@@ -1,16 +1,25 @@
-#include "common.hlsli"
-#include "math.hlsli"
-#include "visibility_buffer.hlsli"
+#include "common.h.slang"
+#include "math.h.slang"
 
 // https://static.graphicsprogrammingconference.com/public/2025/slides/visibility-buffer-and-deferred-rendering-in-doom/Lazarek-Hammer-visibility-buffer-and-deferred-rendering-in-doom-the-dark-ages.pdf
+
+ConstantBuffer<UniformData> uniform_buffer;
+StructuredBuffer<uint32_t> draw_indices_buffer;
+StructuredBuffer<DrawData> draw_data_buffer;
+StructuredBuffer<Vertex> vertex_buffer;
 
 [[vk::push_constant]]
 PushConstantsVisibilityBuffer push_constants;
 
-void main(
-    uint vertex_id : SV_VertexID,
-    // Dummy semantics just to please the compiler.
-    [[vk::builtin("DrawIndex")]] uint raw_draw_idx : RAW_DRAW_IDX,
+struct VertexOutput {
+    float4 position_clip : SV_Position;
+    nointerpolation uint raw_draw_idx;
+};
+
+[shader("vertex")]
+void main_vert(
+    uint vertex_id : SV_VulkanVertexID,
+    uint raw_draw_idx : SV_DrawIndex,
     out VertexOutput output
 ) {
     const uint draw_idx = draw_indices_buffer[raw_draw_idx];
@@ -34,4 +43,17 @@ void main(
     outraw_draw_idx |= push_constants.cull_late << 31;
 
     output.raw_draw_idx = outraw_draw_idx;
+}
+
+struct FragmentOutput {
+    uint2 visibility_data : SV_Target0;
+};
+
+[shader("fragment")]
+void main_frag(
+    VertexOutput input,
+    uint primitive_id : SV_PrimitiveID,
+    out FragmentOutput output
+) : SV_Target {
+    output.visibility_data = uint2(primitive_id, input.raw_draw_idx);
 }

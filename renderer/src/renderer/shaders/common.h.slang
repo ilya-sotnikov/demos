@@ -1,7 +1,7 @@
 #pragma once
 
-#include "shared_config.hlsli"
-#include "shared_def.hlsli"
+#include "shared_config.h.slang"
+#include "shared_def.h.slang"
 
 struct DrawIndexedIndirectCommand {
     uint32_t    index_count;
@@ -29,8 +29,7 @@ static const uint32_t COLOR_MAGENTA = 0xffff00ff;
 #ifdef VULKAN_ENABLE_DEBUG_UTILS
 #define ASSERT(expr) \
     do { \
-        if (!(expr)) \
-        { \
+        if (!(expr)) { \
             printf(__FILE__ ":%d shader assertion failed " #expr "\n", __LINE__); \
         } \
     } while (false)

@@ -1,7 +1,7 @@
-#include "common.hlsli"
-#include "math.hlsli"
-#include "pbr.hlsli"
-#include "sky.hlsli"
+#include "common.h.slang"
+#include "math.h.slang"
+#include "pbr.h.slang"
+#include "sky.h.slang"
 
 // https://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
 
@@ -30,7 +30,7 @@ RWTexture2D<float2> velocity_texture_rw;
 RWTexture2D<float3> render_texture_rw;
 
 // TODO: very messy.
-#include "calc_shadow.hlsli"
+#include "calc_shadow.h.slang"
 
 // NOTE: full bindless is not practical yet since it messes up synchronization validation.
 // For now it's only for read-only resources (textures).
@@ -65,6 +65,7 @@ float4 sample_tex(uint32_t idx, InterpolatedData2D uv) {
         .SampleGrad(texture_sampler, uv.c, uv.dcdx, uv.dcdy);
 }
 
+[shader("compute")]
 [numthreads(RENDERER_RENDER_WORKGROUP_SIZE_X, RENDERER_RENDER_WORKGROUP_SIZE_Y, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
     const int2 render_texture_size = int2(uniform_buffer.render_width, uniform_buffer.render_height);
@@ -76,7 +77,7 @@ void main(uint3 dtid : SV_DispatchThreadID) {
     const uint2 visibility_data = visibility_texture[dtid.xy];
     uint raw_draw_idx = visibility_data.y;
 
-    const bool is_cull_late = raw_draw_idx & 0x80000000;
+    const bool is_cull_late = bool(raw_draw_idx & 0x80000000);
     raw_draw_idx &= 0x7fffffff;
 
     float2 pixel_ndc = ((dtid.xy + 0.5f) * uniform_buffer.render_texture_size_inv) * 2.0f - 1.0f;
@@ -201,7 +202,11 @@ void main(uint3 dtid : SV_DispatchThreadID) {
 
     const float3 fragment_to_camera = normalize(uniform_buffer.camera_position - pixel_world);
 
-    const float3 half_vec_view_light = normalize(fragment_to_camera - uniform_buffer.sun_direction_world);
+    float3 half_vec_view_light = fragment_to_camera - uniform_buffer.sun_direction_world;
+    const float half_vec_view_light_len = length(half_vec_view_light);
+    // TODO: IDK.
+    half_vec_view_light = half_vec_view_light_len > 1e-4 ?
+                          half_vec_view_light / half_vec_view_light_len : normal;
 
     float3 fresnel0 = float3(0.04f, 0.04f, 0.04f); // Good default for dielectrics.
     fresnel0 = lerp(fresnel0, albedo.rgb, metallic);
@@ -275,14 +280,14 @@ void main(uint3 dtid : SV_DispatchThreadID) {
         );
 
     float ambient_occlusion = 1.0f;
-    if (uniform_buffer.enable_ssao) {
+    if (uniform_buffer.enable_ssao == 1) {
         ambient_occlusion = ambient_occlusion_texture[dtid.xy];
     }
 
     const float3 ambient = albedo.rgb * uniform_buffer.ambient_intensity * ambient_occlusion;
 
     float fog_factor = 0.0f;
-    if (uniform_buffer.enable_fog) {
+    if (uniform_buffer.enable_fog == 1) {
         fog_factor = fog_texture.SampleLevel(
             linear_sampler,
             (dtid.xy + 0.5f) * uniform_buffer.render_texture_size_inv,
@@ -296,7 +301,7 @@ void main(uint3 dtid : SV_DispatchThreadID) {
         fog_factor
     ) * uniform_buffer.sun_color;
 
-    switch (uniform_buffer.render_mode) {
+    switch (RenderMode(uniform_buffer.render_mode)) {
     case RENDER_MODE_AMBIENT_OCCLUSION:
         color = ambient_occlusion;
         break;

@@ -48,7 +48,7 @@ utils::FileData utils::file_read(const char* path) {
         return result;
     }
 
-    result.data = res;
+    result.data = static_cast<u8*>(res);
     result.size = u64(file_size);
 
     return result;

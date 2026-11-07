@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.hlsli"
+#include "common.h.slang"
 
 // Analytic calculation of simplified Rayleigh and Mie scattering.
 // Took the implementation from here (with small tweaks):

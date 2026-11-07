@@ -1,4 +1,4 @@
-#include "common.hlsli"
+#include "common.h.slang"
 
 // Referenced this:
 // Robust Screen Space Ambient Occlusion in 1 ms in 1080p on PS4, Wojciech Sterna, GPU Zen.
@@ -13,6 +13,7 @@ Texture2D<float> in_texture;
 RWTexture2D<float> out_texture;
 
 // Bilinear depth-aware upsampling.
+[shader("compute")]
 [numthreads(RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_X, RENDERER_SSAO_UPSAMPLE_WORKGROUP_SIZE_Y, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
     const uint2 texture_size = uint2(uniform_buffer.render_width, uniform_buffer.render_height);

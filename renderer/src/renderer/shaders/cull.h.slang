@@ -1,6 +1,5 @@
-#include "common.hlsli"
-#include "math.hlsli"
-#include "debug_draw.hlsli"
+#include "common.h.slang"
+#include "math.h.slang"
 
 // Heavily based on from niagara:
 // https://github.com/zeux/niagara
@@ -19,6 +18,10 @@ RWStructuredBuffer<uint32_t> mesh_primitive_visible_buffer;
 SamplerState min_sampler;
 Texture2D<float> depth_pyramid_texture;
 
+RWByteAddressBuffer debug_draw_count_buffer;
+RWStructuredBuffer<DebugDrawRectData> debug_draw_rect_buffer;
+#include "debug_draw.h.slang"
+
 // 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere, Michael Mara, Morgan McGuire
 // http://jcgt.org/published/0002/02/05/paper.pdf
 // Took the implementation from niagara:
@@ -36,6 +39,7 @@ bool project_sphere(
     // If the bounding sphere intersects the near plane, we skip occlusion tests
     // since it simplifies math and in this case the object is probably not occluded anyway.
     if (center.z > -(radius + z_near)) {
+        aabb = float4(0.0f);
         return false;
     }
 
@@ -61,6 +65,7 @@ bool project_sphere(
     return true;
 }
 
+[shader("compute")]
 [numthreads(RENDERER_CULL_WORKGROUP_SIZE, 1, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
     const uint draw_idx = dtid.x;
@@ -119,7 +124,7 @@ void main(uint3 dtid : SV_DispatchThreadID) {
 
             visible = visible && depth_sphere > depth;
 
-            if (cull_pass_data.draw_cull_aabb) {
+            if (cull_pass_data.draw_cull_aabb == 1) {
                 debug_draw_rect(
                     aabb * float4(
                         uniform_buffer.render_width,

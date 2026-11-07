@@ -82,7 +82,6 @@ struct CommandBufferImpl {
 struct ShaderImpl {
     VkShaderModule module;
     VkShaderStageFlagBits stage;
-    u32 push_constant_size;
     Vec3U32 local_size;
 };
 
@@ -558,46 +557,48 @@ static VkImageAspectFlags vk_aspect_flags_from_format(VkFormat format) {
     }
 }
 
-static bool create_shader(
-    ShaderImpl& shader,
+static bool create_shaders(
+    TempVector<ShaderImpl>& shaders,
     TempVector<VkDescriptorSetLayoutBinding>& descriptor_set_layout_bindings,
+    u32& push_constant_size,
     VkDevice device,
     Slice<u8> bytecode
 ) {
     DEBUG_ASSERT(device);
     DEBUG_ASSERT(bytecode.count > 0);
 
-    const VkShaderModuleCreateInfo create_info = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = bytecode.count,
-        .pCode = reinterpret_cast<const u32*>(bytecode.data),
-    };
-
-    if (vkCreateShaderModule(device, &create_info, nullptr, &shader.module) != VK_SUCCESS) {
-        fprintf(stderr, "vulkan: vkCreateShaderModule failed\n");
-        return false;
-    }
-
     SpvReflectShaderModule module{};
     SpvReflectResult result = spvReflectCreateShaderModule(bytecode.count, bytecode.data, &module);
     ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
     DEFER(spvReflectDestroyShaderModule(&module));
 
-    // NOTE: AFAIK in dxc multiple entry points are buggy. Also, I've encountered a strange bug (?)
-    // with multiple compute shader entry points in Nsight Graphics, when profiling, some samples
-    // always end up in the first entry point in a file when in reality it should not execute at
-    // all. Maybe PEBKAC, but for now I'll just always use 1 entry point per file.
-    ASSERT(module.entry_point_count == 1);
+    ASSERT(module.entry_point_count > 0);
+    shaders.resize(module.entry_point_count);
 
-    const SpvReflectEntryPoint* const entry_point = spvReflectGetEntryPoint(&module, "main");
-    ASSERT(entry_point);
+    for (u32 entryPointIdx = 0; entryPointIdx < module.entry_point_count; ++entryPointIdx) {
+        ShaderImpl& shader = shaders[entryPointIdx];
 
-    shader.stage = static_cast<VkShaderStageFlagBits>(entry_point->shader_stage);
-    shader.local_size = {
-        entry_point->local_size.x,
-        entry_point->local_size.y,
-        entry_point->local_size.z,
-    };
+        const VkShaderModuleCreateInfo create_info = {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = bytecode.count,
+            .pCode = reinterpret_cast<const u32*>(bytecode.data),
+        };
+
+        if (vkCreateShaderModule(device, &create_info, nullptr, &shader.module) != VK_SUCCESS) {
+            fprintf(stderr, "vulkan: vkCreateShaderModule failed\n");
+            return false;
+        }
+
+        const SpvReflectEntryPoint& entry_point = module.entry_points[entryPointIdx];
+
+        shader.stage = static_cast<VkShaderStageFlagBits>(entry_point.shader_stage);
+
+        shader.local_size = {
+            entry_point.local_size.x,
+            entry_point.local_size.y,
+            entry_point.local_size.z,
+        };
+    }
 
     u32 set_count = 0;
     result = spvReflectEnumerateDescriptorSets(&module, &set_count, nullptr);
@@ -637,9 +638,7 @@ static bool create_shader(
 
     const SpvReflectBlockVariable* const push_constant_block =
         spvReflectGetPushConstantBlock(&module, 0, &result);
-    if (push_constant_block) {
-        shader.push_constant_size = push_constant_block->size;
-    }
+    push_constant_size = push_constant_block ? push_constant_block->size : 0;
 
     return true;
 }
@@ -673,6 +672,18 @@ static void debug_name_object(
 #ifdef RHI_ENABLE_DEBUG_UTILS
     VK_CHECK(vkSetDebugUtilsObjectNameEXT(device, &nameInfo));
 #endif
+}
+
+static const char* get_entry_point_name(VkShaderStageFlagBits stage) {
+    if (stage & VK_SHADER_STAGE_COMPUTE_BIT) {
+        return "main";
+    } else if (stage & VK_SHADER_STAGE_VERTEX_BIT) {
+        return "main_vert";
+    } else if (stage & VK_SHADER_STAGE_FRAGMENT_BIT) {
+        return "main_frag";
+    } else {
+        ASSERT(0);
+    }
 }
 
 void rhi::create(SDL_Window* window) {
@@ -1839,12 +1850,24 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
 
     TempVector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings{temp};
     descriptor_set_layout_bindings.reserve(32);
-    ShaderImpl shader{};
-    DEFER(vkDestroyShaderModule(s_ctx.device, shader.module, nullptr));
-
-    if (!create_shader(shader, descriptor_set_layout_bindings, s_ctx.device, desc.bytecode)) {
+    TempVector<ShaderImpl> shaders{temp};
+    DEFER({
+        for (u64 i = 0; i < shaders.size(); ++i) {
+            vkDestroyShaderModule(s_ctx.device, shaders[i].module, nullptr);
+        }
+    });
+    u32 push_constant_size = 0;
+    if (!create_shaders(
+            shaders,
+            descriptor_set_layout_bindings,
+            push_constant_size,
+            s_ctx.device,
+            desc.bytecode
+        ))
+    {
         return rhi::Pipeline::invalid();
     }
+    ASSERT(shaders.size() == 1);
 
     // Remove duplicates.
     bool binding_used[32]{};
@@ -1904,11 +1927,11 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
     ));
 
     VkPushConstantRange push_constant_range{};
-    const bool uses_push_constants = shader.push_constant_size > 0;
+    const bool uses_push_constants = push_constant_size > 0;
     if (uses_push_constants) {
         push_constant_range.stageFlags = VK_SHADER_STAGE_ALL;
-        push_constant_range.size = shader.push_constant_size;
-        pipeline.push_constant_size = shader.push_constant_size;
+        push_constant_range.size = push_constant_size;
+        pipeline.push_constant_size = push_constant_size;
     }
 
     const VkDescriptorSetLayout set_layouts[] = {
@@ -1930,9 +1953,9 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
         .stage =
             {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                .stage = shader.stage,
-                .module = shader.module,
-                .pName = "main",
+                .stage = shaders[0].stage,
+                .module = shaders[0].module,
+                .pName = get_entry_point_name(shaders[0].stage),
             },
         .layout = pipeline.layout,
     };
@@ -1992,19 +2015,18 @@ rhi::Pipeline rhi::create_compute_pipeline(const rhi::ComputePipelineDesc&& desc
 
     failed = false;
 
-    pipeline.local_size = shader.local_size;
+    pipeline.local_size = shaders[0].local_size;
 
     return s_ctx.pipelines.create_handle(pipeline);
 }
 
 rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& desc) {
-    DEBUG_ASSERT(desc.bytecodes.count > 0);
-
     TEMP_ALLOCATOR(temp);
 
     TempVector<VkDescriptorSetLayoutBinding> descriptor_set_layout_bindings{temp};
     descriptor_set_layout_bindings.reserve(32);
-    TempVector<ShaderImpl> shaders{desc.bytecodes.count, temp};
+    TempVector<ShaderImpl> shaders{temp};
+    shaders.reserve(2);
 
     bool failed = true;
     PipelineImpl pipeline{};
@@ -2026,27 +2048,16 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
         }
     );
     // clang-format on
-
-    for (size_t i = 0; i < desc.bytecodes.count; ++i) {
-        if (!create_shader(
-                shaders[i],
-                descriptor_set_layout_bindings,
-                s_ctx.device,
-                *(desc.bytecodes.begin() + i)
-            ))
-        {
-            return rhi::Pipeline::invalid();
-        }
-    }
-
     u32 push_constant_size = 0;
-    for (ShaderImpl& shader: shaders) {
-        ASSERT(
-            (push_constant_size == 0 || shader.push_constant_size == 0)
-            || (push_constant_size == shader.push_constant_size)
-        );
-        push_constant_size =
-            push_constant_size == 0 ? shader.push_constant_size : push_constant_size;
+    if (!create_shaders(
+            shaders,
+            descriptor_set_layout_bindings,
+            push_constant_size,
+            s_ctx.device,
+            desc.bytecode
+        ))
+    {
+        return rhi::Pipeline::invalid();
     }
 
     // Remove duplicates.
@@ -2117,7 +2128,7 @@ rhi::Pipeline rhi::create_graphics_pipeline(const rhi::GraphicsPipelineDesc&& de
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = shaders[i].stage,
             .module = shaders[i].module,
-            .pName = "main",
+            .pName = get_entry_point_name(shaders[i].stage),
         };
     }
 

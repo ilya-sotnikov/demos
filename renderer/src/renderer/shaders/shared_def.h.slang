@@ -2,7 +2,7 @@
 
 // Shared with C++.
 
-#include "shared_config.hlsli"
+#include "shared_config.h.slang"
 
 #ifdef __cplusplus
 #define HALF f16
@@ -45,7 +45,6 @@ struct UniformData {
     float delta_time;
     float sun_intensity;
     float ambient_intensity;
-    float grad_error_max;
     float aspect;
     uint64_t frame_count;
     uint32_t swapchain_width;
@@ -163,7 +162,6 @@ enum RenderPassFlagBits {
 
 enum RenderMode {
     RENDER_MODE_VISIBILITY,
-    RENDER_MODE_GRAD_ERROR,
     RENDER_MODE_AMBIENT_OCCLUSION,
     RENDER_MODE_COUNT,
 };

@@ -1,5 +1,5 @@
-#include "common.hlsli"
-#include "math.hlsli"
+#include "common.h.slang"
+#include "math.h.slang"
 
 // Referenced this:
 // Robust Screen Space Ambient Occlusion in 1 ms in 1080p on PS4, Wojciech Sterna, GPU Zen.
@@ -50,6 +50,7 @@ float3 calc_pos_view(float2 uv) {
     return pos;
 }
 
+[shader("compute")]
 [numthreads(RENDERER_SSAO_WORKGROUP_SIZE_X, RENDERER_SSAO_WORKGROUP_SIZE_Y, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
     const uint2 texture_size = uint2(push_constants.width, push_constants.height);
@@ -66,7 +67,7 @@ void main(uint3 dtid : SV_DispatchThreadID) {
     const uint2 visibility_data = visibility_texture[dtid.xy * 2];
     uint raw_draw_idx = visibility_data.y;
 
-    const bool is_cull_late = raw_draw_idx & 0x80000000;
+    const bool is_cull_late = bool(raw_draw_idx & 0x80000000);
     raw_draw_idx &= 0x7fffffff;
 
     if (raw_draw_idx == 0) {
