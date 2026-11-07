@@ -7,8 +7,8 @@
 #include "math/utils.hpp"
 #include "rhi/rhi.hpp"
 #include "scene.hpp"
-#include "shaders/shared_config.hlsli"
-#include "shaders/shared_def.hlsli"
+#include "shaders/shared_config.h.slang"
+#include "shaders/shared_def.h.slang"
 #include "uniform_buffer_manager.hpp"
 
 #include <EASTL/vector.h>
@@ -84,7 +84,6 @@ struct Renderer {
     rhi::Pipeline m_cull_early_pipeline;
     rhi::Pipeline m_cull_late_pipeline;
     rhi::Pipeline m_taa_resolve_pipeline;
-    rhi::Pipeline m_debug_grad_error_pipeline;
     rhi::Pipeline m_depth_reduce_pipeline;
     rhi::Pipeline m_debug_draw_rect_pipeline;
     rhi::Pipeline m_debug_draw_fill_cmd_pipeline;
@@ -167,14 +166,7 @@ private:
     void debug_draw_pass(rhi::CommandBuffer cb);
     void fullscreen_pass(rhi::CommandBuffer cb, rhi::Texture swapchain_texture);
 
-    void debug_draw_grad_error_pass(
-        rhi::CommandBuffer cb,
-        bool cull_late,
-        rhi::Texture swapchain_texture
-    );
-
-    void record_and_submit_debug_grad_error(rhi::Texture swapchain_texture);
-    void record_and_submit_visibility(rhi::Texture swapchain_texture);
+    void record_and_submit(rhi::Texture swapchain_texture);
     void create_swapchain(Vec2U32 size);
     void cleanup_swapchain();
     void create_color_resources();

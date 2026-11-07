@@ -463,7 +463,7 @@ struct PipelineColorTarget {
     ColorComponentFlags color_component_mask = rhi::COLOR_COMPONENT_ALL_BITS;
 };
 struct GraphicsPipelineDesc {
-    SliceArg<Slice<u8>> bytecodes;
+    Slice<u8> bytecode;
     bool uses_bindless_textures;
     Topology topology = TOPOLOGY_TRIANGLE_LIST;
     Cull cull = CULL_NONE;

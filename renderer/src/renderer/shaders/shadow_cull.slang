@@ -1,5 +1,5 @@
-#include "common.hlsli"
-#include "math.hlsli"
+#include "common.h.slang"
+#include "math.h.slang"
 
 ConstantBuffer<UniformData> uniform_buffer;
 StructuredBuffer<DrawData> draw_data_buffer;
@@ -11,6 +11,7 @@ RWStructuredBuffer<uint32_t> draw_indices_buffer;
 [[vk::push_constant]]
 PushConstantsShadow push_constants;
 
+[shader("compute")]
 [numthreads(RENDERER_CULL_WORKGROUP_SIZE, 1, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
     const uint draw_idx = dtid.x;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.hlsli"
+#include "common.h.slang"
 
 // Stole from GNU libc.
 #ifndef M_Ef
@@ -61,11 +61,11 @@
 
 // https://github.com/imneme/pcg-c-basic/blob/master/pcg_basic.c
 // https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
-struct Pcg32
-{
+struct Pcg32 {
     uint64_t m_state; // RNG state.  All values are possible.
     uint64_t m_inc; // Controls which RNG sequence (stream) is selected. Must *always* be odd.
 
+    [mutating]
     void init(uint64_t seed, uint64_t seq) {
         m_state = 0U;
         m_inc = (seq << 1U) | 1U;
@@ -74,6 +74,7 @@ struct Pcg32
         next();
     }
 
+    [mutating]
     uint32_t next() {
         const uint64_t old_state = m_state;
         m_state = old_state * 6364136223846793005ULL + m_inc;
@@ -82,16 +83,19 @@ struct Pcg32
         return (xor_shifted >> rot) | (xor_shifted << ((-rot) & 31U));
     }
 
+    [mutating]
     float next_float() {
         // 23 bit mantissa => 32 - 23 = 9.
         const uint32_t raw = 0x3f800000U | (next() >> 9U); // Float range [1, 2].
         return asfloat(raw) - 1.0f; // Float range [0, 1].
     }
 
+    [mutating]
     float2 next_float2() {
         return float2(next_float(), next_float());
     }
 
+    [mutating]
     float3 next_float3() {
         return float3(next_float(), next_float(), next_float());
     }
@@ -111,9 +115,8 @@ float max(float3 x) {
 }
 
 // [0, 1] -> [-x, x]
-template<typename Float>
-Float interval_unit_to_symmetric(Float val, float x) {
-    return ((val - 0.5f) * 2.0f) * x;
+T interval_unit_to_symmetric<T>(T val, float x) where T : IFloat {
+    return ((val - T(0.5)) * T(2.0)) * T(x);
 }
 
 // https://www.elopezr.com/the-art-of-packing-data/

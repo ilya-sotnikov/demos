@@ -117,16 +117,13 @@ bool ImguiRenderer::init(
 
     // Pipeline.
     {
-        const utils::FileData vert_data = utils::file_read("imgui.vert.hlsl.spv");
-        DEFER(free(vert_data.data));
-        const utils::FileData frag_data = utils::file_read("imgui.frag.hlsl.spv");
-        DEFER(free(frag_data.data));
+        // TODO: Some kind of rhi_utils.hpp that builds on top of RHI (platform agnostic),
+        // but provides helpers for stuff like this. Maybe in the same namespace.
+        const utils::FileData data = utils::file_read("imgui.slang.spv");
+        DEFER(free(data.data));
 
         m_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes{
-                {static_cast<u8*>(vert_data.data), vert_data.size},
-                {static_cast<u8*>(frag_data.data), frag_data.size},
-            },
+            .bytecode{data.data, data.size},
             .stencil_format = rhi::FORMAT_S8_UINT,
             .color_targets = {{
                 .format = color_format,

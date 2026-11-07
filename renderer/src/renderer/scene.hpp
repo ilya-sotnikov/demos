@@ -3,7 +3,7 @@
 #include "common.hpp"
 #include "math/types.hpp"
 #include "renderer/rhi/rhi.hpp"
-#include "renderer/shaders/shared_def.hlsli"
+#include "renderer/shaders/shared_def.h.slang"
 
 #include <EASTL/vector.h>
 #include <EASTL/string.h>

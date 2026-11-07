@@ -114,7 +114,7 @@ static eastl::vector<i8> create_shadow_jitter_offsets(
     return result;
 }
 
-// Adapted from sky.hlsli, assuming view_direction_world == -sun_direction_world.
+// Adapted from sky.h.slang, assuming view_direction_world == -sun_direction_world.
 static Vec3 calc_sun_color(Vec3 sun_direction_world) {
     const f32 I0 = 11.0f;
     const Vec3 sigma_rayleigh = Vec3{0.33f, 0.78f, 1.89f};
@@ -588,7 +588,6 @@ bool Renderer::init() {
     m_taa_pass_data.blend_weight = 0.1f;
     m_uniform_data.ambient_intensity = 0.04f;
     m_uniform_data.sun_intensity = 1.0f;
-    m_uniform_data.grad_error_max = 0.01f;
     m_uniform_data.enable_ssao = true;
     m_uniform_data.enable_fog = true;
 
@@ -764,7 +763,7 @@ bool Renderer::render(f32 delta_time) {
 
     m_uniform_data.delta_time = delta_time;
 
-    if ((m_taa_pass_data.enable == 1) && (m_uniform_data.render_mode != RENDER_MODE_GRAD_ERROR)) {
+    if (m_taa_pass_data.enable == 1) {
         const f32 halton_x = 2.0f * math::halton_sequence(m_taa_jitter_idx + 1, 2) - 1.0f;
         const f32 halton_y = 2.0f * math::halton_sequence(m_taa_jitter_idx + 1, 3) - 1.0f;
         m_uniform_data.prev_taa_jitter = m_uniform_data.taa_jitter;
@@ -815,14 +814,7 @@ bool Renderer::render(f32 delta_time) {
     m_shadow_pass_uniform_buffer_descriptor =
         frame.uniform_buffer_manager.push(&m_shadow_pass_data, sizeof(m_shadow_pass_data));
 
-    switch (m_uniform_data.render_mode) {
-    case RENDER_MODE_GRAD_ERROR:
-        record_and_submit_debug_grad_error(swapchain_texture_handle);
-        break;
-    default:
-        record_and_submit_visibility(swapchain_texture_handle);
-        break;
-    }
+    record_and_submit(swapchain_texture_handle);
 
     swapchain_result = rhi::queue_present(m_graphics_queue);
     if ((swapchain_result == rhi::SWAPCHAIN_OUT_OF_DATE)
@@ -830,7 +822,7 @@ bool Renderer::render(f32 delta_time) {
     {
         m_swapchain_needs_recreating = true;
     } else if (swapchain_result != rhi::SWAPCHAIN_SUCCESS) {
-        fprintf(stderr, "RHI::QueuePresent failed\n");
+        fprintf(stderr, "rhi::queue_present failed\n");
         return false;
     }
 
@@ -877,7 +869,6 @@ void Renderer::cleanup_pipelines() {
     rhi::destroy_pipeline(m_debug_draw_fill_cmd_pipeline);
     rhi::destroy_pipeline(m_debug_draw_rect_pipeline);
     rhi::destroy_pipeline(m_depth_reduce_pipeline);
-    rhi::destroy_pipeline(m_debug_grad_error_pipeline);
     rhi::destroy_pipeline(m_taa_resolve_pipeline);
     rhi::destroy_pipeline(m_cull_late_pipeline);
     rhi::destroy_pipeline(m_cull_early_pipeline);
@@ -893,16 +884,11 @@ bool Renderer::recompile_pipelines() {
 
     // Graphics pipelines
     {
-        utils::FileData vert_data = utils::file_read("visibility_buffer.vert.hlsl.spv");
-        DEFER(free(vert_data.data));
-        utils::FileData frag_data = utils::file_read("visibility_buffer.frag.hlsl.spv");
-        DEFER(free(frag_data.data));
+        utils::FileData data = utils::file_read("visibility_buffer.slang.spv");
+        DEFER(free(data.data));
 
         m_visibility_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes{
-                {static_cast<u8*>(vert_data.data), vert_data.size},
-                {static_cast<u8*>(frag_data.data), frag_data.size},
-            },
+            .bytecode{data.data, data.size},
             .cull = rhi::CULL_CW,
             .depth_format = rhi::get_texture_format(m_depth_texture),
             .depth_mask = rhi::DEPTH_READ_BIT | rhi::DEPTH_WRITE_BIT,
@@ -918,16 +904,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData vert_data = utils::file_read("debug_draw_rect.vert.hlsl.spv");
-        DEFER(free(vert_data.data));
-        utils::FileData frag_data = utils::file_read("debug_draw_rect.frag.hlsl.spv");
-        DEFER(free(frag_data.data));
+        utils::FileData data = utils::file_read("debug_draw_rect.slang.spv");
+        DEFER(free(data.data));
 
         m_debug_draw_rect_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes{
-                {static_cast<u8*>(vert_data.data), vert_data.size},
-                {static_cast<u8*>(frag_data.data), frag_data.size},
-            },
+            .bytecode{data.data, data.size},
             .color_targets{
                 {.format = rhi::get_texture_format(m_render_texture)},
             },
@@ -939,16 +920,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData vert_data = utils::file_read("fullscreen.vert.hlsl.spv");
-        DEFER(free(vert_data.data));
-        utils::FileData frag_data = utils::file_read("fullscreen.frag.hlsl.spv");
-        DEFER(free(frag_data.data));
+        utils::FileData data = utils::file_read("fullscreen.slang.spv");
+        DEFER(free(data.data));
 
         m_fullscreen_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes{
-                {static_cast<u8*>(vert_data.data), vert_data.size},
-                {static_cast<u8*>(frag_data.data), frag_data.size},
-            },
+            .bytecode{data.data, data.size},
             .color_targets = {{.format = rhi::get_texture_format(rhi::get_swapchain_texture(0))}},
             .debug_name = "fullscreen_pass",
         });
@@ -958,38 +934,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData vert_data = utils::file_read("debug_grad_error.vert.hlsl.spv");
-        DEFER(free(vert_data.data));
-        utils::FileData frag_data = utils::file_read("debug_grad_error.frag.hlsl.spv");
-        DEFER(free(frag_data.data));
-
-        m_debug_grad_error_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes{
-                {static_cast<u8*>(vert_data.data), vert_data.size},
-                {static_cast<u8*>(frag_data.data), frag_data.size},
-            },
-            .cull = rhi::CULL_CW,
-            .depth_format = rhi::get_texture_format(m_depth_texture),
-            .depth_mask = rhi::DEPTH_READ_BIT | rhi::DEPTH_WRITE_BIT,
-            .color_targets = {{.format = rhi::get_texture_format(rhi::get_swapchain_texture(0))}},
-            .debug_name = "debug_grad_error_pass",
-        });
-        if (!m_debug_grad_error_pipeline) {
-            return false;
-        }
-    }
-
-    {
-        utils::FileData vert_data = utils::file_read("shadow.vert.hlsl.spv");
-        DEFER(free(vert_data.data));
-        utils::FileData frag_data = utils::file_read("shadow.frag.hlsl.spv");
-        DEFER(free(frag_data.data));
+        utils::FileData data = utils::file_read("shadow.slang.spv");
+        DEFER(free(data.data));
 
         m_shadow_pipeline = rhi::create_graphics_pipeline({
-            .bytecodes{
-                {static_cast<u8*>(vert_data.data), vert_data.size},
-                {static_cast<u8*>(frag_data.data), frag_data.size},
-            },
+            .bytecode{data.data, data.size},
             .cull = rhi::CULL_CW,
             .depth_format = rhi::get_texture_format(m_shadow_texture),
             .depth_mask = rhi::DEPTH_READ_BIT | rhi::DEPTH_WRITE_BIT,
@@ -1003,11 +952,11 @@ bool Renderer::recompile_pipelines() {
 
     // Compute pipelines.
     {
-        utils::FileData comp_data = utils::file_read("cull_early.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("cull_early.slang.spv");
+        DEFER(free(data.data));
 
         m_cull_early_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "cull_early_pass",
         });
         if (!m_cull_early_pipeline) {
@@ -1016,11 +965,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("cull_late.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("cull_late.slang.spv");
+        DEFER(free(data.data));
 
         m_cull_late_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "cull_late_pass",
         });
         if (!m_cull_late_pipeline) {
@@ -1029,11 +978,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("shadow_cull.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("shadow_cull.slang.spv");
+        DEFER(free(data.data));
 
         m_shadow_cull_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "shadow_cull_pass",
         });
         if (!m_cull_late_pipeline) {
@@ -1042,11 +991,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("visibility_render.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("visibility_render.slang.spv");
+        DEFER(free(data.data));
 
         m_visibility_render_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .uses_bindless_textures = true,
             .debug_name = "visibility_render_pass",
         });
@@ -1056,11 +1005,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("taa_resolve.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("taa_resolve.slang.spv");
+        DEFER(free(data.data));
 
         m_taa_resolve_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "taa_resolve_pass",
         });
         if (!m_taa_resolve_pipeline) {
@@ -1069,11 +1018,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("depth_reduce.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("depth_reduce.slang.spv");
+        DEFER(free(data.data));
 
         m_depth_reduce_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "depth_reduce_pass",
         });
         if (!m_depth_reduce_pipeline) {
@@ -1082,11 +1031,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("depth_view_quarter_res.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("depth_view_quarter_res.slang.spv");
+        DEFER(free(data.data));
 
         m_depth_view_quarter_res_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "depth_view_quarter_res_pass",
         });
         if (!m_depth_view_quarter_res_pipeline) {
@@ -1095,11 +1044,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("ssao.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("ssao.slang.spv");
+        DEFER(free(data.data));
 
         m_ambient_occlusion_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "ambient_occlusion_pass",
         });
         if (!m_ambient_occlusion_pipeline) {
@@ -1108,11 +1057,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("blur_ssao.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("blur_ssao.slang.spv");
+        DEFER(free(data.data));
 
         m_ambient_occlusion_blur_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "ambient_occlusion_blur_pass",
         });
         if (!m_ambient_occlusion_blur_pipeline) {
@@ -1121,11 +1070,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("upsample_ssao.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("upsample_ssao.slang.spv");
+        DEFER(free(data.data));
 
         m_ambient_occlusion_upsample_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "ambient_occlusion_upsample_pass",
         });
         if (!m_ambient_occlusion_upsample_pipeline) {
@@ -1134,11 +1083,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("fog.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("fog.slang.spv");
+        DEFER(free(data.data));
 
         m_fog_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "fog_pass",
         });
         if (!m_fog_pipeline) {
@@ -1147,11 +1096,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("blur_fog.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("blur_fog.slang.spv");
+        DEFER(free(data.data));
 
         m_blur_fog_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "blur_fog_pass",
         });
         if (!m_blur_fog_pipeline) {
@@ -1160,11 +1109,11 @@ bool Renderer::recompile_pipelines() {
     }
 
     {
-        utils::FileData comp_data = utils::file_read("debug_draw_fill_cmd.comp.hlsl.spv");
-        DEFER(free(comp_data.data));
+        utils::FileData data = utils::file_read("debug_draw_fill_cmd.slang.spv");
+        DEFER(free(data.data));
 
         m_debug_draw_fill_cmd_pipeline = rhi::create_compute_pipeline({
-            .bytecode = {static_cast<u8*>(comp_data.data), comp_data.size},
+            .bytecode{data.data, data.size},
             .debug_name = "debug_draw_fill_cmd_pass",
         });
         if (!m_debug_draw_fill_cmd_pipeline) {
@@ -1609,7 +1558,6 @@ void Renderer::shadow_pass(rhi::CommandBuffer cb) {
         cb,
         pipeline,
         {
-            m_uniform_buffer_descriptor,
             m_shadow_pass_uniform_buffer_descriptor,
             m_draw_indices_shadow_buffer,
             m_draw_data_buffer,
@@ -1857,7 +1805,6 @@ void Renderer::debug_draw_pass(rhi::CommandBuffer cb) {
         m_debug_draw_rect_pipeline,
         {
             m_uniform_buffer_descriptor,
-            m_debug_draw_count_buffer,
             m_debug_draw_rect_buffer,
         }
     );
@@ -1930,222 +1877,7 @@ void Renderer::fullscreen_pass(rhi::CommandBuffer cb, rhi::Texture swapchain_tex
     rhi::cmd_end_rendering(cb);
 }
 
-void Renderer::debug_draw_grad_error_pass(
-    rhi::CommandBuffer cb,
-    bool cull_late,
-    rhi::Texture swapchain_texture
-) {
-    DEBUG_ASSERT(cb);
-    DEBUG_ASSERT(swapchain_texture);
-
-    const rhi::Pipeline pipeline = m_debug_grad_error_pipeline;
-
-    rhi::cmd_bind_pipeline(cb, pipeline);
-
-    rhi::cmd_push_descriptors(
-        cb,
-        pipeline,
-        {
-            m_uniform_buffer_descriptor,
-            cull_late ? m_draw_indices_late_buffer : m_draw_indices_early_buffer,
-            cull_late ? m_draw_cmd_late_buffer2 : m_draw_cmd_early_buffer2,
-            m_draw_data_buffer,
-            m_index_buffer,
-            m_vertex_buffer,
-        }
-    );
-
-    const Vec2U32 size = rhi::get_texture_dimensions(swapchain_texture).xy();
-
-    rhi::cmd_set_viewport({
-        .cb = cb,
-        .y = f32(size.y),
-        .width = f32(size.x),
-        .height = -f32(size.y),
-    });
-
-    rhi::cmd_set_scissor({.cb = cb, .extent = size});
-
-    rhi::cmd_begin_rendering({
-        .cb = cb,
-        .extent = size,
-        .color_targets = {{
-            .attachment = swapchain_texture,
-            .load_op = cull_late ? rhi::ATTACHMENT_LOAD_OP_LOAD : rhi::ATTACHMENT_LOAD_OP_CLEAR,
-            .store_op = rhi::ATTACHMENT_STORE_OP_STORE,
-        }},
-        .depth_target = {
-            .attachment = m_depth_texture,
-            .load_op = cull_late ? rhi::ATTACHMENT_LOAD_OP_LOAD : rhi::ATTACHMENT_LOAD_OP_CLEAR,
-            .store_op = rhi::ATTACHMENT_STORE_OP_STORE,
-        },
-    });
-
-    rhi::cmd_bind_index_buffer(cb, m_index_buffer, 0, rhi::INDEX_TYPE_U32);
-
-    rhi::cmd_draw_indexed_indirect_count(
-        cb,
-        cull_late ? m_draw_cmd_late_buffer2 : m_draw_cmd_early_buffer2,
-        0,
-        m_draw_count_buffer,
-        0,
-        m_uniform_data.draw_count
-    );
-
-    rhi::cmd_end_rendering(cb);
-}
-
-void Renderer::record_and_submit_debug_grad_error(rhi::Texture swapchain_texture) {
-    DEBUG_ASSERT(swapchain_texture);
-
-    const rhi::CommandBuffer cb = m_frame[m_frame_idx].start_command_buffer;
-
-    rhi::begin_command_buffer(cb);
-
-    rhi::cmd_texture_invalidate_barrier(
-        cb,
-        rhi::STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | rhi::STAGE_LATE_FRAGMENT_TESTS_BIT,
-        rhi::ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        rhi::STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | rhi::STAGE_COMPUTE_SHADER_BIT
-            | rhi::STAGE_EARLY_FRAGMENT_TESTS_BIT,
-        rhi::ACCESS_COLOR_ATTACHMENT_WRITE_BIT | rhi::ACCESS_SHADER_STORAGE_WRITE_BIT
-            | rhi::ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        {
-            m_visibility_texture,
-            m_depth_pyramid_texture,
-            swapchain_texture,
-            m_depth_texture,
-        }
-    );
-
-    rhi::cmd_barrier(
-        cb,
-        rhi::STAGE_DRAW_INDIRECT_BIT,
-        rhi::ACCESS_NONE,
-        rhi::STAGE_TRANSFER_BIT,
-        rhi::ACCESS_NONE
-    );
-
-    rhi::cmd_fill_buffer(cb, m_draw_count_buffer, 0, sizeof(u32), 0);
-
-    rhi::cmd_barrier(
-        cb,
-        rhi::STAGE_TRANSFER_BIT | rhi::STAGE_VERTEX_SHADER_BIT | rhi::STAGE_FRAGMENT_SHADER_BIT,
-        rhi::ACCESS_TRANSFER_WRITE_BIT,
-        rhi::STAGE_COMPUTE_SHADER_BIT,
-        rhi::ACCESS_SHADER_STORAGE_READ_BIT | rhi::ACCESS_SHADER_STORAGE_WRITE_BIT
-    );
-
-    cull_pass(cb, false);
-
-    rhi::cmd_barrier(
-        cb,
-        rhi::STAGE_COMPUTE_SHADER_BIT,
-        rhi::ACCESS_SHADER_STORAGE_WRITE_BIT,
-        rhi::STAGE_DRAW_INDIRECT_BIT | rhi::STAGE_VERTEX_SHADER_BIT
-            | rhi::STAGE_FRAGMENT_SHADER_BIT,
-        rhi::ACCESS_INDIRECT_COMMAND_READ_BIT | rhi::ACCESS_SHADER_STORAGE_READ_BIT
-    );
-
-    debug_draw_grad_error_pass(cb, false, swapchain_texture);
-
-    rhi::cmd_barrier(
-        cb,
-        rhi::STAGE_LATE_FRAGMENT_TESTS_BIT,
-        rhi::ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        rhi::STAGE_COMPUTE_SHADER_BIT,
-        rhi::ACCESS_SHADER_SAMPLED_READ_BIT
-    );
-
-    if (!m_cull_camera_frozen) {
-        depth_reduce_pass(cb);
-    }
-
-    rhi::cmd_barrier(
-        cb,
-        rhi::STAGE_VERTEX_SHADER_BIT | rhi::STAGE_DRAW_INDIRECT_BIT,
-        rhi::ACCESS_NONE,
-        rhi::STAGE_COMPUTE_SHADER_BIT | rhi::STAGE_TRANSFER_BIT,
-        rhi::ACCESS_NONE
-    );
-
-    rhi::cmd_fill_buffer(cb, m_draw_count_buffer, 0, sizeof(u32), 0);
-
-    rhi::cmd_barrier(
-        cb,
-        rhi::STAGE_TRANSFER_BIT | rhi::STAGE_VERTEX_SHADER_BIT | rhi::STAGE_FRAGMENT_SHADER_BIT
-            | rhi::STAGE_COMPUTE_SHADER_BIT,
-        rhi::ACCESS_TRANSFER_WRITE_BIT | rhi::ACCESS_SHADER_STORAGE_WRITE_BIT,
-        rhi::STAGE_COMPUTE_SHADER_BIT,
-        rhi::ACCESS_SHADER_STORAGE_READ_BIT | rhi::ACCESS_SHADER_SAMPLED_READ_BIT
-            | rhi::ACCESS_SHADER_STORAGE_WRITE_BIT
-    );
-
-    cull_pass(cb, true);
-
-    rhi::cmd_barrier(
-        cb,
-        rhi::STAGE_COMPUTE_SHADER_BIT,
-        rhi::ACCESS_SHADER_STORAGE_WRITE_BIT,
-        rhi::STAGE_DRAW_INDIRECT_BIT | rhi::STAGE_VERTEX_SHADER_BIT | rhi::STAGE_FRAGMENT_SHADER_BIT
-            | rhi::STAGE_COMPUTE_SHADER_BIT | rhi::STAGE_EARLY_FRAGMENT_TESTS_BIT,
-        rhi::ACCESS_INDIRECT_COMMAND_READ_BIT | rhi::ACCESS_SHADER_STORAGE_READ_BIT
-            | rhi::ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
-    );
-
-    debug_draw_grad_error_pass(cb, true, swapchain_texture);
-
-    m_imgui_renderer.update_vertex_index_buffers(u32(m_frame_idx));
-
-    // TODO: separate pass.
-    if (m_enable_ui) {
-        const Vec2U32 size = rhi::get_texture_dimensions(swapchain_texture).xy();
-
-        rhi::cmd_begin_rendering({
-            .cb = cb,
-            .extent = size,
-            .color_targets = {{
-                .attachment = swapchain_texture,
-                .load_op = rhi::ATTACHMENT_LOAD_OP_LOAD,
-                .store_op = rhi::ATTACHMENT_STORE_OP_STORE,
-            }},
-        });
-
-        m_imgui_renderer.render(cb, u32(m_frame_idx));
-
-        rhi::cmd_end_rendering(cb);
-    }
-
-    rhi::cmd_texture_barrier(
-        cb,
-        {{
-            swapchain_texture,
-            rhi::TEXTURE_LAYOUT_GENERAL,
-            rhi::TEXTURE_LAYOUT_PRESENT_SRC,
-            rhi::STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            rhi::ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            rhi::STAGE_NONE,
-            rhi::ACCESS_NONE,
-        }}
-    );
-
-    rhi::end_command_buffer(cb);
-
-    m_frame[m_frame_idx].uniform_buffer_manager.flush();
-    rhi::queue_submit(
-        m_graphics_queue,
-        {{
-            .cb = cb,
-            .wait_for_texture_acquire = true,
-            .signal_ready_to_present = true,
-            .signal_semaphores = {
-                {m_frame_semaphore, m_uniform_data.frame_count + 1},
-            },
-        }}
-    );
-}
-
-void Renderer::record_and_submit_visibility(rhi::Texture swapchain_texture) {
+void Renderer::record_and_submit(rhi::Texture swapchain_texture) {
     Frame& frame = m_frame[m_frame_idx];
 
     const rhi::CommandBuffer cb_start = frame.start_command_buffer;

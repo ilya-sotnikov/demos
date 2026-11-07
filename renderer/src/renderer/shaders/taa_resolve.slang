@@ -1,5 +1,5 @@
-#include "common.hlsli"
-#include "math.hlsli"
+#include "common.h.slang"
+#include "math.h.slang"
 
 [[vk::push_constant]]
 PushConstantsTAA push_constants;
@@ -30,6 +30,7 @@ SamplerState linear_sampler;
 
 // TODO: now that we have a visibility buffer, is it useful for history rejection?
 
+[shader("compute")]
 [numthreads(RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_X, RENDERER_TAA_RESOLVE_WORKGROUP_SIZE_Y, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
     int2 render_texture_size = int2(uniform_buffer.render_width, uniform_buffer.render_height);

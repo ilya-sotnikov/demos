@@ -198,11 +198,6 @@ static void process_input(SDL_Window* window, f32 delta_time, Renderer& renderer
 
     if (s_keys[SDL_SCANCODE_2]) {
         s_keys[SDL_SCANCODE_2] = 0;
-        s_render_mode = RENDER_MODE_GRAD_ERROR;
-    }
-
-    if (s_keys[SDL_SCANCODE_3]) {
-        s_keys[SDL_SCANCODE_3] = 0;
         s_render_mode = RENDER_MODE_AMBIENT_OCCLUSION;
     }
 }
@@ -391,20 +386,12 @@ int main() {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             int render_mode = static_cast<int>(s_render_mode);
-            const char* render_modes[] = {"Visibility", "Grad error", "AO"};
-            ImGui::ListBox("Render mode", &render_mode, render_modes, ARRAY_SIZE(render_modes));
+            const char* render_modes[] = {"Visibility", "AO"};
+            ImGui::ListBox("##render_mode", &render_mode, render_modes, ARRAY_SIZE(render_modes));
             s_render_mode = static_cast<RenderMode>(render_mode);
             static_assert(ARRAY_SIZE(render_modes) == RENDER_MODE_COUNT);
-
-            ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::SliderFloat(
-                "Grad err max",
-                &renderer.m_uniform_data.grad_error_max,
-                0.01f,
-                0.1f,
-                "%.2f"
-            );
+            ImGui::Text("Render mode");
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();

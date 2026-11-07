@@ -90,8 +90,8 @@ set(SOURCES
     src/renderer/uniform_buffer_manager.hpp
     src/renderer/uniform_buffer_manager.cpp
 
-    src/renderer/shaders/shared_def.hlsli
-    src/renderer/shaders/shared_config.hlsli
+    src/renderer/shaders/shared_def.h.slang
+    src/renderer/shaders/shared_config.h.slang
 )
 
 set(LIBS
@@ -156,62 +156,39 @@ endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBS})
 
-if(NOT DEFINED DXC_EXECUTABLE)
-    if(UNIX)
-        if(DEFINED ENV{VULKAN_SDK})
-            set(DXC_EXECUTABLE "$ENV{VULKAN_SDK}/bin/dxc")
-        else()
-            set(DXC_EXECUTABLE "dxc")
-        endif()
-    else()
-        set(DXC_EXECUTABLE "$ENV{VULKAN_SDK}/Bin/dxc.exe")
-    endif()
-endif()
+set(SLANGC_EXECUTABLE slangc)
 
 set(SHADER_SOURCE_DIRECTORY ${CMAKE_SOURCE_DIR}/src/renderer/shaders/)
 set(SHADER_SOURCE_FILES
-    ${SHADER_SOURCE_DIRECTORY}/cull_early.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/cull_late.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/shadow_cull.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/debug_grad_error.vert.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/debug_grad_error.frag.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/shadow.vert.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/shadow.frag.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/fullscreen.vert.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/fullscreen.frag.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/imgui.vert.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/imgui.frag.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/depth_view_quarter_res.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/ssao.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/blur_ssao.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/upsample_ssao.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/fog.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/blur_fog.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/visibility_render.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/taa_resolve.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/visibility_buffer.vert.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/visibility_buffer.frag.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/depth_reduce.comp.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/debug_draw_rect.vert.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/debug_draw_rect.frag.hlsl
-    ${SHADER_SOURCE_DIRECTORY}/debug_draw_fill_cmd.comp.hlsl
+    ${SHADER_SOURCE_DIRECTORY}/cull_early.slang
+    ${SHADER_SOURCE_DIRECTORY}/cull_late.slang
+    ${SHADER_SOURCE_DIRECTORY}/shadow_cull.slang
+    ${SHADER_SOURCE_DIRECTORY}/shadow.slang
+    ${SHADER_SOURCE_DIRECTORY}/fullscreen.slang
+    ${SHADER_SOURCE_DIRECTORY}/imgui.slang
+    ${SHADER_SOURCE_DIRECTORY}/depth_view_quarter_res.slang
+    ${SHADER_SOURCE_DIRECTORY}/ssao.slang
+    ${SHADER_SOURCE_DIRECTORY}/blur_ssao.slang
+    ${SHADER_SOURCE_DIRECTORY}/upsample_ssao.slang
+    ${SHADER_SOURCE_DIRECTORY}/fog.slang
+    ${SHADER_SOURCE_DIRECTORY}/blur_fog.slang
+    ${SHADER_SOURCE_DIRECTORY}/visibility_render.slang
+    ${SHADER_SOURCE_DIRECTORY}/taa_resolve.slang
+    ${SHADER_SOURCE_DIRECTORY}/visibility_buffer.slang
+    ${SHADER_SOURCE_DIRECTORY}/depth_reduce.slang
+    ${SHADER_SOURCE_DIRECTORY}/debug_draw_rect.slang
+    ${SHADER_SOURCE_DIRECTORY}/debug_draw_fill_cmd.slang
 )
 set(SHADER_INCLUDE_FILES
-    ${SHADER_SOURCE_DIRECTORY}/cull.comp.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/common.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/debug_grad_error.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/shadow.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/fullscreen.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/imgui.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/math.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/pbr.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/shared_config.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/shared_def.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/visibility_buffer.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/sky.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/calc_shadow.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/debug_draw_rect.hlsli
-    ${SHADER_SOURCE_DIRECTORY}/debug_draw.hlsli
+    ${SHADER_SOURCE_DIRECTORY}/cull.h.slang
+    ${SHADER_SOURCE_DIRECTORY}/common.h.slang
+    ${SHADER_SOURCE_DIRECTORY}/math.h.slang
+    ${SHADER_SOURCE_DIRECTORY}/pbr.h.slang
+    ${SHADER_SOURCE_DIRECTORY}/shared_config.h.slang
+    ${SHADER_SOURCE_DIRECTORY}/shared_def.h.slang
+    ${SHADER_SOURCE_DIRECTORY}/sky.h.slang
+    ${SHADER_SOURCE_DIRECTORY}/calc_shadow.h.slang
+    ${SHADER_SOURCE_DIRECTORY}/debug_draw.h.slang
 )
 
 execute_process(COMMAND ${DXC_EXECUTABLE} --version)
@@ -222,37 +199,20 @@ foreach(shader ${SHADER_SOURCE_FILES})
     set(SPIRV "${CMAKE_BINARY_DIR}/${FILE_NAME}.spv")
     cmake_path(GET shader EXTENSION FILE_EXTENSION)
 
-    if("${FILE_EXTENSION}" STREQUAL ".vert.hlsl")
-        set(SHADER_TYPE vs)
-    elseif("${FILE_EXTENSION}" STREQUAL ".frag.hlsl")
-        set(SHADER_TYPE ps)
-    elseif("${FILE_EXTENSION}" STREQUAL ".comp.hlsl")
-        set(SHADER_TYPE cs)
-    elseif("${FILE_EXTENSION}" STREQUAL ".mesh.hlsl")
-        set(SHADER_TYPE ms)
-    elseif("${FILE_EXTENSION}" STREQUAL ".task.hlsl")
-        set(SHADER_TYPE as)
-    else()
-        message(FATAL_ERROR "unknown shader extension ${shader}")
-    endif()
-
     message(STATUS ${shader})
 
     add_custom_command(
         OUTPUT ${SPIRV}
-        COMMAND ${DXC_EXECUTABLE}
-            -spirv
-            -O3 #-Zi -fspv-debug=vulkan-with-source
-            -T ${SHADER_TYPE}_6_6
+        COMMAND ${SLANGC_EXECUTABLE} ${shader}
+            -Wall -Wextra
+            -O3
+            -target spirv
+            -profile sm_6_6
+            -matrix-layout-column-major
+            -fvk-use-entrypoint-name
             -fvk-use-scalar-layout
-            -enable-16bit-types
-            -Zpc
-            -E main
-            -fspv-target-env=vulkan1.3
-            -fspv-preserve-bindings
-            #-fspv-extension=SPV_EXT_mesh_shader
-            -fspv-extension=SPV_EXT_descriptor_indexing
-            -Fo ${SPIRV} ${shader}
+            -unscoped-enum
+            -o ${SPIRV}
         DEPENDS ${shader} ${SHADER_INCLUDE_FILES}
     )
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})

@@ -1,5 +1,5 @@
-#include "common.hlsli"
-#include "math.hlsli"
+#include "common.h.slang"
+#include "math.h.slang"
 
 ConstantBuffer<UniformData> uniform_buffer;
 ConstantBuffer<ShadowPassData> shadow_uniform_buffer;
@@ -17,7 +17,7 @@ static const int RAYMARCH_STEPS = 16;
 static const float FOG_INTENSITY = 0.5f;
 
 float3 calc_pos_world(float2 uv) {
-    const float depth = depth_texture.SampleLevel(nearest_sampler, uv, 0);
+    const float depth = depth_texture.SampleLevel(nearest_sampler, uv, 0) + 1e-4;
 
     float2 pos_ndc = uv * 2.0f - 1.0f;
     pos_ndc.y *= -1.0f;
@@ -31,7 +31,7 @@ float3 calc_pos_world(float2 uv) {
 }
 
 float calc_shadow(float3 posWorld) {
-    // TODO: for now just taking the largest cascade.
+    // TODO: For now just taking the largest cascade.
     const int CASCADE_IDX = RENDERER_SHADOW_MAP_CASCADE_COUNT - 1;
     float3 pos_shadow = mul(
         shadow_uniform_buffer.world_to_clip[CASCADE_IDX],
@@ -63,6 +63,7 @@ float phase_henyey_greenstein(float march_dir_dot_light_dir, float scatter_facto
     return nom / denom;
 }
 
+[shader("compute")]
 [numthreads(RENDERER_FOG_WORKGROUP_SIZE_X, RENDERER_FOG_WORKGROUP_SIZE_Y, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
     const uint2 texture_size = uint2(uniform_buffer.render_width, uniform_buffer.render_height);

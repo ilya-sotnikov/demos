@@ -1,4 +1,4 @@
-#include "common.hlsli"
+#include "common.h.slang"
 
 // Learned this trick (and countless more) from niagara:
 // https://github.com/zeux/niagara
@@ -13,6 +13,7 @@ SamplerState min_sampler;
 [[vk::push_constant]]
 PushConstantsDepthReduce push_constants;
 
+[shader("compute")]
 [numthreads(RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_X, RENDERER_DEPTH_REDUCE_WORKGROUP_SIZE_Y, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
     if (dtid.x >= push_constants.out_width || dtid.y >= push_constants.out_height) {
